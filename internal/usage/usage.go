@@ -38,15 +38,12 @@ func makeList(atom Atom, min int, sep ...string) Atom {
 // --- 预定义 atom 变量 ---
 
 var (
-	File           = placeholder{"file"}
-	ID             = placeholder{"id"}
-	Remote         = placeholder{"remote"}
-	Key            = placeholder{"key"}
-	Value          = placeholder{"value"}
-	Name           = placeholder{"name"}
-	KV             = compound{"=", []Atom{Key, Value}}
-	RemoteColon    = remote{Remote, nil, false}
-	RemoteColonOpt = remote{Remote, nil, true}
+	File    = placeholder{"file"}
+	ID      = placeholder{"id"}
+	Key     = placeholder{"key"}
+	Value   = placeholder{"value"}
+	Name    = placeholder{"name"}
+	KV      = compound{"=", []Atom{Key, Value}}
 )
 
 // --- 构造函数 ---
@@ -87,9 +84,6 @@ func Flag(name string) Atom {
 	return flag{name}
 }
 
-func MakeRemote(atom Atom, optional bool) remote {
-	return remote{atom, nil, optional}
-}
 
 // helper: 渲染不带颜色的原始文本
 func renderRaw(a Atom) string {
@@ -120,15 +114,6 @@ func renderRaw(a Atom) string {
 		return s + v.separator + s + "..."
 	case flag:
 		return "--" + v.name
-	case remote:
-		s := renderRaw(v.atom) + ":"
-		if v.optional {
-			s = "[" + s + "]"
-		}
-		if v.suffix != nil {
-			s += renderRaw(v.suffix)
-		}
-		return s
 	case hide:
 		return renderRaw(v.replacement)
 	case deprecated:

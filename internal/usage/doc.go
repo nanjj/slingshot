@@ -43,7 +43,6 @@
 //	Sequence(a, b, c)         — space-separated sequence, renders as "a b c"
 //	MakePath(a, b)            — "/"-separated compound, renders as "a/b"
 //	Colon(a)                  — appends ":", renders as "a:"
-//	MakeRemote(atom, opt)     — "remote:" prefix with optional colon
 //
 // ## Combinators
 //
@@ -56,13 +55,10 @@
 //
 //	File            <file>
 //	ID              <id>
-//	Remote          <remote>
 //	Key             <key>
 //	Value           <value>
 //	Name            <name>
 //	KV              <key>=<value>  (compound with "=")
-//	RemoteColon     <remote>:       (remote with optional colon omitted)
-//	RemoteColonOpt  [<remote>:]     (remote with optional colon optional)
 //
 // # Parsing Results
 //
@@ -72,8 +68,6 @@
 //	List        []*Parsed    — sub-results (for compound, list, etc.)
 //	StringList  []string     — flat string slice of all sub-results
 //	Skipped     bool         — true if the atom was optional and unmatched
-//	RemoteName  string       — for remote atoms, the part before ":"
-//	RemoteObject *Parsed     — for remote atoms with a suffix
 //	BranchID    int          — for Either, which branch matched (0-indexed)
 //
 // Get returns the string value or a default if Skipped:
@@ -82,14 +76,8 @@
 //
 // # Error Handling
 //
-// Parse returns typed errors that callers can inspect:
-//
-//	*notEnoughArgumentsError    — missing required value
-//	*tooManyArgumentsError      — unexpected extra arguments
-//	*argumentMismatchError      — value doesn't match expected
-//	*argumentNotFullyConsumedError  — remainder in a remote: value
-//
-// Use isParsingError(err) to distinguish parse errors from internal errors.
+// Parse returns errors that distinguish parse failures from internal
+// errors. Use errors.As or a type switch to inspect specific error types.
 //
 // # Explain Mode
 //

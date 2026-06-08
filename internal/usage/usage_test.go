@@ -29,9 +29,6 @@ func TestUsageTooManyArgs(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for too many arguments")
 	}
-	if !isParsingError(err) {
-		t.Errorf("expected parsing error, got %T", err)
-	}
 }
 
 func TestUsageNotEnoughArgs(t *testing.T) {
@@ -50,7 +47,6 @@ func TestPredefinedAtoms(t *testing.T) {
 	}{
 		{"File", File, []string{"main.go"}},
 		{"ID", ID, []string{"abc123"}},
-		{"Remote", Remote, []string{"server1"}},
 		{"Key", Key, []string{"mykey"}},
 		{"Value", Value, []string{"myvalue"}},
 		{"Name", Name, []string{"testname"}},

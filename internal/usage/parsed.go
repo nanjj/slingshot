@@ -30,15 +30,13 @@ func formatAlternatives(alternatives []string) string {
 
 // Parsed 是解析结果。
 type Parsed struct {
-	source       Atom
-	RemoteName   string
-	RemoteObject *Parsed
-	String       string
-	List         []*Parsed
-	StringList   []string
-	err          error
-	Skipped      bool
-	BranchID     int
+	source     Atom
+	String     string
+	List       []*Parsed
+	StringList []string
+	err        error
+	Skipped    bool
+	BranchID   int
 }
 
 // Get 获取解析结果的字符串值, 如果被跳过则返回默认值。

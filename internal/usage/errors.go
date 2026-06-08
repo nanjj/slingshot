@@ -45,21 +45,10 @@ func (e *argumentMismatchError) Error() string {
 	return fmt.Sprintf(i18n.G("unexpected %s; expected %s"), quote(e.arg), formatAlternatives(e.expected))
 }
 
-type argumentNotFullyConsumedError struct {
-	rest   string
-	parent string
-}
-
-func (e *argumentNotFullyConsumedError) Error() string {
-	if e.rest == e.parent {
-		return fmt.Sprintf(i18n.G("cannot parse this argument; unexpected %s"), quote(e.rest))
-	}
-	return fmt.Sprintf(i18n.G("cannot parse this argument; unexpected %s in %s"), quote(e.rest), quote(e.parent))
-}
-
+// isParsingError 判断 err 是否为解析错误。
 func isParsingError(err error) bool {
 	switch err.(type) {
-	case *notEnoughArgumentsError, *tooManyArgumentsError, *argumentMismatchError, *argumentNotFullyConsumedError:
+	case *notEnoughArgumentsError, *tooManyArgumentsError, *argumentMismatchError:
 		return true
 	default:
 		return false

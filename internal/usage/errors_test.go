@@ -10,7 +10,6 @@ func TestIsParsingError(t *testing.T) {
 		{&notEnoughArgumentsError{}, true},
 		{&tooManyArgumentsError{}, true},
 		{&argumentMismatchError{}, true},
-		{&argumentNotFullyConsumedError{}, true},
 		{ErrExplainOnly, false},
 		{nil, false},
 	}
