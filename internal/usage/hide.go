@@ -15,8 +15,8 @@ func (h hide) Render() string {
 	return h.replacement.Render()
 }
 
-func (h hide) List(min int, sep ...string) Atom {
-	return makeList(h, min, sep...)
+func (h hide) List(minOccurrences int, sep ...string) Atom {
+	return makeList(h, minOccurrences, sep...)
 }
 
 func (h hide) Optional() Atom {

@@ -26,15 +26,6 @@ type Atom interface {
 	Optional() Atom
 }
 
-// --- 辅助函数 ---
-
-func makeList(atom Atom, min int, sep ...string) Atom {
-	if len(sep) == 0 {
-		return list{atom, min, " "}
-	}
-	return list{atom, min, sep[0]}
-}
-
 // --- 预定义 atom 变量 ---
 
 var (

@@ -27,8 +27,8 @@ func (o optional) Render() string {
 	return faint.Sprint("[") + o.atom.Render() + faint.Sprint("]")
 }
 
-func (o optional) List(min int, sep ...string) Atom {
-	return makeList(o.atom, min, sep...).Optional()
+func (o optional) List(minOccurrences int, sep ...string) Atom {
+	return makeList(o.atom, minOccurrences, sep...).Optional()
 }
 
 func (o optional) Optional() Atom {

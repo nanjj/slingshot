@@ -19,11 +19,10 @@ func (f flag) Render() string {
 	return verbatim{"--" + f.name}.Render()
 }
 
-func (f flag) List(min int, sep ...string) Atom {
-	return makeList(f, min, sep...)
+func (f flag) List(minOccurrences int, sep ...string) Atom {
+	return makeList(f, minOccurrences, sep...)
 }
 
 func (f flag) Optional() Atom {
 	return optional{f}
 }
-

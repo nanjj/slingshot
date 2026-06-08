@@ -20,8 +20,8 @@ func (v verbatim) Render() string {
 	return v.element
 }
 
-func (v verbatim) List(min int, sep ...string) Atom {
-	return makeList(v, min, sep...)
+func (v verbatim) List(minOccurrences int, sep ...string) Atom {
+	return makeList(v, minOccurrences, sep...)
 }
 
 func (v verbatim) Optional() Atom {

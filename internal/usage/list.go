@@ -96,10 +96,23 @@ func (l list) Render() string {
 	}
 }
 
-func (l list) List(min int, sep ...string) Atom {
-	return makeList(l, min, sep...)
+func (l list) List(minOccurrences int, sep ...string) Atom {
+	return makeList(l, minOccurrences, sep...)
 }
 
 func (l list) Optional() Atom {
 	return optional{list{l.atom, max(l.minOccurrences, 1), l.separator}}
+}
+
+// --- 辅助函数 ---
+
+func makeList(atom Atom, minOccurrences int, sep ...string) Atom {
+	switch len(sep) {
+	case 0:
+		return list{atom, minOccurrences, " "}
+	case 1:
+		return list{atom, minOccurrences, sep[0]}
+	default:
+		panic("usage: List accepts at most one separator")
+	}
 }

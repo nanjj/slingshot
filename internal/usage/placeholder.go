@@ -21,8 +21,8 @@ func (p placeholder) Render() string {
 	return color.GreenString("<" + p.element + ">")
 }
 
-func (p placeholder) List(min int, sep ...string) Atom {
-	return makeList(p, min, sep...)
+func (p placeholder) List(minOccurrences int, sep ...string) Atom {
+	return makeList(p, minOccurrences, sep...)
 }
 
 func (p placeholder) Optional() Atom {

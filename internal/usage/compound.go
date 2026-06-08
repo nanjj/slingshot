@@ -137,8 +137,8 @@ func (c compound) Render() string {
 	return sb.String()
 }
 
-func (c compound) List(min int, sep ...string) Atom {
-	return makeList(c, min, sep...)
+func (c compound) List(minOccurrences int, sep ...string) Atom {
+	return makeList(c, minOccurrences, sep...)
 }
 
 func (c compound) Optional() Atom {

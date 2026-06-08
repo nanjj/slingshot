@@ -60,8 +60,8 @@ func (a alternative) Render() string {
 		faint.Sprint(")")
 }
 
-func (a alternative) List(min int, sep ...string) Atom {
-	return makeList(a, min, sep...)
+func (a alternative) List(minOccurrences int, sep ...string) Atom {
+	return makeList(a, minOccurrences, sep...)
 }
 
 func (a alternative) Optional() Atom {
