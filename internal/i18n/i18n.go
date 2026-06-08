@@ -3,7 +3,7 @@
 // po - globalization 的核心机制:
 //   - 所有面向用户的字符串用 i18n.G() 包裹
 //   - G() 根据 LANGUAGE/LC_ALL/LANG 环境变量选择语言
-//   - 在 locales/ 目录下存放 .po 文件: locales/<lang>/slingshot.po
+//   - 翻译文件在编译时通过 //go:embed 嵌入二进制 (locales/<lang>/slingshot.po)
 //   - 找不到翻译时回退到原文 (msgid)
 //
 // 这与 "在英文环境显示中文" 相反——它是让每个语言的用户看到自己的语言。
@@ -13,7 +13,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -58,47 +57,31 @@ func detectLang() string {
 	return "en_US"
 }
 
-// loadTranslations 扫描 locales/ 目录并加载所有 .po 文件。
+// loadTranslations 从嵌入的 locales/ 目录加载所有 .po 文件。
 func loadTranslations() {
 	translations = make(map[string]map[string]string)
 	detectedLang = detectLang()
 
-	// 从可执行文件相对路径查找 locales
-	exe, err := os.Executable()
+	entries, err := localesFS.ReadDir("locales")
 	if err != nil {
+		// 没有嵌入翻译数据 (编译时未找到匹配文件)
 		return
 	}
 
-	// 尝试多个可能的位置
-	candidates := []string{
-		filepath.Join(filepath.Dir(exe), "..", "..", "locales"), // 开发模式
-		filepath.Join(filepath.Dir(exe), "locales"),             // 安装模式
-		"locales", // 当前目录
-	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
 
-	for _, base := range candidates {
-		entries, err := os.ReadDir(base)
+		lang := entry.Name()
+		data, err := localesFS.ReadFile("locales/" + lang + "/slingshot.po")
 		if err != nil {
 			continue
 		}
 
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			lang := entry.Name()
-			poFile := filepath.Join(base, lang, "slingshot.po")
-
-			data, err := os.ReadFile(poFile)
-			if err != nil {
-				continue
-			}
-
-			table := parsePO(string(data))
-			if len(table) > 0 {
-				translations[lang] = table
-			}
+		table := parsePO(string(data))
+		if len(table) > 0 {
+			translations[lang] = table
 		}
 	}
 }

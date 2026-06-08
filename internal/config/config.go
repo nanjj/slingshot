@@ -6,7 +6,6 @@
 //	wechat:
 //	  appid: wx1234567890
 //	  secret: abcdefghijklmn
-//	default_remote: local
 package config
 
 import (
@@ -19,9 +18,8 @@ import (
 
 // Config represents the slingshot configuration file structure.
 type Config struct {
-	Wechat        WechatConfig    `yaml:"wechat"`
-	DefaultRemote string          `yaml:"default_remote"`
-	Extra         map[string]any  `yaml:",inline"`
+	Wechat WechatConfig   `yaml:"wechat"`
+	Extra  map[string]any `yaml:",inline"`
 }
 
 // WechatConfig holds WeChat API credentials.
@@ -84,15 +82,13 @@ func Save(cfg *Config, path string) error {
 }
 
 // Get retrieves a config value by dot-separated key path.
-// Examples: "wechat.appid", "default_remote", "extra.key"
+// Examples: "wechat.appid", "extra.key"
 func Get(cfg *Config, key string) (any, error) {
 	switch key {
 	case "wechat.appid":
 		return cfg.Wechat.AppID, nil
 	case "wechat.secret":
 		return cfg.Wechat.Secret, nil
-	case "default_remote":
-		return cfg.DefaultRemote, nil
 	default:
 		if cfg.Extra != nil {
 			if v, ok := cfg.Extra[key]; ok {
@@ -112,9 +108,6 @@ func Set(cfg *Config, key string, value string) error {
 	case "wechat.secret":
 		cfg.Wechat.Secret = value
 		return nil
-	case "default_remote":
-		cfg.DefaultRemote = value
-		return nil
 	default:
 		if cfg.Extra == nil {
 			cfg.Extra = make(map[string]any)
@@ -133,9 +126,6 @@ func Del(cfg *Config, key string) error {
 	case "wechat.secret":
 		cfg.Wechat.Secret = ""
 		return nil
-	case "default_remote":
-		cfg.DefaultRemote = ""
-		return nil
 	default:
 		if cfg.Extra != nil {
 			delete(cfg.Extra, key)
@@ -149,13 +139,11 @@ func AllKeys(cfg *Config) map[string]any {
 	result := make(map[string]any)
 	result["wechat.appid"] = cfg.Wechat.AppID
 	result["wechat.secret"] = cfg.Wechat.Secret
-	result["default_remote"] = cfg.DefaultRemote
 	for k, v := range cfg.Extra {
 		result[k] = v
 	}
 	return result
 }
-
 // Path returns the default config file path.
 func Path() string {
 	return defaultConfigPath()

@@ -11,11 +11,12 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-msgid "Slingshot — AI agent tools for WeChat public accounts"
-msgstr "Slingshot — 微信公众号 AI 智能体工具"
+msgid "A slingshot for AI agents"
+msgstr "AI 智能体可用的弹弓"
 
-msgid "Slingshot is a CLI tool for AI agents to manage WeChat public account content."
-msgstr "Slingshot 是一个供 AI 智能体管理微信公众号内容的命令行工具。"
+msgid "Slingshot is a multi-purpose CLI for AI agents. Initially built for WeChat Official Account management, it is designed to grow — more subcommands will be integrated over time, making it a versatile tool that can aim at any target."
+msgstr "Slingshot 是一个为 AI 智能体打造的多用途命令行工具。它以微信公众号管理为起点，设计上预留了扩展空间——未来将持续集成更多子命令，成为不局限于特定领域的灵活弹弓。"
+
 
 msgid "Show help"
 msgstr "显示帮助"

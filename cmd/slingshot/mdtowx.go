@@ -11,11 +11,10 @@ import (
 )
 
 // 定义 mdtowx 命令的语法:
-//   mdtowx [<remote>:] <file>
+//   mdtowx <file>
 // 顶层 atom 序列: cobra 处理了 "mdtowx", 这里只定义参数。
 var mdtowxUsage = u.Usage{
-	u.RemoteColonOpt, // [<remote>:]
-	u.File,           // <file>
+	u.File, // <file>
 }
 
 // cmdMdtowx 实现 "slingshot mdtowx" 子命令。
@@ -25,10 +24,10 @@ type cmdMdtowx struct {
 
 func (c *cmdMdtowx) command() *cobra.Command {
 	cmd := &cobra.Command{}
-	cmd.Use = "mdtowx " + u.RemoteColonOpt.Render() + " " + u.File.Render()
+	cmd.Use = "mdtowx " + u.File.Render()
 	cmd.Short = i18n.G("Convert Markdown to WeChat public account HTML")
 	cmd.Long = cli.FormatSection(
-		fmt.Sprintf("\033[36mDescription:\033[0m"),
+		"\033[36mDescription:\033[0m",
 		i18n.G(`Convert a Markdown file to HTML format suitable for WeChat public accounts.
 
 The conversion process:
@@ -45,19 +44,15 @@ The conversion process:
 }
 
 func (c *cmdMdtowx) run(cmd *cobra.Command, args []string) error {
-	parsed, err := mdtowxUsage.Parse(args)
+	parsed, err := c.global.Parse(mdtowxUsage, cmd, args)
 	if err != nil {
 		return err
 	}
 
-	// parsed[0] = RemoteColonOpt (Skipped if no remote)
-	// parsed[1] = File
-	remote := parsed[0] // may be Skipped
-	file := parsed[1]
+	// parsed[0] = File
+	file := parsed[0]
 
-	_ = remote // remote name, if specified
-
-	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Converting %s to WeChat HTML...\n"), quote(file.String))
+	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Converting '%s' to WeChat HTML...\n"), file.String)
 
 	// TODO: 实际的 mdtowx 转换逻辑
 	_ = file.String

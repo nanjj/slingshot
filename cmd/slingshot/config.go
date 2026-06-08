@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -157,7 +158,7 @@ func (c *cmdConfig) doShow(cfg *config.Config) error {
 
 func (c *cmdConfig) doGet(cfg *config.Config, parsed []*u.Parsed) error {
 	if len(parsed) < 1 || parsed[0].Skipped {
-		return fmt.Errorf(i18n.G("expected a key argument"))
+		return errors.New(i18n.G("expected a key argument"))
 	}
 	key := parsed[0].String
 
@@ -172,7 +173,7 @@ func (c *cmdConfig) doGet(cfg *config.Config, parsed []*u.Parsed) error {
 
 func (c *cmdConfig) doSet(cfg *config.Config, parsed []*u.Parsed) error {
 	if len(parsed) < 2 || parsed[1].Skipped {
-		return fmt.Errorf(i18n.G("expected key and value arguments"))
+		return errors.New(i18n.G("expected key and value arguments"))
 	}
 	key := parsed[0].String
 	val := parsed[1].String
@@ -192,7 +193,7 @@ func (c *cmdConfig) doSet(cfg *config.Config, parsed []*u.Parsed) error {
 
 func (c *cmdConfig) doUnset(cfg *config.Config, parsed []*u.Parsed) error {
 	if len(parsed) < 1 || parsed[0].Skipped {
-		return fmt.Errorf(i18n.G("expected a key argument"))
+		return errors.New(i18n.G("expected a key argument"))
 	}
 	key := parsed[0].String
 
@@ -239,11 +240,12 @@ func (s *cmdConfigSub) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
 	}
 
-	if len(args) < s.minArgs {
-		return fmt.Errorf(i18n.G("not enough arguments"))
+	if len(args) < s.minArgs && !s.global.flagExplain {
+		return errors.New(i18n.G("not enough arguments"))
 	}
 
-	parsed, err := s.usage.Parse(args)
+
+	parsed, err := s.global.Parse(s.usage, cmd, args)
 	if err != nil {
 		return err
 	}

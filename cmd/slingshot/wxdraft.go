@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -14,28 +15,22 @@ import (
 // 注意: cobra 已处理子命令名 (list/add/update/remove/show),
 // 这里只定义子命令后的参数。所有用法使用顶层 atom 序列。
 
-var wxdraftListUsage = u.Usage{
-	u.RemoteColonOpt,
-}
+var wxdraftListUsage = u.Usage{}
 
 var wxdraftAddUsage = u.Usage{
-	u.RemoteColonOpt,
 	u.File,
 }
 
 var wxdraftUpdateUsage = u.Usage{
-	u.RemoteColonOpt,
 	u.ID,
 	u.File,
 }
 
 var wxdraftRemoveUsage = u.Usage{
-	u.RemoteColonOpt,
 	u.ID,
 }
 
 var wxdraftShowUsage = u.Usage{
-	u.RemoteColonOpt,
 	u.ID,
 }
 
@@ -134,55 +129,50 @@ func (c *cmdWxdraft) cmdShow() *cmdWxdraftSub {
 // Actions
 
 func (c *cmdWxdraft) doList(parsed []*u.Parsed) error {
-	// parsed[0] = RemoteColonOpt (Skipped if not provided)
 	fmt.Println(i18n.G("Listing drafts..."))
 	_ = parsed
 	return nil
 }
 
 func (c *cmdWxdraft) doAdd(parsed []*u.Parsed) error {
-	// parsed[0] = RemoteColonOpt
-	// parsed[1] = File
-	if len(parsed) < 2 || parsed[1].Skipped {
-		return fmt.Errorf(i18n.G("expected a file argument"))
+	// parsed[0] = File
+	if len(parsed) < 1 || parsed[0].Skipped {
+		return errors.New(i18n.G("expected a file argument"))
 	}
-	file := parsed[1]
-	fmt.Printf(i18n.G("Creating draft from %s...\n"), quote(file.String))
+	file := parsed[0]
+	fmt.Printf(i18n.G("Creating draft from '%s'...\n"), file.String)
 	return nil
 }
 
 func (c *cmdWxdraft) doUpdate(parsed []*u.Parsed) error {
-	// parsed[0] = RemoteColonOpt
-	// parsed[1] = ID
-	// parsed[2] = File
-	if len(parsed) < 3 || parsed[2].Skipped {
-		return fmt.Errorf(i18n.G("expected id and file arguments"))
+	// parsed[0] = ID
+	// parsed[1] = File
+	if len(parsed) < 2 || parsed[1].Skipped {
+		return errors.New(i18n.G("expected id and file arguments"))
 	}
-	id := parsed[1]
-	file := parsed[2]
-	fmt.Printf(i18n.G("Updating draft %s from %s...\n"), quote(id.String), quote(file.String))
+	id := parsed[0]
+	file := parsed[1]
+	fmt.Printf(i18n.G("Updating draft '%s' from '%s'...\n"), id.String, file.String)
 	return nil
 }
 
 func (c *cmdWxdraft) doRemove(parsed []*u.Parsed) error {
-	// parsed[0] = RemoteColonOpt
-	// parsed[1] = ID
-	if len(parsed) < 2 || parsed[1].Skipped {
-		return fmt.Errorf(i18n.G("expected an id argument"))
+	// parsed[0] = ID
+	if len(parsed) < 1 || parsed[0].Skipped {
+		return errors.New(i18n.G("expected an id argument"))
 	}
-	id := parsed[1]
-	fmt.Printf(i18n.G("Removing draft %s...\n"), quote(id.String))
+	id := parsed[0]
+	fmt.Printf(i18n.G("Removing draft '%s'...\n"), id.String)
 	return nil
 }
 
 func (c *cmdWxdraft) doShow(parsed []*u.Parsed) error {
-	// parsed[0] = RemoteColonOpt
-	// parsed[1] = ID
-	if len(parsed) < 2 || parsed[1].Skipped {
-		return fmt.Errorf(i18n.G("expected an id argument"))
+	// parsed[0] = ID
+	if len(parsed) < 1 || parsed[0].Skipped {
+		return errors.New(i18n.G("expected an id argument"))
 	}
-	id := parsed[1]
-	fmt.Printf(i18n.G("Showing draft %s...\n"), quote(id.String))
+	id := parsed[0]
+	fmt.Printf(i18n.G("Showing draft '%s'...\n"), id.String)
 	return nil
 }
 
@@ -210,7 +200,7 @@ func (s *cmdWxdraftSub) command() *cobra.Command {
 }
 
 func (s *cmdWxdraftSub) run(cmd *cobra.Command, args []string) error {
-	parsed, err := s.usage.Parse(args)
+	parsed, err := s.global.Parse(s.usage, cmd, args)
 	if err != nil {
 		return err
 	}
