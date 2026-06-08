@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
@@ -44,7 +45,7 @@ func (c *cmdWxdraft) command() *cobra.Command {
 	cmd.Use = "wxdraft"
 	cmd.Short = i18n.G("Manage WeChat drafts")
 	cmd.Long = cli.FormatSection(
-		fmt.Sprintf("\033[36mDescription:\033[0m"),
+		color.CyanString("Description:"),
 		i18n.G(`Manage WeChat public account drafts.
 
 Subcommands:
@@ -191,7 +192,7 @@ func (s *cmdWxdraftSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		fmt.Sprintf("\033[36mDescription:\033[0m"),
+		color.CyanString("Description:"),
 		s.long,
 	)
 	cmd.RunE = s.run

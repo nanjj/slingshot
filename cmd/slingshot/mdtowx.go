@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
@@ -27,7 +28,7 @@ func (c *cmdMdtowx) command() *cobra.Command {
 	cmd.Use = "mdtowx " + u.File.Render()
 	cmd.Short = i18n.G("Convert Markdown to WeChat public account HTML")
 	cmd.Long = cli.FormatSection(
-		"\033[36mDescription:\033[0m",
+		color.CyanString("Description:"),
 		i18n.G(`Convert a Markdown file to HTML format suitable for WeChat public accounts.
 
 The conversion process:

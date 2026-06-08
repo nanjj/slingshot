@@ -42,7 +42,7 @@ func detectLang() string {
 		}
 
 		// LANGUAGE 可以包含冒号分隔的列表
-		lang := strings.Split(val, ":")[0]
+		lang, _, _ := strings.Cut(val, ":")
 
 		// 去掉 .UTF-8 等编码后缀
 		if idx := strings.IndexByte(lang, '.'); idx >= 0 {
@@ -123,7 +123,8 @@ func parsePO(data string) map[string]string {
 			val = strings.ReplaceAll(val, `\"`, `"`)
 			val = strings.ReplaceAll(val, `\n`, "\n")
 
-			if key == "msgid" {
+			switch key {
+			case "msgid":
 				// 保存上一对
 				if currentID != "" {
 					table[currentID] = currentStr
@@ -132,7 +133,7 @@ func parsePO(data string) map[string]string {
 				currentStr = ""
 				inID = true
 				inStr = false
-			} else if key == "msgstr" {
+			case "msgstr":
 				currentStr = val
 				inID = false
 				inStr = true

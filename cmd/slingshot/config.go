@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/config"
@@ -40,7 +41,7 @@ func (c *cmdConfig) command() *cobra.Command {
 	cmd.Use = "config"
 	cmd.Short = i18n.G("Manage configuration")
 	cmd.Long = cli.FormatSection(
-		fmt.Sprintf("\033[36mDescription:\033[0m"),
+		color.CyanString("Description:"),
 		i18n.G(`Manage slingshot configuration file (~/.config/slingshot/config.yml).
 
 Subcommands:
@@ -226,7 +227,7 @@ func (s *cmdConfigSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		fmt.Sprintf("\033[36mDescription:\033[0m"),
+		color.CyanString("Description:"),
 		s.long,
 	)
 	cmd.RunE = s.run

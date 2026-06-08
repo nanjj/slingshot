@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -80,10 +79,4 @@ func FormatSection(header string, content string) string {
 	}
 
 	return out.String()
-}
-
-// ColorizePrefix 创建带颜色的前缀字符串 (如 "Description:" )。
-// colorCode: ANSI 颜色代码, text: 前缀文本。
-func ColorizePrefix(colorCode string, text string) string {
-	return fmt.Sprintf("\033[%sm%s\033[0m", colorCode, text)
 }

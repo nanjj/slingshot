@@ -9,6 +9,7 @@
 package config
 
 import (
+	"maps"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -139,9 +140,7 @@ func AllKeys(cfg *Config) map[string]any {
 	result := make(map[string]any)
 	result["wechat.appid"] = cfg.Wechat.AppID
 	result["wechat.secret"] = cfg.Wechat.Secret
-	for k, v := range cfg.Extra {
-		result[k] = v
-	}
+	maps.Copy(result, cfg.Extra)
 	return result
 }
 // Path returns the default config file path.
