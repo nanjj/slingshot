@@ -230,7 +230,7 @@ func TestConvertFile(t *testing.T) {
 	})
 
 	t.Run("with_front_matter", func(t *testing.T) {
-		input := []byte("---\ntitle: Test Title\nauthor: Test Author\n---\n\n# Hello\n")
+		input := []byte("---\ntitle: Test Title\nauthor: An Author\n---\n\n# Hello\n")
 		dir := t.TempDir()
 		path := dir + "/front.md"
 		if err := os.WriteFile(path, input, 0644); err != nil {
@@ -243,8 +243,8 @@ func TestConvertFile(t *testing.T) {
 		if result.Title != "Test Title" {
 			t.Errorf("expected title 'Test Title', got %q", result.Title)
 		}
-		if result.Author != "Test Author" {
-			t.Errorf("expected author 'Test Author', got %q", result.Author)
+		if result.Author != "AnAuthor" {
+			t.Errorf("expected author 'AnAuthor', got %q", result.Author)
 		}
 		if !strings.Contains(string(result.HTML), "Hello") {
 			t.Errorf("HTML should contain content, got: %s", string(result.HTML))
@@ -402,5 +402,148 @@ func TestExtractAndReplaceRoundTrip(t *testing.T) {
 	}
 	if strings.Contains(s, `src="images/photo.png"`) {
 		t.Errorf("old path should be replaced, got: %s", s)
+	}
+}
+
+func TestValidateTitle(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		if err := ValidateTitle(""); err != nil {
+			t.Errorf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("exactly_64", func(t *testing.T) {
+		title := string(make([]rune, 64))
+		if err := ValidateTitle(title); err != nil {
+			t.Errorf("expected nil for 64 chars, got %v", err)
+		}
+	})
+
+	t.Run("65_chars_error", func(t *testing.T) {
+		title := string(make([]rune, 65))
+		if err := ValidateTitle(title); err == nil {
+			t.Error("expected error for 65 chars, got nil")
+		} else if !strings.Contains(err.Error(), "exceeds 64 characters") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("multi_byte_64", func(t *testing.T) {
+		// 64 Chinese characters = 64 runes
+		title := ""
+		for i := 0; i < 64; i++ {
+			title += "中"
+		}
+		if err := ValidateTitle(title); err != nil {
+			t.Errorf("expected nil for 64 Chinese chars, got %v", err)
+		}
+	})
+
+	t.Run("multi_byte_65_error", func(t *testing.T) {
+		title := ""
+		for i := 0; i < 65; i++ {
+			title += "文"
+		}
+		if err := ValidateTitle(title); err == nil {
+			t.Error("expected error for 65 Chinese chars, got nil")
+		}
+	})
+}
+
+func TestSanitizeAuthor(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		if got := SanitizeAuthor(""); got != "" {
+			t.Errorf("expected empty, got %q", got)
+		}
+	})
+
+	t.Run("under_8_unchanged", func(t *testing.T) {
+		got := SanitizeAuthor("John")
+		if got != "John" {
+			t.Errorf("expected 'John', got %q", got)
+		}
+	})
+
+	t.Run("exactly_8_unchanged", func(t *testing.T) {
+		got := SanitizeAuthor("12345678")
+		if got != "12345678" {
+			t.Errorf("expected '12345678', got %q", got)
+		}
+	})
+
+	t.Run("truncate_over_8", func(t *testing.T) {
+		got := SanitizeAuthor("123456789")
+		if got != "12345678" {
+			t.Errorf("expected '12345678', got %q", got)
+		}
+	})
+
+	t.Run("strip_spaces_then_truncate", func(t *testing.T) {
+		got := SanitizeAuthor("A B C D E F")
+		// "ABCDEF" is 6 chars — after stripping spaces it's "ABCDEF" (6), under 8
+		if got != "ABCDEF" {
+			t.Errorf("expected 'ABCDEF', got %q", got)
+		}
+	})
+
+	t.Run("strip_spaces_over_8", func(t *testing.T) {
+		got := SanitizeAuthor("a b c d e f g h i")
+		// after stripping spaces: "abcdefghi" (9 chars) → truncated to "abcdefgh" (8)
+		if got != "abcdefgh" {
+			t.Errorf("expected 'abcdefgh', got %q", got)
+		}
+	})
+
+	t.Run("multi_byte_truncate", func(t *testing.T) {
+		got := SanitizeAuthor("一二三四五六七八九")
+		if got != "一二三四五六七八" {
+			t.Errorf("expected '一二三四五六七八', got %q", got)
+		}
+	})
+
+	t.Run("spaces_multi_byte", func(t *testing.T) {
+		got := SanitizeAuthor("一 二 三 四 五 六 七 八 九")
+		// strip spaces: "一二三四五六七八九" (9 runes) → "一二三四五六七八" (8)
+		if got != "一二三四五六七八" {
+			t.Errorf("expected '一二三四五六七八', got %q", got)
+		}
+	})
+}
+
+func TestConvertMarkdown_TitleTooLong(t *testing.T) {
+	// 65 'a' characters
+	longTitle := ""
+	for i := 0; i < 65; i++ {
+		longTitle += "a"
+	}
+	input := "---\ntitle: " + longTitle + "\n---\n\n# Hello\n"
+	_, err := ConvertMarkdown([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for title > 64 chars, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds 64 characters") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestConvertMarkdown_AuthorSanitized(t *testing.T) {
+	input := "---\ntitle: OK\nauthor: a b c d e f g h i\n---\n\n# Hello\n"
+	result, err := ConvertMarkdown([]byte(input))
+	if err != nil {
+		t.Fatalf("ConvertMarkdown() error = %v", err)
+	}
+	if result.Author != "abcdefgh" {
+		t.Errorf("expected sanitized author 'abcdefgh', got %q", result.Author)
+	}
+}
+
+func TestConvertMarkdown_AuthorNotExceeding(t *testing.T) {
+	input := "---\ntitle: OK\nauthor: John\n---\n\n# Hello\n"
+	result, err := ConvertMarkdown([]byte(input))
+	if err != nil {
+		t.Fatalf("ConvertMarkdown() error = %v", err)
+	}
+	if result.Author != "John" {
+		t.Errorf("expected author 'John', got %q", result.Author)
 	}
 }

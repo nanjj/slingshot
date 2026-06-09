@@ -17,6 +17,7 @@ import (
 	"github.com/nanjj/slingshot/internal/draft"
 	"github.com/nanjj/slingshot/internal/getaccesstoken"
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/mdtowx"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
 
@@ -182,9 +183,13 @@ func (c *cmdWxdraftAdd) run(cmd *cobra.Command, args []string) error {
 		title = extractTitle(htmlStr, file)
 	}
 
-	// Extract author from <meta name="author" content="...">
-	author := extractAuthor(htmlStr)
+	// Validate title
+	if err := mdtowx.ValidateTitle(title); err != nil {
+		return fmt.Errorf("invalid title: %w", err)
+	}
 
+	// Extract and sanitize author
+	author := mdtowx.SanitizeAuthor(extractAuthor(htmlStr))
 	// Load config and get token
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -264,9 +269,13 @@ func (c *cmdWxdraftUpdate) run(cmd *cobra.Command, args []string) error {
 		title = extractTitle(htmlStr, file)
 	}
 
-	// Extract author from <meta name="author" content="...">
-	author := extractAuthor(htmlStr)
+	// Validate title
+	if err := mdtowx.ValidateTitle(title); err != nil {
+		return fmt.Errorf("invalid title: %w", err)
+	}
 
+	// Extract and sanitize author
+	author := mdtowx.SanitizeAuthor(extractAuthor(htmlStr))
 	// Load config and get token
 	cfg, _, err := config.Load()
 	if err != nil {

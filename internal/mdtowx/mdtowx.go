@@ -30,6 +30,45 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// --- WeChat API limits ---
+
+const (
+	// MaxTitleLen is the maximum length (in runes) for an article title.
+	MaxTitleLen = 64
+	// MaxAuthorLen is the maximum length (in runes) for an article author.
+	MaxAuthorLen = 8
+)
+
+// ValidateTitle checks that title does not exceed the WeChat API limit.
+// Returns an error if the title is too long.
+func ValidateTitle(title string) error {
+	if n := len([]rune(title)); n > MaxTitleLen {
+		return fmt.Errorf("title exceeds %d characters (got %d)", MaxTitleLen, n)
+	}
+	return nil
+}
+
+// SanitizeAuthor truncates author to the WeChat API limit.
+// If the author exceeds MaxAuthorLen, all whitespace is stripped
+// and the first MaxAuthorLen runes are kept.
+func SanitizeAuthor(author string) string {
+	if len([]rune(author)) <= MaxAuthorLen {
+		return author
+	}
+	// Strip all whitespace
+	noSpace := strings.Map(func(r rune) rune {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return -1 // drop
+		}
+		return r
+	}, author)
+	runes := []rune(noSpace)
+	if len(runes) > MaxAuthorLen {
+		runes = runes[:MaxAuthorLen]
+	}
+	return string(runes)
+}
+
 // --- Result type ---
 
 // Result holds the converted HTML and metadata extracted from Markdown.
@@ -262,16 +301,22 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 	// 1. Parse front matter (if present)
 	fm, body := parseFrontMatter(source)
 
+	// 2. Validate title and sanitize author.
+	if err := ValidateTitle(fm.Title); err != nil {
+		return nil, err
+	}
+	author := SanitizeAuthor(fm.Author)
+
 	md := newGoldmark()
 
-	// 2. Parse to AST.
+	// 3. Parse to AST.
 	reader := text.NewReader(body)
 	doc := md.Parser().Parse(reader)
 
-	// 3. Inject inline style attributes.
+	// 4. Inject inline style attributes.
 	addInlineStyles(doc)
 
-	// 4. Render to HTML.
+	// 5. Render to HTML.
 	var buf bytes.Buffer
 	if err := md.Renderer().Render(&buf, body, doc); err != nil {
 		return nil, fmt.Errorf("rendering markdown: %w", err)
@@ -280,7 +325,7 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 	return &Result{
 		HTML:   buf.Bytes(),
 		Title:  fm.Title,
-		Author: fm.Author,
+		Author: author,
 	}, nil
 }
 
