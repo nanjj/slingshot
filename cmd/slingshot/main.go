@@ -90,7 +90,6 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 
 	// 注册子命令
 	rootCmd.AddCommand(
-		(&cmdMdtowx{global: global}).command(),
 		(&cmdWxdraft{global: global}).command(),
 		(&cmdConfig{global: global}).command(),
 	)

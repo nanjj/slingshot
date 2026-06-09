@@ -9,8 +9,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
-	"github.com/nanjj/slingshot/internal/config"
 	cli "github.com/nanjj/slingshot/internal/cmd"
+	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/i18n"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
@@ -58,11 +58,11 @@ Subcommands:
 
 	cmd.AddCommand(
 		(&cmdConfigSub{
-			global: c.global,
-			name:   "list",
-			usage:  u.Usage{},
-			short:  i18n.G("List all config keys"),
-			long:   i18n.G("List all configuration keys and their current values."),
+			global:  c.global,
+			name:    "list",
+			usage:   u.Usage{},
+			short:   i18n.G("List all config keys"),
+			long:    i18n.G("List all configuration keys and their current values."),
 			minArgs: 0,
 			action: func(cfg *config.Config, parsed []*u.Parsed) error {
 				return c.doList(cfg)
@@ -70,11 +70,11 @@ Subcommands:
 		}).command(),
 
 		(&cmdConfigSub{
-			global: c.global,
-			name:   "show",
-			usage:  u.Usage{},
-			short:  i18n.G("Show full configuration"),
-			long:   i18n.G("Display the complete configuration in YAML format."),
+			global:  c.global,
+			name:    "show",
+			usage:   u.Usage{},
+			short:   i18n.G("Show full configuration"),
+			long:    i18n.G("Display the complete configuration in YAML format."),
 			minArgs: 0,
 			action: func(cfg *config.Config, parsed []*u.Parsed) error {
 				return c.doShow(cfg)
@@ -82,11 +82,11 @@ Subcommands:
 		}).command(),
 
 		(&cmdConfigSub{
-			global: c.global,
-			name:   "get",
-			usage:  configGetUsage,
-			short:  i18n.G("Get a config value"),
-			long:   i18n.G("Get the value of a specific configuration key."),
+			global:  c.global,
+			name:    "get",
+			usage:   configGetUsage,
+			short:   i18n.G("Get a config value"),
+			long:    i18n.G("Get the value of a specific configuration key."),
 			minArgs: 1,
 			action: func(cfg *config.Config, parsed []*u.Parsed) error {
 				return c.doGet(cfg, parsed)
@@ -94,11 +94,11 @@ Subcommands:
 		}).command(),
 
 		(&cmdConfigSub{
-			global: c.global,
-			name:   "set",
-			usage:  configSetUsage,
-			short:  i18n.G("Set a config value"),
-			long:   i18n.G("Set a configuration key to a new value and save."),
+			global:  c.global,
+			name:    "set",
+			usage:   configSetUsage,
+			short:   i18n.G("Set a config value"),
+			long:    i18n.G("Set a configuration key to a new value and save."),
 			minArgs: 2,
 			action: func(cfg *config.Config, parsed []*u.Parsed) error {
 				return c.doSet(cfg, parsed)
@@ -106,11 +106,11 @@ Subcommands:
 		}).command(),
 
 		(&cmdConfigSub{
-			global: c.global,
-			name:   "unset",
-			usage:  configUnsetUsage,
-			short:  i18n.G("Unset (delete) a config key"),
-			long:   i18n.G("Unset (delete) a configuration key and save."),
+			global:  c.global,
+			name:    "unset",
+			usage:   configUnsetUsage,
+			short:   i18n.G("Unset (delete) a config key"),
+			long:    i18n.G("Unset (delete) a configuration key and save."),
 			minArgs: 1,
 			action: func(cfg *config.Config, parsed []*u.Parsed) error {
 				return c.doUnset(cfg, parsed)
@@ -244,7 +244,6 @@ func (s *cmdConfigSub) run(cmd *cobra.Command, args []string) error {
 	if len(args) < s.minArgs && !s.global.flagExplain {
 		return errors.New(i18n.G("not enough arguments"))
 	}
-
 
 	parsed, err := s.global.Parse(s.usage, cmd, args)
 	if err != nil {

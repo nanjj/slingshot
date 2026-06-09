@@ -29,12 +29,12 @@ type Atom interface {
 // --- 预定义 atom 变量 ---
 
 var (
-	File    = placeholder{"file"}
-	ID      = placeholder{"id"}
-	Key     = placeholder{"key"}
-	Value   = placeholder{"value"}
-	Name    = placeholder{"name"}
-	KV      = compound{"=", []Atom{Key, Value}}
+	File  = placeholder{"file"}
+	ID    = placeholder{"id"}
+	Key   = placeholder{"key"}
+	Value = placeholder{"value"}
+	Name  = placeholder{"name"}
+	KV    = compound{"=", []Atom{Key, Value}}
 )
 
 // --- 构造函数 ---
@@ -74,7 +74,6 @@ func Colon(a Atom) Atom {
 func Flag(name string) Atom {
 	return flag{name}
 }
-
 
 // helper: 渲染不带颜色的原始文本
 func renderRaw(a Atom) string {
