@@ -547,3 +547,27 @@ func TestConvertMarkdown_AuthorNotExceeding(t *testing.T) {
 		t.Errorf("expected author 'John', got %q", result.Author)
 	}
 }
+
+func TestConvertMarkdown_ThumbMediaID(t *testing.T) {
+	t.Run("extracted_from_front_matter", func(t *testing.T) {
+		input := "---\ntitle: With Cover\nauthor: Me\nthumb_media_id: abc123def\n---\n\n# Hello\n"
+		result, err := ConvertMarkdown([]byte(input))
+		if err != nil {
+			t.Fatalf("ConvertMarkdown() error = %v", err)
+		}
+		if result.ThumbMediaID != "abc123def" {
+			t.Errorf("expected thumb_media_id 'abc123def', got %q", result.ThumbMediaID)
+		}
+	})
+
+	t.Run("empty_when_not_in_front_matter", func(t *testing.T) {
+		input := "# No front matter\n"
+		result, err := ConvertMarkdown([]byte(input))
+		if err != nil {
+			t.Fatalf("ConvertMarkdown() error = %v", err)
+		}
+		if result.ThumbMediaID != "" {
+			t.Errorf("expected empty thumb_media_id, got %q", result.ThumbMediaID)
+		}
+	})
+}

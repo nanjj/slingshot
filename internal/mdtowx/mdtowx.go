@@ -79,12 +79,15 @@ type Result struct {
 	Title string
 	// Author extracted from the YAML front matter (if present).
 	Author string
+	// ThumbMediaID extracted from the YAML front matter (if present).
+	ThumbMediaID string
 }
 
 // frontMatter is the YAML structure expected at the top of a Markdown file.
 type frontMatter struct {
-	Title  string `yaml:"title"`
-	Author string `yaml:"author"`
+	Title        string `yaml:"title"`
+	Author       string `yaml:"author"`
+	ThumbMediaID string `yaml:"thumb_media_id"`
 }
 
 // parseFrontMatter extracts YAML front matter from Markdown source.
@@ -323,10 +326,12 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 	}
 
 	return &Result{
-		HTML:   buf.Bytes(),
-		Title:  fm.Title,
-		Author: author,
+		HTML:         buf.Bytes(),
+		Title:        fm.Title,
+		Author:       author,
+		ThumbMediaID: fm.ThumbMediaID,
 	}, nil
+
 }
 
 // ConvertFile reads a Markdown file and returns WeChat-friendly HTML with

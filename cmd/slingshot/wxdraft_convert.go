@@ -92,7 +92,7 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	if !c.upload {
 		// Without --upload: wrap with metadata and save
-		outHTML := wrapHTML(result.Title, result.Author, html)
+		outHTML := wrapHTML(result.Title, result.Author, result.ThumbMediaID, html)
 		if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
 		}
@@ -108,7 +108,7 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	if len(refs) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), i18n.G("No local images found, saving HTML..."))
-		outHTML := wrapHTML(result.Title, result.Author, html)
+		outHTML := wrapHTML(result.Title, result.Author, result.ThumbMediaID, html)
 		if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
 		}
@@ -190,7 +190,7 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 	updatedHTML := mdtowx.ReplaceImageURLs(html, replacements)
 
 	// Wrap with metadata and save
-	outHTML := wrapHTML(result.Title, result.Author, updatedHTML)
+	outHTML := wrapHTML(result.Title, result.Author, result.ThumbMediaID, updatedHTML)
 	if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 		return fmt.Errorf("writing output %q: %w", outPath, err)
 	}
@@ -200,7 +200,7 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 }
 
 // wrapHTML wraps body HTML in a complete document with metadata.
-func wrapHTML(title, author string, body []byte) []byte {
+func wrapHTML(title, author, thumbMediaID string, body []byte) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("<!DOCTYPE html>\n<html>\n<head>\n")
 	if title != "" {
@@ -211,6 +211,11 @@ func wrapHTML(title, author string, body []byte) []byte {
 	if author != "" {
 		buf.WriteString(`<meta name="author" content="`)
 		buf.WriteString(htmlEscape(author))
+		buf.WriteString(`">` + "\n")
+	}
+	if thumbMediaID != "" {
+		buf.WriteString(`<meta name="thumb_media_id" content="`)
+		buf.WriteString(htmlEscape(thumbMediaID))
 		buf.WriteString(`">` + "\n")
 	}
 	buf.WriteString(`<meta charset="utf-8">` + "\n")
