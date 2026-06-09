@@ -174,12 +174,16 @@ func (c *cmdWxdraftAdd) run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading %q: %w", file, err)
 	}
+	htmlStr := string(htmlContent)
 
 	// Determine title
 	title := c.title
 	if title == "" {
-		title = extractTitle(string(htmlContent), file)
+		title = extractTitle(htmlStr, file)
 	}
+
+	// Extract author from <meta name="author" content="...">
+	author := extractAuthor(htmlStr)
 
 	// Load config and get token
 	cfg, _, err := config.Load()
@@ -195,6 +199,7 @@ func (c *cmdWxdraftAdd) run(cmd *cobra.Command, args []string) error {
 	resp, err := draft.Add(token, []draft.Article{
 		{
 			Title:   title,
+			Author:  author,
 			Content: string(htmlContent),
 		},
 	})
@@ -251,12 +256,16 @@ func (c *cmdWxdraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading %q: %w", file, err)
 	}
+	htmlStr := string(htmlContent)
 
 	// Determine title
 	title := c.title
 	if title == "" {
-		title = extractTitle(string(htmlContent), file)
+		title = extractTitle(htmlStr, file)
 	}
+
+	// Extract author from <meta name="author" content="...">
+	author := extractAuthor(htmlStr)
 
 	// Load config and get token
 	cfg, _, err := config.Load()
@@ -271,6 +280,7 @@ func (c *cmdWxdraftUpdate) run(cmd *cobra.Command, args []string) error {
 	// Update draft
 	if err := draft.Update(token, mediaID, c.index, draft.Article{
 		Title:   title,
+		Author:  author,
 		Content: string(htmlContent),
 	}); err != nil {
 		return fmt.Errorf("updating draft: %w", err)
@@ -468,6 +478,34 @@ func extractTitle(htmlContent, filePath string) string {
 	base := filepath.Base(filePath)
 	ext := filepath.Ext(base)
 	return base[:len(base)-len(ext)]
+}
+
+// extractAuthor extracts the author from <meta name="author" content="..."> in HTML.
+func extractAuthor(htmlContent string) string {
+	lower := strings.ToLower(htmlContent)
+	// Match <meta name="author" content="...">
+	marker := `<meta name="author" content="`
+	start := strings.Index(lower, marker)
+	if start < 0 {
+		// Try with single quotes
+		marker = `<meta name="author" content='`
+		start = strings.Index(lower, marker)
+		if start < 0 {
+			return ""
+		}
+	}
+	start += len(marker)
+	end := strings.Index(htmlContent[start:], `"`)
+	if end < 0 {
+		end = strings.Index(htmlContent[start:], `'`)
+	}
+	if end < 0 {
+		return ""
+	}
+	author := htmlContent[start : start+end]
+	author = strings.TrimSpace(author)
+	author = html.UnescapeString(author)
+	return author
 }
 
 // stripTags removes HTML tags for preview text.

@@ -153,14 +153,48 @@ func TestConvertMarkdown(t *testing.T) {
 				`<p style="margin:0.8em 0;line-height:1.8">p <strong>b</strong> p</p>`,
 			},
 		},
+		// Front matter tests
+		{
+			name: "front_matter_title_author",
+			input: `---
+title: My Article
+author: John Doe
+---
+
+# Hello`,
+			want: []string{
+				`<h1`, `Hello`,
+			},
+		},
+		{
+			name:  "front_matter_only_title",
+			input: "---\ntitle: Just Title\n---\n\nContent.",
+			want: []string{
+				`Content.`,
+			},
+		},
+		{
+			name: "front_matter_empty_no_double_title",
+			input: `---
+title: Test
+---
+
+# Title in body`,
+			want: []string{
+				`<h1`, `Title in body`,
+			},
+			not: []string{
+				`Test`, // front matter content should not appear in HTML
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ConvertMarkdown([]byte(tc.input))
+			result, err := ConvertMarkdown([]byte(tc.input))
 			if err != nil {
 				t.Fatalf("ConvertMarkdown() error = %v", err)
 			}
-			s := string(got)
+			s := string(result.HTML)
 			for _, w := range tc.want {
 				if !strings.Contains(s, w) {
 					t.Errorf("expected output to contain %q\n--- got ---\n%s", w, s)
@@ -176,22 +210,65 @@ func TestConvertMarkdown(t *testing.T) {
 }
 
 func TestConvertFile(t *testing.T) {
-	input := []byte("# Hello\n\nWorld.\n")
-	dir := t.TempDir()
-	path := dir + "/test.md"
-	if err := os.WriteFile(path, input, 0644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := ConvertFile(path)
-	if err != nil {
-		t.Fatalf("ConvertFile error = %v", err)
-	}
-	if len(got) == 0 {
-		t.Fatal("ConvertFile returned empty output")
-	}
-	if !strings.Contains(string(got), "World.") {
-		t.Errorf("output should contain content, got: %s", string(got))
-	}
+	t.Run("basic", func(t *testing.T) {
+		input := []byte("# Hello\n\nWorld.\n")
+		dir := t.TempDir()
+		path := dir + "/test.md"
+		if err := os.WriteFile(path, input, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(path)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if len(result.HTML) == 0 {
+			t.Fatal("ConvertFile returned empty HTML")
+		}
+		if !strings.Contains(string(result.HTML), "World.") {
+			t.Errorf("output should contain content, got: %s", string(result.HTML))
+		}
+	})
+
+	t.Run("with_front_matter", func(t *testing.T) {
+		input := []byte("---\ntitle: Test Title\nauthor: Test Author\n---\n\n# Hello\n")
+		dir := t.TempDir()
+		path := dir + "/front.md"
+		if err := os.WriteFile(path, input, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(path)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "Test Title" {
+			t.Errorf("expected title 'Test Title', got %q", result.Title)
+		}
+		if result.Author != "Test Author" {
+			t.Errorf("expected author 'Test Author', got %q", result.Author)
+		}
+		if !strings.Contains(string(result.HTML), "Hello") {
+			t.Errorf("HTML should contain content, got: %s", string(result.HTML))
+		}
+	})
+
+	t.Run("without_front_matter", func(t *testing.T) {
+		input := []byte("# Just Content\n")
+		dir := t.TempDir()
+		path := dir + "/plain.md"
+		if err := os.WriteFile(path, input, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(path)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "" {
+			t.Errorf("expected empty title, got %q", result.Title)
+		}
+		if result.Author != "" {
+			t.Errorf("expected empty author, got %q", result.Author)
+		}
+	})
 }
 
 func TestExtractImagePaths(t *testing.T) {

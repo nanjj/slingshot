@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -79,17 +81,19 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Converting %s to WeChat HTML...\n"), file.String)
 
-	html, err := mdtowx.ConvertFile(file.String)
+	result, err := mdtowx.ConvertFile(file.String)
 	if err != nil {
 		return fmt.Errorf("conversion failed: %w", err)
 	}
+	html := result.HTML
 
 	// 输出文件名: <filename>.html (与输入同目录)
 	outPath := replaceExt(file.String, ".html")
 
 	if !c.upload {
-		// Without --upload: just save and exit
-		if err := os.WriteFile(outPath, html, 0644); err != nil {
+		// Without --upload: wrap with metadata and save
+		outHTML := wrapHTML(result.Title, result.Author, html)
+		if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Written to %s\n"), outPath)
@@ -104,7 +108,8 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	if len(refs) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), i18n.G("No local images found, saving HTML..."))
-		if err := os.WriteFile(outPath, html, 0644); err != nil {
+		outHTML := wrapHTML(result.Title, result.Author, html)
+		if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Written to %s\n"), outPath)
@@ -184,12 +189,45 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 	// Step 4: Update image URLs in HTML
 	updatedHTML := mdtowx.ReplaceImageURLs(html, replacements)
 
-	if err := os.WriteFile(outPath, updatedHTML, 0644); err != nil {
+	// Wrap with metadata and save
+	outHTML := wrapHTML(result.Title, result.Author, updatedHTML)
+	if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 		return fmt.Errorf("writing output %q: %w", outPath, err)
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Upload complete, written to %s\n"), outPath)
 	return nil
+}
+
+// wrapHTML wraps body HTML in a complete document with metadata.
+func wrapHTML(title, author string, body []byte) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("<!DOCTYPE html>\n<html>\n<head>\n")
+	if title != "" {
+		buf.WriteString("<title>")
+		buf.WriteString(htmlEscape(title))
+		buf.WriteString("</title>\n")
+	}
+	if author != "" {
+		buf.WriteString(`<meta name="author" content="`)
+		buf.WriteString(htmlEscape(author))
+		buf.WriteString(`">` + "\n")
+	}
+	buf.WriteString(`<meta charset="utf-8">` + "\n")
+	buf.WriteString("</head>\n<body>\n")
+	buf.Write(body)
+	buf.WriteString("\n</body>\n</html>\n")
+	return buf.Bytes()
+}
+
+// htmlEscape escapes special HTML characters.
+func htmlEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, `"`, "&quot;")
+	s = strings.ReplaceAll(s, "'", "&#39;")
+	return s
 }
 
 // replaceExt replaces the extension of a file path with ext.

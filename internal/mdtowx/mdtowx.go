@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -26,7 +27,70 @@ import (
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
+	"gopkg.in/yaml.v3"
 )
+
+// --- Result type ---
+
+// Result holds the converted HTML and metadata extracted from Markdown.
+type Result struct {
+	// HTML is the body HTML with all styles inline, suitable for WeChat.
+	HTML []byte
+	// Title extracted from the YAML front matter (if present).
+	Title string
+	// Author extracted from the YAML front matter (if present).
+	Author string
+}
+
+// frontMatter is the YAML structure expected at the top of a Markdown file.
+type frontMatter struct {
+	Title  string `yaml:"title"`
+	Author string `yaml:"author"`
+}
+
+// parseFrontMatter extracts YAML front matter from Markdown source.
+// It returns the parsed metadata and the body content (with front matter stripped).
+// If no valid front matter is found, returns empty metadata and the original source.
+func parseFrontMatter(source []byte) (fm frontMatter, body []byte) {
+	s := string(source)
+	if !strings.HasPrefix(s, "---\n") && !strings.HasPrefix(s, "---\r\n") {
+		return fm, source
+	}
+
+	// Find the closing ---
+	rest := s[3:] // skip opening ---
+	// Handle \r\n or \n after opening
+	if strings.HasPrefix(rest, "\r\n") {
+		rest = rest[2:]
+	} else if strings.HasPrefix(rest, "\n") {
+		rest = rest[1:]
+	} else {
+		return fm, source // malformed opening
+	}
+
+	endIdx := strings.Index(rest, "\n---")
+	if endIdx < 0 {
+		endIdx = strings.Index(rest, "\r\n---")
+	}
+	if endIdx < 0 {
+		return fm, source // no closing --- found
+	}
+
+	yamlBlock := rest[:endIdx]
+	bodyStart := endIdx + 4 // skip \n--- (handle either \n or \r\n)
+	if len(rest) > bodyStart && rest[bodyStart-1] == '\r' {
+		bodyStart = endIdx + 5 // skip \r\n---
+	}
+
+	// Parse YAML
+	var parsed frontMatter
+	if err := yaml.Unmarshal([]byte(yamlBlock), &parsed); err != nil {
+		// Invalid YAML — skip front matter, treat source as plain markdown
+		return fm, source
+	}
+
+	return parsed, []byte(rest[bodyStart:])
+}
 
 // --- Inline style definitions ---
 
@@ -188,32 +252,41 @@ func newGoldmark() goldmark.Markdown {
 }
 
 // --- Public API ---
-
 // ConvertMarkdown converts Markdown source bytes to WeChat-friendly HTML.
 //
 // The returned HTML has all styles inline, making it suitable for pasting into
-// the WeChat public platform editor.
-func ConvertMarkdown(source []byte) ([]byte, error) {
+// the WeChat public platform editor. If the source contains YAML front matter
+// (delimited by ---), the title and author are extracted and returned in the
+// Result struct.
+func ConvertMarkdown(source []byte) (*Result, error) {
+	// 1. Parse front matter (if present)
+	fm, body := parseFrontMatter(source)
+
 	md := newGoldmark()
 
-	// 1. Parse to AST.
-	reader := text.NewReader(source)
+	// 2. Parse to AST.
+	reader := text.NewReader(body)
 	doc := md.Parser().Parse(reader)
 
-	// 2. Inject inline style attributes.
+	// 3. Inject inline style attributes.
 	addInlineStyles(doc)
 
-	// 3. Render to HTML.
+	// 4. Render to HTML.
 	var buf bytes.Buffer
-	if err := md.Renderer().Render(&buf, source, doc); err != nil {
+	if err := md.Renderer().Render(&buf, body, doc); err != nil {
 		return nil, fmt.Errorf("rendering markdown: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	return &Result{
+		HTML:   buf.Bytes(),
+		Title:  fm.Title,
+		Author: fm.Author,
+	}, nil
 }
 
-// ConvertFile reads a Markdown file and returns WeChat-friendly HTML.
-func ConvertFile(filePath string) ([]byte, error) {
+// ConvertFile reads a Markdown file and returns WeChat-friendly HTML with
+// metadata extracted from YAML front matter.
+func ConvertFile(filePath string) (*Result, error) {
 	source, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading file %q: %w", filePath, err)

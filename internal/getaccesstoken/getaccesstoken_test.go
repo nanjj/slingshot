@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,6 +180,12 @@ func TestGetTokenWithConfig(t *testing.T) {
 		TokenURL = srv.URL
 		defer func() { TokenURL = originalURL }()
 
+		// Save to a temp file instead of the real config
+		savePath := t.TempDir() + "/test_config.yml"
+		originalSavePath := ConfigSavePath
+		ConfigSavePath = savePath
+		defer func() { ConfigSavePath = originalSavePath }()
+
 		cfg := &config.Config{Extra: map[string]any{
 			"wechat": map[string]any{
 				"access_token":     "stale_token",
@@ -202,6 +210,15 @@ func TestGetTokenWithConfig(t *testing.T) {
 		}
 		if raw.(string) != "fresh_token" {
 			t.Errorf("config should have fresh_token, got %q", raw.(string))
+		}
+
+		// Verify the temp config file was saved and contains the token
+		savedData, err := os.ReadFile(savePath)
+		if err != nil {
+			t.Fatalf("expected temp config file to exist: %v", err)
+		}
+		if !strings.Contains(string(savedData), "fresh_token") {
+			t.Errorf("temp config should contain fresh_token, got: %s", string(savedData))
 		}
 	})
 }

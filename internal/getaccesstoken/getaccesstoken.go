@@ -24,6 +24,10 @@ var (
 	// DefaultExpiryBuffer is the safety margin (seconds) before actual expiry
 	// to proactively refresh the token.
 	DefaultExpiryBuffer = 300 // 5 minutes
+	// ConfigSavePath is where GetToken saves the updated config (token cache).
+	// If empty, defaults to config.Path(). Tests can set this to a temp file
+	// to avoid overwriting the real config file.
+	ConfigSavePath string
 )
 
 // TokenResponse represents the WeChat access token API response.
@@ -79,12 +83,14 @@ func GetToken(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("caching token expiry: %w", err)
 	}
 
-	// Save config
-	path := config.Path()
-	if err := config.Save(cfg, path); err != nil {
+	// Save config (use ConfigSavePath if set, otherwise config.Path())
+	savePath := ConfigSavePath
+	if savePath == "" {
+		savePath = config.Path()
+	}
+	if err := config.Save(cfg, savePath); err != nil {
 		return "", fmt.Errorf("saving config: %w", err)
 	}
-
 	return token, nil
 }
 
