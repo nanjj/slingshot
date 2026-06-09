@@ -20,20 +20,21 @@ import (
 	u "github.com/nanjj/slingshot/internal/usage"
 )
 
-// 定义 wxdraft convert 子命令的语法:
+// 定义 draft convert 子命令的语法:
 //
-//	wxdraft convert <file>
-var wxdraftConvertUsage = u.Usage{
+//	draft convert <file>
+
+var draftConvertUsage = u.Usage{
 	u.File, // <file>
 }
 
-// cmdWxdraftConvert 实现 "slingshot wxdraft convert" 子命令。
-type cmdWxdraftConvert struct {
+// cmdDraftConvert 实现 "slingshot draft convert" 子命令。
+type cmdDraftConvert struct {
 	global *cmdGlobal
 	upload bool
 }
 
-func (c *cmdWxdraftConvert) command() *cobra.Command {
+func (c *cmdDraftConvert) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "convert " + u.File.Render()
 	cmd.Short = i18n.G("Convert Markdown to WeChat public account HTML")
@@ -72,8 +73,8 @@ This command handles all common Markdown syntax:
 	return cmd
 }
 
-func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
-	parsed, err := c.global.Parse(wxdraftConvertUsage, cmd, args)
+func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
+	parsed, err := c.global.Parse(draftConvertUsage, cmd, args)
 	if err != nil {
 		return err
 	}

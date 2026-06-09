@@ -90,8 +90,9 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 
 	// 注册子命令
 	rootCmd.AddCommand(
-		(&cmdWxdraft{global: global}).command(),
+		(&cmdDraft{global: global}).command(),
 		(&cmdConfig{global: global}).command(),
+		(&cmdMeterial{global: global}).command(),
 	)
 
 	// 处理 version 标志
