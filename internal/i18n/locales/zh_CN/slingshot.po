@@ -14,8 +14,8 @@ msgstr ""
 msgid "A slingshot for AI agents"
 msgstr "AI 智能体可用的弹弓"
 
-msgid "Slingshot is a multi-purpose CLI for AI agents. Initially built for WeChat Official Account management, it is designed to grow — more subcommands will be integrated over time, making it a versatile tool that can aim at any target."
-msgstr "Slingshot 是一个为 AI 智能体打造的多用途命令行工具。它以微信公众号管理为起点，设计上预留了扩展空间——未来将持续集成更多子命令，成为不局限于特定领域的灵活弹弓。"
+msgid "Slingshot is a multi-purpose CLI for AI agents."
+msgstr "Slingshot 是一个为 AI 智能体打造的多用途命令行工具。"
 
 
 msgid "Show help"

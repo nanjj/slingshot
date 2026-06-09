@@ -28,7 +28,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:           "slingshot",
 		Short:         i18n.G("A slingshot for AI agents"),
-		Long:          i18n.G(`Slingshot is a multi-purpose CLI for AI agents. Initially built for WeChat Official Account management, it is designed to grow — more subcommands will be integrated over time, making it a versatile tool that can aim at any target.`),
+		Long:          i18n.G(`Slingshot is a multi-purpose CLI for AI agents.`),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
