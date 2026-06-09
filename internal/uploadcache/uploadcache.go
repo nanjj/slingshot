@@ -3,13 +3,15 @@
 //
 // The cache is stored as images.yaml in the same directory as the markdown
 // or HTML file. Each entry maps an md5sum key to an Entry containing the
-// original filename and the WeChat URL returned by the upload API.
+// original filename, the WeChat URL (from media/uploadimg), and optionally
+// the media_id (from material/add_material for thumbnail images).
 //
 // Example images.yaml:
 //
 //	86d66b4cb6fd2a2a49afc0addbdf1b89:
 //	  filename: photo.png
 //	  url: "https://mmbiz.qpic.cn/abc"
+//	  media_id: "xxx"
 //	a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d:
 //	  filename: logo.jpg
 //	  url: "https://mmbiz.qpic.cn/def"
@@ -27,9 +29,13 @@ import (
 const cacheFile = "images.yaml"
 
 // Entry stores the metadata for a cached image upload.
+// Both URL and MediaID are optional — which one is set depends on
+// whether the image was uploaded for content use (media/uploadimg → URL)
+// or as a thumbnail (material/add_material → media_id).
 type Entry struct {
 	Filename string `yaml:"filename"`
-	URL      string `yaml:"url"`
+	URL      string `yaml:"url,omitempty"`
+	MediaID  string `yaml:"media_id,omitempty"`
 }
 
 // Cache manages image upload state via YAML on disk.
@@ -99,11 +105,40 @@ func (c *Cache) Get(key string) (string, bool) {
 	return entry.URL, true
 }
 
-// Set records a cache entry and marks the cache as dirty (needs saving).
+// GetMediaID returns the cached media_id for a key and whether it was found.
+func (c *Cache) GetMediaID(key string) (string, bool) {
+	entry, ok := c.data[key]
+	if !ok {
+		return "", false
+	}
+	return entry.MediaID, true
+}
+
+// Set records a cache entry (with URL) and marks the cache as dirty.
 func (c *Cache) Set(key, filename, url string) {
 	entry := Entry{Filename: filename, URL: url}
 	if existing, ok := c.data[key]; ok && existing == entry {
 		return // no change
+	}
+	// Preserve existing MediaID if present
+	if existing, ok := c.data[key]; ok && existing.MediaID != "" {
+		entry.MediaID = existing.MediaID
+	}
+	c.data[key] = entry
+	c.dirty = true
+}
+
+// SetMediaID records a cache entry with a media_id (for thumbnails) and marks
+// the cache as dirty. If a URL was previously cached for the same key, it is
+// preserved.
+func (c *Cache) SetMediaID(key, filename, mediaID string) {
+	entry := Entry{Filename: filename, MediaID: mediaID}
+	if existing, ok := c.data[key]; ok && existing == entry {
+		return // no change
+	}
+	// Preserve existing URL if present
+	if existing, ok := c.data[key]; ok && existing.URL != "" {
+		entry.URL = existing.URL
 	}
 	c.data[key] = entry
 	c.dirty = true

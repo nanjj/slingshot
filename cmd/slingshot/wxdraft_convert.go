@@ -50,6 +50,8 @@ With --upload:
   4. Parse local image references from the HTML
   5. Upload images to WeChat material management (with caching via images.yaml)
   6. Update image URLs in the HTML
+  7. If the YAML front matter contains 'thumb_media_id: <path>', upload the
+     thumbnail image as permanent material and replace with the real media_id
 
 WeChat only supports inline styles and a limited set of HTML elements.
 This command handles all common Markdown syntax:
@@ -91,7 +93,12 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 	outPath := replaceExt(file.String, ".html")
 
 	if !c.upload {
-		// Without --upload: wrap with metadata and save
+		// Without --upload: check for thumbnail file that needs uploading
+		if result.ThumbMediaID != "" && isLocalFile(filepath.Dir(file.String), result.ThumbMediaID) {
+			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumb_media_id %q looks like a local file.\n"+
+				"  Use --upload to auto-upload the thumbnail image, or upload it manually and \n"+
+				"  replace the value with a real media_id from WeChat material management.\n"), result.ThumbMediaID)
+		}
 		outHTML := wrapHTML(result.Title, result.Author, result.ThumbMediaID, html)
 		if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
@@ -189,8 +196,52 @@ func (c *cmdWxdraftConvert) run(cmd *cobra.Command, args []string) error {
 	// Step 4: Update image URLs in HTML
 	updatedHTML := mdtowx.ReplaceImageURLs(html, replacements)
 
+	// Step 5: Handle thumbnail image (thumb_media_id from front matter)
+	thumbMediaID := result.ThumbMediaID
+	if thumbMediaID != "" {
+		// Resolve relative to the markdown file's directory
+		thumbPath := thumbMediaID
+		if !filepath.IsAbs(thumbPath) {
+			thumbPath = filepath.Join(baseDir, thumbPath)
+		}
+		thumbPath = filepath.Clean(thumbPath)
+
+		if _, err := os.Stat(thumbPath); err == nil {
+			// File exists — upload as permanent material
+			key, err := uploadcache.Key(thumbPath)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
+			} else {
+				// Check cache first
+				if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
+					thumbMediaID = cachedMediaID
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
+						filepath.Base(thumbPath), thumbMediaID)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
+					mediaID, err := uploadimage.UploadThumb(token, thumbPath)
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
+						cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
+						thumbMediaID = mediaID
+					}
+				}
+				// Save cache after thumbnail upload (in case of partial updates)
+				if err := cache.Save(); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
+				}
+			}
+		} else {
+			// File doesn't exist — treat as an already-valid media_id or warn
+			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail file %q not found, using value as-is "+
+				"(make sure it's a valid media_id from WeChat material management)\n"), thumbPath)
+		}
+	}
+
 	// Wrap with metadata and save
-	outHTML := wrapHTML(result.Title, result.Author, result.ThumbMediaID, updatedHTML)
+	outHTML := wrapHTML(result.Title, result.Author, thumbMediaID, updatedHTML)
 	if err := os.WriteFile(outPath, outHTML, 0644); err != nil {
 		return fmt.Errorf("writing output %q: %w", outPath, err)
 	}
@@ -239,4 +290,14 @@ func htmlEscape(s string) string {
 func replaceExt(path, ext string) string {
 	orig := filepath.Ext(path)
 	return path[:len(path)-len(orig)] + ext
+}
+
+// isLocalFile checks if a path relative to baseDir exists on disk.
+func isLocalFile(baseDir, path string) bool {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(baseDir, path)
+	}
+	path = filepath.Clean(path)
+	_, err := os.Stat(path)
+	return err == nil
 }

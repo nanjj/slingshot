@@ -250,3 +250,115 @@ func TestEntryComparison(t *testing.T) {
 		t.Error("different filename entries should not be equal")
 	}
 }
+
+// --- MediaID tests ---
+
+func TestGetMediaIDMissing(t *testing.T) {
+	c := Load(t.TempDir())
+	if _, ok := c.GetMediaID("nonexistent"); ok {
+		t.Error("expected ok=false for missing media_id key")
+	}
+}
+
+func TestSetMediaID(t *testing.T) {
+	c := Load(t.TempDir())
+	c.SetMediaID("key1", "cover.jpg", "media_abc123")
+
+	mediaID, ok := c.GetMediaID("key1")
+	if !ok {
+		t.Fatal("expected ok=true after SetMediaID")
+	}
+	if mediaID != "media_abc123" {
+		t.Errorf("expected media_abc123, got %q", mediaID)
+	}
+}
+
+func TestSetMediaIDMarksDirty(t *testing.T) {
+	c := Load(t.TempDir())
+	c.SetMediaID("k1", "cover.jpg", "mid1")
+	if !c.dirty {
+		t.Error("dirty should be true after SetMediaID")
+	}
+	// Change mediaID
+	c.dirty = false
+	c.SetMediaID("k1", "cover.jpg", "mid2")
+	if !c.dirty {
+		t.Error("dirty should be true after mediaID change")
+	}
+}
+
+func TestSetMediaIDNoop(t *testing.T) {
+	c := Load(t.TempDir())
+	c.SetMediaID("k1", "cover.jpg", "mid1")
+	c.dirty = false
+	c.SetMediaID("k1", "cover.jpg", "mid1")
+	if c.dirty {
+		t.Error("dirty should be false when setting same media_id value")
+	}
+}
+
+func TestSetMediaIDPreservesURL(t *testing.T) {
+	c := Load(t.TempDir())
+	// First set URL
+	c.Set("key1", "img.png", "http://url1")
+	// Then set media_id — should preserve existing URL
+	c.SetMediaID("key1", "img.png", "media_xyz")
+
+	// Verify URL is still accessible
+	url, ok := c.Get("key1")
+	if !ok || url != "http://url1" {
+		t.Errorf("expected URL http://url1 to be preserved, got %q, ok=%v", url, ok)
+	}
+	// Verify media_id is also set
+	mediaID, ok := c.GetMediaID("key1")
+	if !ok || mediaID != "media_xyz" {
+		t.Errorf("expected media_id 'media_xyz', got %q, ok=%v", mediaID, ok)
+	}
+}
+
+func TestSetPreservesMediaID(t *testing.T) {
+	c := Load(t.TempDir())
+	// First set media_id
+	c.SetMediaID("key1", "img.png", "media_xyz")
+	// Then update URL — should preserve existing media_id
+	c.Set("key1", "img.png", "http://url1")
+
+	// Verify media_id is still accessible
+	mediaID, ok := c.GetMediaID("key1")
+	if !ok || mediaID != "media_xyz" {
+		t.Errorf("expected media_id 'media_xyz' to be preserved, got %q, ok=%v", mediaID, ok)
+	}
+	// Verify URL is also set
+	url, ok := c.Get("key1")
+	if !ok || url != "http://url1" {
+		t.Errorf("expected URL http://url1, got %q, ok=%v", url, ok)
+	}
+}
+
+func TestMediaIDRoundTripViaDisk(t *testing.T) {
+	dir := t.TempDir()
+	c := Load(dir)
+
+	c.SetMediaID("thumb1", "cover.jpg", "media_abc")
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read raw file to verify YAML contains media_id field
+	raw, err := os.ReadFile(filepath.Join(dir, "images.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+
+	if !strings.Contains(s, "media_id: media_abc") {
+		t.Errorf("expected 'media_id: media_abc' in YAML, got:\n%s", s)
+	}
+
+	// Reload and verify
+	c2 := Load(dir)
+	mediaID, ok := c2.GetMediaID("thumb1")
+	if !ok || mediaID != "media_abc" {
+		t.Errorf("expected media_abc after reload, got %q, ok=%v", mediaID, ok)
+	}
+}

@@ -125,3 +125,120 @@ func TestUpload(t *testing.T) {
 		}
 	})
 }
+
+func TestUploadThumb(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		imgPath := filepath.Join(tmpDir, "cover.jpg")
+		if err := os.WriteFile(imgPath, []byte("fake-cover-content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("expected POST, got %s", r.Method)
+			}
+			if r.URL.Query().Get("access_token") != "test_token" {
+				t.Errorf("expected access_token=test_token")
+			}
+			if r.URL.Query().Get("type") != "image" {
+				t.Errorf("expected type=image, got %q", r.URL.Query().Get("type"))
+			}
+			// Verify multipart form
+			ct := r.Header.Get("Content-Type")
+			if !strings.HasPrefix(ct, "multipart/form-data") {
+				t.Errorf("expected multipart/form-data, got %q", ct)
+			}
+			if err := r.ParseMultipartForm(10 << 20); err != nil {
+				t.Fatal(err)
+			}
+			file, _, err := r.FormFile("media")
+			if err != nil {
+				t.Fatalf("expected media field: %v", err)
+			}
+			file.Close()
+
+			_ = json.NewEncoder(w).Encode(ThumbUploadResponse{
+				MediaID: "abc123def456",
+				URL:     "http://mmbiz.qpic.cn/cover123",
+				ErrCode: 0,
+				ErrMsg:  "ok",
+			})
+		}))
+		defer srv.Close()
+
+		originalURL := MaterialUploadURL
+		MaterialUploadURL = srv.URL
+		defer func() { MaterialUploadURL = originalURL }()
+
+		mediaID, err := UploadThumb("test_token", imgPath)
+		if err != nil {
+			t.Fatalf("UploadThumb() error = %v", err)
+		}
+		if mediaID != "abc123def456" {
+			t.Errorf("expected media_id 'abc123def456', got %q", mediaID)
+		}
+	})
+
+	t.Run("api_error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		imgPath := filepath.Join(tmpDir, "cover.jpg")
+		if err := os.WriteFile(imgPath, []byte("content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(ThumbUploadResponse{
+				ErrCode: 40005,
+				ErrMsg:  "invalid file type",
+			})
+		}))
+		defer srv.Close()
+
+		originalURL := MaterialUploadURL
+		MaterialUploadURL = srv.URL
+		defer func() { MaterialUploadURL = originalURL }()
+
+		_, err := UploadThumb("token", imgPath)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "invalid file type") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("file_not_found", func(t *testing.T) {
+		_, err := UploadThumb("token", "/nonexistent/cover.jpg")
+		if err == nil {
+			t.Fatal("expected error for missing file, got nil")
+		}
+	})
+
+	t.Run("empty_media_id_response", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		imgPath := filepath.Join(tmpDir, "cover.jpg")
+		if err := os.WriteFile(imgPath, []byte("content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(ThumbUploadResponse{
+				MediaID: "",
+				URL:     "http://mmbiz.qpic.cn/cover123",
+				ErrCode: 0,
+				ErrMsg:  "ok",
+			})
+		}))
+		defer srv.Close()
+
+		originalURL := MaterialUploadURL
+		MaterialUploadURL = srv.URL
+		defer func() { MaterialUploadURL = originalURL }()
+
+		_, err := UploadThumb("token", imgPath)
+		if err == nil {
+			t.Fatal("expected error for empty media_id, got nil")
+		}
+	})
+}
