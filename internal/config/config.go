@@ -9,24 +9,18 @@
 package config
 
 import (
-	"maps"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 )
 
 // Config represents the slingshot configuration file structure.
+// It is purely dynamic: all keys are stored in Extra.
 type Config struct {
-	Wechat WechatConfig   `yaml:"wechat"`
-	Extra  map[string]any `yaml:",inline"`
-}
-
-// WechatConfig holds WeChat API credentials.
-type WechatConfig struct {
-	AppID  string `yaml:"appid"`
-	Secret string `yaml:"secret"`
+	Extra map[string]any `yaml:",inline"`
 }
 
 // defaultConfigPath returns the default config file path.
@@ -83,66 +77,105 @@ func Save(cfg *Config, path string) error {
 }
 
 // Get retrieves a config value by dot-separated key path.
-// Examples: "wechat.appid", "extra.key"
+// It traverses nested maps inside Extra.
+// Examples: "wechat.appid", "some.nested.key"
 func Get(cfg *Config, key string) (any, error) {
-	switch key {
-	case "wechat.appid":
-		return cfg.Wechat.AppID, nil
-	case "wechat.secret":
-		return cfg.Wechat.Secret, nil
-	default:
-		if cfg.Extra != nil {
-			if v, ok := cfg.Extra[key]; ok {
-				return v, nil
-			}
+	parts := strings.Split(key, ".")
+	current := any(cfg.Extra)
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("unknown config key: %s", key)
 		}
-		return nil, fmt.Errorf("unknown config key: %s", key)
+		current, ok = m[part]
+		if !ok {
+			return nil, fmt.Errorf("unknown config key: %s", key)
+		}
 	}
+	return current, nil
 }
 
 // Set sets a config value by dot-separated key path.
+// Intermediate map nodes are created as needed.
 func Set(cfg *Config, key string, value string) error {
-	switch key {
-	case "wechat.appid":
-		cfg.Wechat.AppID = value
-		return nil
-	case "wechat.secret":
-		cfg.Wechat.Secret = value
-		return nil
-	default:
-		if cfg.Extra == nil {
-			cfg.Extra = make(map[string]any)
-		}
-		cfg.Extra[key] = value
-		return nil
+	parts := strings.Split(key, ".")
+	if cfg.Extra == nil {
+		cfg.Extra = make(map[string]any)
 	}
+	current := cfg.Extra
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			current[part] = value
+		} else {
+			next, ok := current[part]
+			if ok {
+				m, ok := next.(map[string]any)
+				if !ok {
+					// Overwrite with a new map
+					m = make(map[string]any)
+					current[part] = m
+				}
+				current = m
+			} else {
+				m := make(map[string]any)
+				current[part] = m
+				current = m
+			}
+		}
+	}
+	return nil
 }
 
-// Del deletes a config key.
+// Del deletes a config key by dot-separated key path.
 func Del(cfg *Config, key string) error {
-	switch key {
-	case "wechat.appid":
-		cfg.Wechat.AppID = ""
-		return nil
-	case "wechat.secret":
-		cfg.Wechat.Secret = ""
-		return nil
-	default:
-		if cfg.Extra != nil {
-			delete(cfg.Extra, key)
-		}
+	parts := strings.Split(key, ".")
+	if len(parts) == 0 || cfg.Extra == nil {
 		return nil
 	}
+	current := cfg.Extra
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			delete(current, part)
+		} else {
+			next, ok := current[part]
+			if !ok {
+				return nil
+			}
+			m, ok := next.(map[string]any)
+			if !ok {
+				return nil
+			}
+			current = m
+		}
+	}
+	return nil
 }
 
 // AllKeys returns all config keys with their values (for listing).
+// Nested maps are flattened to dot-separated keys.
 func AllKeys(cfg *Config) map[string]any {
 	result := make(map[string]any)
-	result["wechat.appid"] = cfg.Wechat.AppID
-	result["wechat.secret"] = cfg.Wechat.Secret
-	maps.Copy(result, cfg.Extra)
+	if cfg.Extra != nil {
+		flatten("", cfg.Extra, result)
+	}
 	return result
 }
+
+// flatten recursively flattens nested maps into dot-separated keys.
+func flatten(prefix string, m map[string]any, result map[string]any) {
+	for k, v := range m {
+		fullKey := k
+		if prefix != "" {
+			fullKey = prefix + "." + k
+		}
+		if sub, ok := v.(map[string]any); ok {
+			flatten(fullKey, sub, result)
+		} else {
+			result[fullKey] = v
+		}
+	}
+}
+
 // Path returns the default config file path.
 func Path() string {
 	return defaultConfigPath()
