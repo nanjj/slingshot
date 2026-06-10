@@ -82,8 +82,8 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "code_block_indented",
 			input: "\tfunc foo() {}\n",
 			want: []string{
-				`<section class="code-snippet__fix code-snippet__js">`,
-				`<pre class="code-snippet__js" data-lang="">`,
+				`<section class="code-snippet__fix code-snippet__text">`,
+				`<pre class="code-snippet__text" data-lang="">`,
 				`<span class="code-snippet_outer">func foo() {}</span>`,
 				`</section>`,
 			},
@@ -92,8 +92,8 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "code_block_fenced_no_lang",
 			input: "```\nhello\n```\n",
 			want: []string{
-				`<section class="code-snippet__fix code-snippet__js">`,
-				`<pre class="code-snippet__js" data-lang="">`,
+				`<section class="code-snippet__fix code-snippet__text">`,
+				`<pre class="code-snippet__text" data-lang="">`,
 				`<span class="code-snippet_outer">hello</span>`,
 				`</section>`,
 			},
@@ -123,8 +123,8 @@ func TestConvertMarkdown(t *testing.T) {
 			// goldmark extracts only the first word of the info string as language
 			input: "```\"><img src=x onerror=alert(1)>\ncode\n```\n",
 			want: []string{
-				// language "><img" is not a valid CSS class → falls back to "js"
-				`<section class="code-snippet__fix code-snippet__js">`,
+				// language "><img" is not a valid CSS class → falls back to "text"
+				`<section class="code-snippet__fix code-snippet__text">`,
 				// data-lang gets html.EscapeString applied
 				`data-lang="&#34;&gt;&lt;img"`,
 				`<span class="code-snippet_outer">code</span>`,

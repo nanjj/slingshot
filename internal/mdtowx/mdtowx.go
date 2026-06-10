@@ -267,25 +267,27 @@ func (r *codeBlockRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 // The language is lowercased, and only safe ASCII CSS class characters
 // (letters, digits, hyphens, underscores) are allowed. If the resulting
 // string is empty, starts with a digit, or contains any unsafe characters,
-// it falls back to "js".
+// it falls back to "text".
 // Iterating over bytes is correct here; any multi-byte rune will be rejected.
 func langSuffix(lang string) string {
+
 	lang = strings.ToLower(lang)
 	if lang == "" {
-		return "js"
+		return "text"
 	}
 	if lang[0] >= '0' && lang[0] <= '9' {
-		return "js"
+		return "text"
 	}
 	for i := 0; i < len(lang); i++ {
 		c := lang[i]
 		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
 			continue
 		}
-		return "js"
+		return "text"
 	}
 	return lang
 }
+
 
 func (r *codeBlockRenderer) renderCodeBlock(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
