@@ -11,6 +11,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
@@ -208,6 +209,9 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 		return errors.New(i18n.G("cover media_id is required: use --thumb flag or add <meta name=\"thumb_media_id\" content=\"...\"> to HTML"))
 	}
 
+	// Extract digest from HTML meta or sidecar YAML
+	digest := extractDigest(htmlStr, file)
+
 	// Load config and get token
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -267,6 +271,7 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 			Title:        title,
 			Author:       author,
 			ThumbMediaID: thumbMediaID,
+			Digest:       digest,
 			Content:      string(htmlContent),
 		},
 	})
@@ -400,10 +405,14 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Extract digest from sidecar YAML or HTML meta
+	digest := extractDigest(htmlStr, file)
+
 	// Build article
 	article := draft.Article{
 		Title:   title,
 		Author:  author,
+		Digest:  digest,
 		Content: string(htmlContent),
 	}
 	if thumbMediaID != "" {
@@ -687,4 +696,59 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+// --- Sidecar YAML helpers ---
+
+// sidecarMeta defines the YAML fields that can be stored alongside an HTML file.
+type sidecarMeta struct {
+	Title        string `yaml:"title"`
+	Author       string `yaml:"author"`
+	ThumbMediaID string `yaml:"thumb_media_id"`
+	Digest       string `yaml:"digest"`
+}
+
+// readSidecarYAML attempts to read a sidecar YAML file for the given
+// file path. It looks for <filename>.yaml first, then <filename>.yml.
+// Returns the parsed metadata and true on success.
+func readSidecarYAML(filePath string) (sidecarMeta, bool) {
+	base := filePath[:len(filePath)-len(filepath.Ext(filePath))]
+	for _, ext := range []string{".yaml", ".yml"} {
+		yamlPath := base + ext
+		data, err := os.ReadFile(yamlPath)
+		if err != nil {
+			continue
+		}
+		var meta sidecarMeta
+		if err := yaml.Unmarshal(data, &meta); err != nil {
+			continue
+		}
+		return meta, true
+	}
+	return sidecarMeta{}, false
+}
+
+// extractDigest extracts the digest from sidecar YAML first, falling back
+// to <meta name="digest" content="..."> in the HTML content.
+func extractDigest(htmlContent, filePath string) string {
+	// Prefer sidecar YAML
+	if meta, ok := readSidecarYAML(filePath); ok && meta.Digest != "" {
+		return meta.Digest
+	}
+	// Fallback: <meta name="digest" content="..."> in HTML
+	lower := strings.ToLower(htmlContent)
+	for _, quote := range []string{`"`, `'`} {
+		marker := `<meta name="digest" content=` + quote
+		start := strings.Index(lower, marker)
+		if start < 0 {
+			continue
+		}
+		start += len(marker)
+		end := strings.Index(htmlContent[start:], quote)
+		if end < 0 {
+			continue
+		}
+		return strings.TrimSpace(htmlContent[start : start+end])
+	}
+	return ""
 }

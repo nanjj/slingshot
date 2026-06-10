@@ -72,6 +72,7 @@ func SanitizeAuthor(author string) string {
 // --- Result type ---
 
 // Result holds the converted HTML and metadata extracted from Markdown.
+// Result holds the converted HTML and metadata extracted from Markdown.
 type Result struct {
 	// HTML is the body HTML with all styles inline, suitable for WeChat.
 	HTML []byte
@@ -81,13 +82,17 @@ type Result struct {
 	Author string
 	// ThumbMediaID extracted from the YAML front matter (if present).
 	ThumbMediaID string
+	// Digest extracted from the YAML front matter (if present).
+	Digest string
 }
 
+// frontMatter is the YAML structure expected at the top of a Markdown file.
 // frontMatter is the YAML structure expected at the top of a Markdown file.
 type frontMatter struct {
 	Title        string `yaml:"title"`
 	Author       string `yaml:"author"`
 	ThumbMediaID string `yaml:"thumb_media_id"`
+	Digest       string `yaml:"digest"`
 }
 
 // parseFrontMatter extracts YAML front matter from Markdown source.
@@ -250,10 +255,25 @@ func (r *codeBlockRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(ast.KindFencedCodeBlock, r.renderFencedCodeBlock)
 }
 
-// langSuffix returns the CSS class suffix for a code block language.
-// For indented code blocks lang is empty, so we default to "js".
+// langSuffix sanitizes a language string for use as a CSS class suffix.
+// The language is lowercased, and only safe ASCII CSS class characters
+// (letters, digits, hyphens, underscores) are allowed. If the resulting
+// string is empty, starts with a digit, or contains any unsafe characters,
+// it falls back to "js".
+// Iterating over bytes is correct here; any multi-byte rune will be rejected.
 func langSuffix(lang string) string {
+	lang = strings.ToLower(lang)
 	if lang == "" {
+		return "js"
+	}
+	if lang[0] >= '0' && lang[0] <= '9' {
+		return "js"
+	}
+	for i := 0; i < len(lang); i++ {
+		c := lang[i]
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+			continue
+		}
 		return "js"
 	}
 	return lang
@@ -285,11 +305,11 @@ func (r *codeBlockRenderer) renderFencedCodeBlock(w util.BufWriter, source []byt
 func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) {
 	lines := n.Lines()
 	nLines := lines.Len()
-	if nLines == 0 {
-		return
-	}
-
 	suffix := langSuffix(lang)
+
+	// Always emit the full section structure, even for empty blocks (nLines == 0),
+	// because the caller unconditionally writes </section> on exit.
+	// An early return here would produce an orphaned closing tag.
 
 	// <section class="code-snippet__fix code-snippet__LANG">
 	_, _ = w.WriteString(`<section class="code-snippet__fix code-snippet__`)
@@ -309,7 +329,7 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 	_, _ = w.WriteString(`<pre class="code-snippet__`)
 	_, _ = w.WriteString(suffix)
 	_, _ = w.WriteString(`" data-lang="`)
-	_, _ = w.WriteString(lang)
+	_, _ = w.WriteString(html.EscapeString(lang))
 	_, _ = w.WriteString(`">`)
 
 	// <code><span class="code-snippet_outer">line</span></code> per line
@@ -495,16 +515,17 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 		Title:        fm.Title,
 		Author:       author,
 		ThumbMediaID: fm.ThumbMediaID,
+		Digest:       fm.Digest,
 	}, nil
-
 }
+
 // ConvertFile reads a Markdown file and returns WeChat-friendly HTML with
 // metadata extracted from YAML front matter and/or a sidecar YAML file.
 //
 // Sidecar YAML: if a file named <filename>.yaml (or .yml) exists alongside
-// the markdown file, its title/author/thumb_media_id fields override any
-// values found in the markdown's own YAML front matter. This allows keeping
-// the markdown content clean while the metadata lives in a separate file.
+// the markdown file, its fields override any values found in the markdown's
+// own YAML front matter. This allows keeping the markdown content clean
+// while the metadata lives in a separate file.
 func ConvertFile(filePath string) (*Result, error) {
 	source, err := os.ReadFile(filePath)
 	if err != nil {
@@ -532,6 +553,9 @@ func ConvertFile(filePath string) (*Result, error) {
 	}
 	if meta.ThumbMediaID != "" {
 		result.ThumbMediaID = meta.ThumbMediaID
+	}
+	if meta.Digest != "" {
+		result.Digest = meta.Digest
 	}
 	return result, nil
 }

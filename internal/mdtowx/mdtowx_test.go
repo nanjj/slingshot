@@ -76,6 +76,68 @@ func TestConvertMarkdown(t *testing.T) {
 				`style="background:#f5f5`, // no longer uses inline styles
 			},
 		},
+		{
+			name:  "code_block_indented",
+			input: "\tfunc foo() {}\n",
+			want: []string{
+				`<section class="code-snippet__fix code-snippet__js">`,
+				`<ul class="code-snippet__line-index code-snippet__js">`,
+				`<li></li>`,
+				`<pre class="code-snippet__js" data-lang="">`,
+				`<span class="code-snippet_outer">func foo() {}</span>`,
+				`</section>`,
+			},
+		},
+		{
+			name:  "code_block_fenced_no_lang",
+			input: "```\nhello\n```\n",
+			want: []string{
+				`<section class="code-snippet__fix code-snippet__js">`,
+				`<ul class="code-snippet__line-index code-snippet__js">`,
+				`<li></li>`,
+				`<pre class="code-snippet__js" data-lang="">`,
+				`<span class="code-snippet_outer">hello</span>`,
+				`</section>`,
+			},
+		},
+		{
+			name:  "code_block_with_html_entities",
+			input: "```html\n<div> & \"quotes\"\n```\n",
+			want: []string{
+				`<span class="code-snippet_outer">&lt;div&gt; &amp; &#34;quotes&#34;</span>`,
+			},
+			not: []string{
+				`<div>`,
+			},
+		},
+		{
+			name:  "code_block_empty_fenced",
+			input: "```go\n```\n",
+			want: []string{
+				`<section class="code-snippet__fix code-snippet__go">`,
+				`<pre class="code-snippet__go" data-lang="go">`,
+				`</pre>`,
+				`</section>`,
+			},
+		},
+		{
+			name:  "code_block_malicious_lang",
+			// goldmark extracts only the first word of the info string as language
+			input: "```\"><img src=x onerror=alert(1)>\ncode\n```\n",
+			want: []string{
+				// language "><img" is not a valid CSS class → falls back to "js"
+				`<section class="code-snippet__fix code-snippet__js">`,
+				`<ul class="code-snippet__line-index code-snippet__js">`,
+				// data-lang gets html.EscapeString applied
+				`data-lang="&#34;&gt;&lt;img"`,
+				`<span class="code-snippet_outer">code</span>`,
+				`</section>`,
+			},
+			not: []string{
+				`class="code-snippet__"<img`, // class should not contain raw malicious chars
+				`data-lang=""><img`,          // data-lang should not be raw
+			},
+		},
 
 		{
 			name:  "link",
