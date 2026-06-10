@@ -18,6 +18,8 @@ import (
 	"github.com/nanjj/slingshot/internal/getaccesstoken"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/mdtowx"
+	"github.com/nanjj/slingshot/internal/uploadcache"
+	"github.com/nanjj/slingshot/internal/uploadimage"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
 
@@ -160,7 +162,7 @@ include <meta name="thumb_media_id" content="..."> in the HTML.`),
 	cmd.Flags().StringVarP(&c.title, "title", "t", "",
 		i18n.G("Article title (overrides auto-detection from HTML)"))
 	cmd.Flags().StringVarP(&c.thumb, "thumb", "", "",
-		i18n.G("Cover image media_id (required; or set via <meta name=\"thumb_media_id\"> in HTML)"))
+		i18n.G("Cover image media_id (required; local image file paths are auto-uploaded to WeChat material)"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
@@ -214,6 +216,49 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 	token, err := getaccesstoken.GetToken(cfg)
 	if err != nil {
 		return fmt.Errorf("getting access token: %w", err)
+	}
+
+	// Auto-upload thumbnail if the value looks like a local image file path
+	if looksLikeImageFile(thumbMediaID) {
+		baseDir := filepath.Dir(file)
+		thumbPath := thumbMediaID
+		if !filepath.IsAbs(thumbPath) {
+			thumbPath = filepath.Join(baseDir, thumbPath)
+		}
+		thumbPath = filepath.Clean(thumbPath)
+
+		if _, err := os.Stat(thumbPath); err == nil {
+			// File exists — upload as permanent material
+			cache := uploadcache.Load(baseDir)
+			key, err := uploadcache.Key(thumbPath)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
+			} else {
+				// Check cache first
+				if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
+					thumbMediaID = cachedMediaID
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
+						filepath.Base(thumbPath), thumbMediaID)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
+					mediaID, err := uploadimage.UploadThumb(token, thumbPath)
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
+						thumbMediaID = mediaID
+						cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
+					}
+				}
+				// Save cache after thumbnail upload
+				if err := cache.Save(); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
+				}
+			}
+		} else {
+			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail file %q not found, passing value as-is "+
+				"(make sure it's a valid media_id)\n"), thumbPath)
+		}
 	}
 
 	// Create draft
@@ -302,7 +347,6 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if thumbMediaID == "" {
 		thumbMediaID = extractThumbMediaID(htmlStr)
 	}
-
 	// Load config and get token
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -311,6 +355,49 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	token, err := getaccesstoken.GetToken(cfg)
 	if err != nil {
 		return fmt.Errorf("getting access token: %w", err)
+	}
+
+	// Auto-upload thumbnail if the value looks like a local image file path
+	if looksLikeImageFile(thumbMediaID) {
+		baseDir := filepath.Dir(file)
+		thumbPath := thumbMediaID
+		if !filepath.IsAbs(thumbPath) {
+			thumbPath = filepath.Join(baseDir, thumbPath)
+		}
+		thumbPath = filepath.Clean(thumbPath)
+
+		if _, err := os.Stat(thumbPath); err == nil {
+			// File exists — upload as permanent material
+			cache := uploadcache.Load(baseDir)
+			key, err := uploadcache.Key(thumbPath)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
+			} else {
+				// Check cache first
+				if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
+					thumbMediaID = cachedMediaID
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
+						filepath.Base(thumbPath), thumbMediaID)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
+					mediaID, err := uploadimage.UploadThumb(token, thumbPath)
+					if err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
+						thumbMediaID = mediaID
+						cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
+					}
+				}
+				// Save cache after thumbnail upload
+				if err := cache.Save(); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
+				}
+			}
+		} else {
+			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail file %q not found, passing value as-is "+
+				"(make sure it's a valid media_id)\n"), thumbPath)
+		}
 	}
 
 	// Build article
