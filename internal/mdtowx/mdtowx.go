@@ -165,10 +165,14 @@ const (
 	styleTable     = "border-collapse:collapse;width:100%;margin:1em 0"
 	styleTableCell = "border:1px solid #ddd;padding:8px;text-align:left"
 	styleTH        = "background:#f5f5f5;font-weight:bold"
-	styleList      = "margin:0.5em 0;padding-left:2em"
-	styleListItem  = "margin:0.3em 0"
 	styleHR        = "margin:1.5em 0;border:none;border-top:2px solid #eee"
 	styleDel       = "text-decoration:line-through"
+
+	// WeChat list styles — WeChat does not support <ul>/<ol>/<li>, so lists
+	// are rendered as <p> with <span> items using bullet/number characters.
+	styleListContainer = "margin:20px 10px;margin-left:0;padding-left:20px"
+	styleListItemWx    = "text-indent:-20px;display:block;margin:10px 10px"
+	styleListBullet    = "margin-right: 10px;"
 )
 
 // --- AST walker: inject style attributes ---
@@ -199,11 +203,6 @@ func addInlineStyles(doc ast.Node) {
 		case ast.KindImage:
 			n.SetAttributeString("style", styleImage)
 
-		case ast.KindList:
-			n.SetAttributeString("style", styleList)
-
-		case ast.KindListItem:
-			n.SetAttributeString("style", styleListItem)
 
 		case ast.KindThematicBreak:
 			n.SetAttributeString("style", styleHR)
@@ -267,6 +266,111 @@ func writeLines(w util.BufWriter, source []byte, n ast.Node) {
 	}
 }
 
+// --- Custom list renderer ---
+//
+// WeChat does not support <ul>/<ol>/<li> tags. Lists must be rendered as
+// <p> with <span> items using bullet or number characters. This renderer
+// replaces the default goldmark list rendering for WeChat compatibility.
+
+type listRenderer struct{}
+
+func (r *listRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindList, r.renderList)
+	reg.Register(ast.KindListItem, r.renderListItem)
+	reg.Register(ast.KindParagraph, r.renderParagraph)
+}
+
+func (r *listRenderer) renderList(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		_, _ = w.WriteString(`<p style="`)
+		_, _ = w.WriteString(styleListContainer)
+		list := n.(*ast.List)
+		if !list.IsOrdered() {
+			_, _ = w.WriteString(`;list-style:circle`)
+		}
+		_, _ = w.WriteString(`">` + "\n")
+	} else {
+		_, _ = w.WriteString("</p>\n")
+	}
+	return ast.WalkContinue, nil
+}
+
+func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		_, _ = w.WriteString(`<span style="`)
+		_, _ = w.WriteString(styleListItemWx)
+		_, _ = w.WriteString(`"><span style="`)
+		_, _ = w.WriteString(styleListBullet)
+		_, _ = w.WriteString(`">`)
+		// Determine bullet character or number
+		parent := n.Parent()
+		if parent != nil && parent.Kind() == ast.KindList {
+			list := parent.(*ast.List)
+			if list.IsOrdered() {
+				num := list.Start
+				for s := n.PreviousSibling(); s != nil; s = s.PreviousSibling() {
+					if s.Kind() == ast.KindListItem {
+						num++
+					}
+				}
+				_, _ = fmt.Fprintf(w, "%d.", num)
+			} else {
+				_, _ = w.WriteString("•")
+			}
+		} else {
+			_, _ = w.WriteString("•")
+		}
+		_, _ = w.WriteString("</span>")
+	} else {
+		_, _ = w.WriteString("</span>\n")
+	}
+	return ast.WalkContinue, nil
+}
+
+// renderParagraph suppresses <p> tags when inside a list item (WeChat list
+// items must not have paragraph wrappers). For paragraphs outside lists,
+// it renders the default <p style="..."> as usual.
+func (r *listRenderer) renderParagraph(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	// Check if this paragraph is inside a list item
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() == ast.KindListItem {
+			return ast.WalkContinue, nil
+		}
+	}
+	// Not inside a list item — render as normal <p>
+	if !n.HasChildren() {
+		return ast.WalkSkipChildren, nil
+	}
+	if entering {
+		_, _ = w.WriteString("<p")
+		writeNodeAttrs(w, n)
+		_ = w.WriteByte('>')
+	} else {
+		_, _ = w.WriteString("</p>\n")
+	}
+	return ast.WalkContinue, nil
+}
+
+// writeNodeAttrs writes all attributes of a node as HTML attributes.
+// It is equivalent to goldmark's internal renderAttributes but accessible
+// from custom renderers.
+func writeNodeAttrs(w util.BufWriter, n ast.Node) {
+	for _, attr := range n.Attributes() {
+		_ = w.WriteByte(' ')
+		_, _ = w.Write(attr.Name)
+		_, _ = w.WriteString(`="`)
+		switch v := attr.Value.(type) {
+		case []byte:
+			_, _ = w.Write(v)
+		case string:
+			_, _ = w.WriteString(v)
+		default:
+			_, _ = fmt.Fprint(w, v)
+		}
+		_ = w.WriteByte('"')
+	}
+}
+
 // --- Goldmark instance ---
 
 func newGoldmark() goldmark.Markdown {
@@ -281,6 +385,7 @@ func newGoldmark() goldmark.Markdown {
 			// registers LAST, so its registrations win over the default.
 			renderer.WithNodeRenderers(
 				util.Prioritized(&codeBlockRenderer{}, 100),
+				util.Prioritized(&listRenderer{}, 100),
 			),
 			// Pass raw HTML through (needed for inline HTML in markdown).
 			renderer.WithOption(renderer.OptionName("Unsafe"), true),

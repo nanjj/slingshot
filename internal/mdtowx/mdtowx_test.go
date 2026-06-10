@@ -94,11 +94,14 @@ func TestConvertMarkdown(t *testing.T) {
 - b
 - c`,
 			want: []string{
-				`<ul style="margin:0.5em 0;padding-left:2em"`,
-				`<li style="margin:0.3em 0">a</li>`,
-				`<li style="margin:0.3em 0">b</li>`,
-				`<li style="margin:0.3em 0">c</li>`,
-				`</ul>`,
+				`<p style="margin:20px 10px;margin-left:0;padding-left:20px;list-style:circle"`,
+				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>a</span>`,
+				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>b</span>`,
+				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>c</span>`,
+				`</p>`,
+			},
+			not: []string{
+				`<ul`, `<ol`, `<li`,
 			},
 		},
 		{
@@ -106,10 +109,13 @@ func TestConvertMarkdown(t *testing.T) {
 			input: `1. one
 2. two`,
 			want: []string{
-				`<ol style="margin:0.5em 0;padding-left:2em"`,
-				`<li style="margin:0.3em 0">one</li>`,
-				`<li style="margin:0.3em 0">two</li>`,
-				`</ol>`,
+				`<p style="margin:20px 10px;margin-left:0;padding-left:20px"`,
+				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">1.</span>one</span>`,
+				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">2.</span>two</span>`,
+				`</p>`,
+			},
+			not: []string{
+				`<ul`, `<ol`, `<li`,
 			},
 		},
 		{
