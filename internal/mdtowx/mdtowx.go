@@ -247,7 +247,6 @@ func addInlineStyles(doc ast.Node) {
 // WeChat requires a specific HTML structure for code blocks:
 //
 //   <section class="code-snippet__fix code-snippet__LANG">
-//     <ul class="code-snippet__line-index code-snippet__LANG"><li></li>...</ul>
 //     <pre class="code-snippet__LANG" data-lang="LANG">
 //       <code><span class="code-snippet_outer">line1</span></code>
 //       ...
@@ -255,8 +254,7 @@ func addInlineStyles(doc ast.Node) {
 //   </section>
 //
 // The language suffix (LANG) comes from the fenced code block info string
-// or defaults to "js". Each line gets its own <code><span> wrapper and a
-// corresponding <li> in the line-number index.
+// or defaults to "js". Each line gets its own <code><span> wrapper.
 
 type codeBlockRenderer struct{}
 
@@ -325,15 +323,6 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 	_, _ = w.WriteString(`<section class="code-snippet__fix code-snippet__`)
 	_, _ = w.WriteString(suffix)
 	_, _ = w.WriteString(`">`)
-
-	// <ul class="code-snippet__line-index code-snippet__LANG"><li></li>...</ul>
-	_, _ = w.WriteString(`<ul class="code-snippet__line-index code-snippet__`)
-	_, _ = w.WriteString(suffix)
-	_, _ = w.WriteString(`">`)
-	for i := 0; i < nLines; i++ {
-		_, _ = w.WriteString("<li></li>")
-	}
-	_, _ = w.WriteString("</ul>")
 
 	// <pre class="code-snippet__LANG" data-lang="LANG">
 	_, _ = w.WriteString(`<pre class="code-snippet__`)

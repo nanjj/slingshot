@@ -69,8 +69,6 @@ func TestConvertMarkdown(t *testing.T) {
 			input: "```go\nfunc main() {}\n```\n",
 			want: []string{
 				`<section class="code-snippet__fix code-snippet__go">`,
-				`<ul class="code-snippet__line-index code-snippet__go">`,
-				`<li></li>`,
 				`<pre class="code-snippet__go" data-lang="go">`,
 				`<span class="code-snippet_outer">func main() {}</span>`,
 				`</section>`,
@@ -85,8 +83,6 @@ func TestConvertMarkdown(t *testing.T) {
 			input: "\tfunc foo() {}\n",
 			want: []string{
 				`<section class="code-snippet__fix code-snippet__js">`,
-				`<ul class="code-snippet__line-index code-snippet__js">`,
-				`<li></li>`,
 				`<pre class="code-snippet__js" data-lang="">`,
 				`<span class="code-snippet_outer">func foo() {}</span>`,
 				`</section>`,
@@ -97,8 +93,6 @@ func TestConvertMarkdown(t *testing.T) {
 			input: "```\nhello\n```\n",
 			want: []string{
 				`<section class="code-snippet__fix code-snippet__js">`,
-				`<ul class="code-snippet__line-index code-snippet__js">`,
-				`<li></li>`,
 				`<pre class="code-snippet__js" data-lang="">`,
 				`<span class="code-snippet_outer">hello</span>`,
 				`</section>`,
@@ -131,7 +125,6 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				// language "><img" is not a valid CSS class → falls back to "js"
 				`<section class="code-snippet__fix code-snippet__js">`,
-				`<ul class="code-snippet__line-index code-snippet__js">`,
 				// data-lang gets html.EscapeString applied
 				`data-lang="&#34;&gt;&lt;img"`,
 				`<span class="code-snippet_outer">code</span>`,
