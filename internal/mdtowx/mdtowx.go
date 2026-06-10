@@ -438,15 +438,62 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 	}, nil
 
 }
-
 // ConvertFile reads a Markdown file and returns WeChat-friendly HTML with
-// metadata extracted from YAML front matter.
+// metadata extracted from YAML front matter and/or a sidecar YAML file.
+//
+// Sidecar YAML: if a file named <filename>.yaml (or .yml) exists alongside
+// the markdown file, its title/author/thumb_media_id fields override any
+// values found in the markdown's own YAML front matter. This allows keeping
+// the markdown content clean while the metadata lives in a separate file.
 func ConvertFile(filePath string) (*Result, error) {
 	source, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading file %q: %w", filePath, err)
 	}
-	return ConvertMarkdown(source)
+
+	result, err := ConvertMarkdown(source)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try sidecar YAML: <filename>.yaml, fallback <filename>.yml
+	meta, ok := readSidecarYAML(filePath)
+	if !ok {
+		return result, nil
+	}
+	if meta.Title != "" {
+		if err := ValidateTitle(meta.Title); err != nil {
+			return nil, err
+		}
+		result.Title = meta.Title
+	}
+	if meta.Author != "" {
+		result.Author = SanitizeAuthor(meta.Author)
+	}
+	if meta.ThumbMediaID != "" {
+		result.ThumbMediaID = meta.ThumbMediaID
+	}
+	return result, nil
+}
+
+// readSidecarYAML attempts to read a sidecar YAML file for the given
+// markdown path. It looks for <filename>.yaml first, then <filename>.yml.
+// Returns the parsed metadata and true on success.
+func readSidecarYAML(mdPath string) (frontMatter, bool) {
+	base := mdPath[:len(mdPath)-len(filepath.Ext(mdPath))]
+	for _, ext := range []string{".yaml", ".yml"} {
+		yamlPath := base + ext
+		data, err := os.ReadFile(yamlPath)
+		if err != nil {
+			continue
+		}
+		var fm frontMatter
+		if err := yaml.Unmarshal(data, &fm); err != nil {
+			continue
+		}
+		return fm, true
+	}
+	return frontMatter{}, false
 }
 
 // ImageRef represents an image reference found in <img src="..."> in HTML.

@@ -275,6 +275,240 @@ func TestConvertFile(t *testing.T) {
 			t.Errorf("expected empty author, got %q", result.Author)
 		}
 	})
+
+	t.Run("sidecar_yaml_overrides_front_matter", func(t *testing.T) {
+		// Both front matter and sidecar YAML — YAML wins
+		mdInput := []byte("---\ntitle: FM Title\nauthor: FM Author\nthumb_media_id: fm123\n---\n\n# Content\n")
+		yamlInput := []byte("title: YAML Title\nauthor: YAML Author\nthumb_media_id: yaml456\n")
+		dir := t.TempDir()
+		mdPath := dir + "/article.md"
+		yamlPath := dir + "/article.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "YAML Title" {
+			t.Errorf("expected title 'YAML Title', got %q", result.Title)
+		}
+		if result.Author != "YAMLAuth" {
+			// Sanitized: "YAML Author" (11 chars) → "YAMLAuth" (8)
+			t.Errorf("expected author 'YAMLAuth', got %q", result.Author)
+		}
+		if result.ThumbMediaID != "yaml456" {
+			t.Errorf("expected thumb_media_id 'yaml456', got %q", result.ThumbMediaID)
+		}
+		if !strings.Contains(string(result.HTML), "Content") {
+			t.Errorf("HTML should contain markdown content")
+		}
+	})
+
+	t.Run("sidecar_yaml_without_front_matter", func(t *testing.T) {
+		// No front matter in markdown, metadata comes from YAML file
+		mdInput := []byte("# Just Content\n")
+		yamlInput := []byte("title: Sidecar Title\nauthor: Side Author\n")
+		dir := t.TempDir()
+		mdPath := dir + "/pure.md"
+		yamlPath := dir + "/pure.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "Sidecar Title" {
+			t.Errorf("expected title 'Sidecar Title', got %q", result.Title)
+		}
+		if result.Author != "SideAuth" {
+			// Sanitized: "Side Author" (11 chars) → "SideAuth" (8)
+			t.Errorf("expected author 'SideAuth', got %q", result.Author)
+		}
+	})
+
+	t.Run("sidecar_yaml_partial_override", func(t *testing.T) {
+		// YAML only provides title; author and thumb_media_id come from front matter
+		mdInput := []byte("---\ntitle: FM Title\nauthor: FM Author\nthumb_media_id: fm789\n---\n\n# Content\n")
+		yamlInput := []byte("title: Override Title\n")
+		dir := t.TempDir()
+		mdPath := dir + "/partial.md"
+		yamlPath := dir + "/partial.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "Override Title" {
+			t.Errorf("expected title 'Override Title', got %q", result.Title)
+		}
+		if result.Author != "FMAuthor" {
+			// Sanitized: spaces stripped, so "FM Author" → "FMAuthor"
+			t.Errorf("expected author 'FMAuthor', got %q", result.Author)
+		}
+		if result.ThumbMediaID != "fm789" {
+			t.Errorf("expected thumb_media_id 'fm789', got %q", result.ThumbMediaID)
+		}
+	})
+
+	t.Run("sidecar_yaml_yml_extension", func(t *testing.T) {
+		// .yml extension (not .yaml) should also be recognized
+		mdInput := []byte("# Content\n")
+		yamlInput := []byte("title: From YML\nauthor: YML Author\n")
+		dir := t.TempDir()
+		mdPath := dir + "/test.md"
+		ymlPath := dir + "/test.yml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(ymlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "From YML" {
+			t.Errorf("expected title 'From YML', got %q", result.Title)
+		}
+		if result.Author != "YMLAutho" {
+			// Sanitized: "YML Author" (10 chars) → "YMLAutho" (8)
+			t.Errorf("expected author 'YMLAutho', got %q", result.Author)
+		}
+	})
+
+	t.Run("sidecar_yaml_prefers_yaml_over_yml", func(t *testing.T) {
+		// Both .yaml and .yml exist — .yaml should be used
+		mdInput := []byte("# Content\n")
+		yamlInput := []byte("title: From Yaml\nauthor: Yaml Auth\n")
+		ymlInput := []byte("title: From Yml\nauthor: Yml Auth\n")
+		dir := t.TempDir()
+		mdPath := dir + "/prefer.md"
+		yamlPath := dir + "/prefer.yaml"
+		ymlPath := dir + "/prefer.yml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(ymlPath, ymlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "From Yaml" {
+			t.Errorf("expected title 'From Yaml' (.yaml preferred), got %q", result.Title)
+		}
+	})
+
+	t.Run("sidecar_yaml_invalid_ignored", func(t *testing.T) {
+		// Invalid YAML should be ignored, front matter takes effect
+		mdInput := []byte("---\ntitle: Valid Title\nauthor: Valid\n---\n\n# Content\n")
+		yamlInput := []byte("{{ invalid yaml\nbroken")
+		dir := t.TempDir()
+		mdPath := dir + "/broken.md"
+		yamlPath := dir + "/broken.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "Valid Title" {
+			t.Errorf("expected title 'Valid Title' from front matter, got %q", result.Title)
+		}
+		if result.Author != "Valid" {
+			t.Errorf("expected author 'Valid' from front matter, got %q", result.Author)
+		}
+	})
+
+	t.Run("sidecar_yaml_empty_ignored", func(t *testing.T) {
+		// Empty YAML file should be ignored
+		mdInput := []byte("---\ntitle: From FM\n---\n\n# Content\n")
+		dir := t.TempDir()
+		mdPath := dir + "/empty-yaml.md"
+		yamlPath := dir + "/empty-yaml.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, []byte{}, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Title != "From FM" {
+			t.Errorf("expected title 'From FM' from front matter, got %q", result.Title)
+		}
+	})
+
+	t.Run("sidecar_yaml_author_sanitized", func(t *testing.T) {
+		// Author from YAML should be sanitized (long author truncated)
+		mdInput := []byte("# Content\n")
+		yamlInput := []byte("title: T\nauthor: a b c d e f g h i j\n")
+		dir := t.TempDir()
+		mdPath := dir + "/long.md"
+		yamlPath := dir + "/long.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		result, err := ConvertFile(mdPath)
+		if err != nil {
+			t.Fatalf("ConvertFile error = %v", err)
+		}
+		if result.Author != "abcdefgh" {
+			t.Errorf("expected sanitized author 'abcdefgh', got %q", result.Author)
+		}
+	})
+
+	t.Run("sidecar_yaml_title_too_long", func(t *testing.T) {
+		// Title from YAML exceeding 64 chars should error
+		longTitle := ""
+		for i := 0; i < 65; i++ {
+			longTitle += "a"
+		}
+		mdInput := []byte("# Content\n")
+		yamlInput := []byte("title: " + longTitle + "\n")
+		dir := t.TempDir()
+		mdPath := dir + "/long-title.md"
+		yamlPath := dir + "/long-title.yaml"
+		if err := os.WriteFile(mdPath, mdInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(yamlPath, yamlInput, 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := ConvertFile(mdPath)
+		if err == nil {
+			t.Fatal("expected error for title > 64 chars, got nil")
+		}
+		if !strings.Contains(err.Error(), "exceeds 64 characters") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestExtractImagePaths(t *testing.T) {
