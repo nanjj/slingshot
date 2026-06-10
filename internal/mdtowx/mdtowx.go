@@ -141,38 +141,39 @@ func parseFrontMatter(source []byte) (fm frontMatter, body []byte) {
 
 // --- Inline style definitions ---
 
+// fontFamily is the common font stack used by all text elements.
+const fontFamily = "Optima-Regular, Optima, PingFangSC-light, PingFangTC-light, 'PingFang SC', Cambria, Cochin, Georgia, Times, 'Times New Roman', serif"
+
 // headingStyle returns the inline style for a heading level.
+// Quaily groups: h1/h2 → centered h2; h3+ → left-aligned bold h3.
 func headingStyle(level int) string {
-	sizes := map[int]string{
-		1: "font-size:1.8em;font-weight:bold;margin:1.2em 0 0.5em;line-height:1.4",
-		2: "font-size:1.5em;font-weight:bold;margin:1.2em 0 0.5em;line-height:1.4",
-		3: "font-size:1.3em;font-weight:bold;margin:1em 0 0.4em;line-height:1.4",
-		4: "font-size:1.1em;font-weight:bold;margin:1em 0 0.4em;line-height:1.4",
+	base := "color:#3f3f3f;line-height:1.5;font-family:" + fontFamily
+	switch {
+	case level <= 2:
+		return "text-align:center;" + base + ";font-size:140%;margin:80px 10px 40px 10px;font-weight:normal"
+	default:
+		return "text-align:left;" + base + ";font-size:120%;margin:40px 10px 20px 10px;font-weight:bold"
 	}
-	if s, ok := sizes[level]; ok {
-		return s
-	}
-	return sizes[4]
 }
 
 // style constants — each targets one AST node kind.
 const (
-	styleParagraph  = "margin:0.8em 0;line-height:1.8"
-	styleBlockquote = "border-left:4px solid #d0d0d0;padding:10px 15px;" +
-		"margin:1em 0;background:#f9f9f9"
-	styleCodeSpan = "background:#f0f0f0;padding:2px 4px;border-radius:3px;" +
-		"font-family:Consolas,'Courier New',monospace;font-size:0.9em"
-	styleLink      = "color:#007bff;text-decoration:none"
+	styleParagraph  = "text-align:left;color:#3f3f3f;line-height:1.6;font-size:16px;font-family:" + fontFamily + ";margin:10px 10px"
+	styleBlockquote = "text-align:left;color:rgb(91,91,91);line-height:1.5;font-size:16px;font-family:" + fontFamily +
+		";margin:20px 10px;padding:1px 0 1px 10px;background:rgba(158,158,158,0.1);border-left:3px solid rgb(158,158,158)"
+	styleCodeSpan = "text-align:left;color:#ff3502;line-height:1.5;font-size:90%;" +
+		"font-family:Operator Mono, Consolas, Monaco, Menlo, monospace;background:#f8f5ec;padding:3px 5px;border-radius:2px"
+	styleLink      = "color:rgb(13,117,252);text-decoration:none"
 	styleImage     = "max-width:100%;height:auto;display:block;margin:0.8em 0"
-	styleTable     = "border-collapse:collapse;width:100%;margin:1em 0"
-	styleTableCell = "border:1px solid #ddd;padding:8px;text-align:left"
-	styleTH        = "background:#f5f5f5;font-weight:bold"
-	styleHR        = "margin:1.5em 0;border:none;border-top:2px solid #eee"
+	styleTable     = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";border-collapse:collapse;margin:20px 0"
+	styleTableHead = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";background:rgba(0,0,0,0.05)"
+	styleTableCell = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:80%;font-family:" + fontFamily + ";border:1px solid #dfdfdf;padding:4px 8px"
+	styleHR        = "margin:1.5em 0;border:none;border-top:1px solid #eee"
 	styleDel       = "text-decoration:line-through"
 
 	// WeChat list styles — WeChat does not support <ul>/<ol>/<li>, so lists
 	// are rendered as <p> with <span> items using bullet/number characters.
-	styleListContainer = "margin:20px 10px;margin-left:0;padding-left:20px"
+	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";margin:20px 10px;margin-left:0;padding-left:20px"
 	styleListItemWx    = "text-indent:-20px;display:block;margin:10px 10px"
 	styleListBullet    = "margin-right: 10px;"
 )
@@ -188,7 +189,16 @@ func addInlineStyles(doc ast.Node) {
 		}
 		switch n.Kind() {
 		case ast.KindHeading:
-			n.SetAttributeString("style", headingStyle(n.(*ast.Heading).Level))
+			h := n.(*ast.Heading)
+			origLevel := h.Level
+			// Map heading level for WeChat: h1/h2 → h2 (centered), h3+ → h3 (left-aligned bold)
+			switch {
+			case origLevel <= 2:
+				h.Level = 2
+			default:
+				h.Level = 3
+			}
+			n.SetAttributeString("style", headingStyle(origLevel))
 
 		case ast.KindParagraph:
 			n.SetAttributeString("style", styleParagraph)
@@ -215,7 +225,7 @@ func addInlineStyles(doc ast.Node) {
 			n.SetAttributeString("style", styleTable)
 
 		case extast.KindTableHeader:
-			n.SetAttributeString("style", styleTH)
+			n.SetAttributeString("style", styleTableHead)
 
 		case extast.KindTableCell:
 			n.SetAttributeString("style", styleTableCell)

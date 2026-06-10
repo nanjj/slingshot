@@ -23,7 +23,8 @@ func TestConvertMarkdown(t *testing.T) {
 			input: `Hello world.`,
 			want: []string{
 				`<p`, `>Hello world.</p>`,
-				`margin:0.8em 0`, `line-height:1.8`,
+				`color:#3f3f3f`, `line-height:1.6`, `font-size:16px`,
+				`Optima-Regular`,
 			},
 		},
 		{
@@ -33,11 +34,14 @@ func TestConvertMarkdown(t *testing.T) {
 ### H3
 #### H4`,
 			want: []string{
-				`<h1 style="font-size:1.8em;font-weight:bold;margin:1.2em 0 0.5em`,
-				`<h2 style="font-size:1.5em;font-weight:bold;margin:1.2em 0 0.5em`,
-				`<h3 style="font-size:1.3em;font-weight:bold;margin:1em 0 0.4em`,
-				`<h4 style="font-size:1.1em;font-weight:bold;margin:1em 0 0.4em`,
-				`</h1>`, `</h2>`, `</h3>`, `</h4>`,
+				`<h2 style="text-align:center;color:#3f3f3f;line-height:1.5;font-family:Optima-Regular`,
+				`font-size:140%;margin:80px 10px 40px 10px;font-weight:normal">H1</h2>`,
+				`<h2 style="text-align:center;color:#3f3f3f;line-height:1.5;font-family:Optima-Regular`,
+				`font-size:140%;margin:80px 10px 40px 10px;font-weight:normal">H2</h2>`,
+				`<h3 style="text-align:left;color:#3f3f3f;line-height:1.5;font-family:Optima-Regular`,
+				`font-size:120%;margin:40px 10px 20px 10px;font-weight:bold">H3</h3>`,
+				`<h3 style="text-align:left;color:#3f3f3f;line-height:1.5;font-family:Optima-Regular`,
+				`font-size:120%;margin:40px 10px 20px 10px;font-weight:bold">H4</h3>`,
 			},
 		},
 		{
@@ -46,8 +50,8 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<strong>bold</strong>`,
 				`<em>italic</em>`,
-				// codespan - check partial style match (exact output has additional font props)
-				`<code style="background:#f0f0f0;padding:2px 4px;border-radius:3px`,
+				// codespan - check partial style match
+				`<code style="text-align:left;color:#ff3502;line-height:1.5;font-size:90%`,
 				`>code</code>`,
 				`<del style="text-decoration:line-through">strike</del>`,
 			},
@@ -56,7 +60,7 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "blockquote",
 			input: `> quote`,
 			want: []string{
-				`<blockquote style="border-left:4px solid #d0d0d0;padding:10px 15px;margin:1em 0;background:#f9f9f9"`,
+				`<blockquote style="text-align:left;color:rgb(91,91,91);line-height:1.5;font-size:16px;font-family:Optima-Regular`,
 				`quote`,
 			},
 		},
@@ -143,7 +147,7 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "link",
 			input: `[text](https://example.com)`,
 			want: []string{
-				`<a href="https://example.com" style="color:#007bff;text-decoration:none"`,
+				`<a href="https://example.com" style="color:rgb(13,117,252);text-decoration:none"`,
 				`>text</a>`,
 			},
 		},
@@ -160,7 +164,8 @@ func TestConvertMarkdown(t *testing.T) {
 - b
 - c`,
 			want: []string{
-				`<p style="margin:20px 10px;margin-left:0;padding-left:20px;list-style:circle"`,
+				`font-family:Optima-Regular`,
+				`margin:20px 10px;margin-left:0;padding-left:20px;list-style:circle`,
 				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>a</span>`,
 				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>b</span>`,
 				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>c</span>`,
@@ -175,7 +180,8 @@ func TestConvertMarkdown(t *testing.T) {
 			input: `1. one
 2. two`,
 			want: []string{
-				`<p style="margin:20px 10px;margin-left:0;padding-left:20px"`,
+				`font-family:Optima-Regular`,
+				`margin:20px 10px;margin-left:0;padding-left:20px`,
 				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">1.</span>one</span>`,
 				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">2.</span>two</span>`,
 				`</p>`,
@@ -188,7 +194,7 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "thematic_break",
 			input: `---`,
 			want: []string{
-				`<hr style="margin:1.5em 0;border:none;border-top:2px solid #eee"`,
+				`<hr style="margin:1.5em 0;border:none;border-top:1px solid #eee"`,
 			},
 		},
 		{
@@ -197,9 +203,12 @@ func TestConvertMarkdown(t *testing.T) {
 |---|---|---|
 | 1 | 2 |`,
 			want: []string{
-				`<table style="border-collapse:collapse;width:100%;margin:1em 0"`,
-				`<th`, `style="background:#f5f5f5;font-weight:bold"`,
-				`<td style="border:1px solid #ddd;padding:8px;text-align:left"`,
+				`font-family:Optima-Regular`,
+				`border-collapse:collapse;margin:20px 0`,
+				`<th`, `font-size:80%`,
+				`border:1px solid #dfdfdf;padding:4px 8px`,
+				`<td style="text-align:left;color:#3f3f3f;line-height:1.5;font-size:80%`,
+				`border:1px solid #dfdfdf;padding:4px 8px`,
 				`A`, `B`, `1`, `2`,
 			},
 		},
@@ -222,7 +231,7 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "bold_inside_paragraph",
 			input: `p **b** p`,
 			want: []string{
-				`<p style="margin:0.8em 0;line-height:1.8">p <strong>b</strong> p</p>`,
+				`<p style="text-align:left;color:#3f3f3f;line-height:1.6;font-size:16px;font-family:Optima-Regular`, `p <strong>b</strong> p</p>`,
 			},
 		},
 		// Front matter tests
@@ -235,7 +244,7 @@ author: John Doe
 
 # Hello`,
 			want: []string{
-				`<h1`, `Hello`,
+				`<h2`, `Hello`,
 			},
 		},
 		{
@@ -253,7 +262,7 @@ title: Test
 
 # Title in body`,
 			want: []string{
-				`<h1`, `Title in body`,
+				`<h2`, `Title in body`,
 			},
 			not: []string{
 				`Test`, // front matter content should not appear in HTML
