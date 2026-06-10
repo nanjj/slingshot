@@ -64,15 +64,19 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "code_block_fenced",
 			input: "```go\nfunc main() {}\n```\n",
 			want: []string{
-				`<pre style="background:#f5f5f5;padding:16px;border-radius:4px;overflow-x:auto"`,
-				`<code style="background:none;padding:0;font-family:Consolas,'Courier New',monospace;font-size:0.9em"`,
-				`func main() {}`,
-				`</code></pre>`,
+				`<section class="code-snippet__fix code-snippet__go">`,
+				`<ul class="code-snippet__line-index code-snippet__go">`,
+				`<li></li>`,
+				`<pre class="code-snippet__go" data-lang="go">`,
+				`<span class="code-snippet_outer">func main() {}</span>`,
+				`</section>`,
 			},
 			not: []string{
-				`class="language-`, // custom renderer doesn't emit language class
+				`class="language-`,       // custom renderer doesn't emit language class
+				`style="background:#f5f5`, // no longer uses inline styles
 			},
 		},
+
 		{
 			name:  "link",
 			input: `[text](https://example.com)`,

@@ -15,6 +15,7 @@ package mdtowx
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,7 +30,6 @@ import (
 	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
 )
-
 // --- WeChat API limits ---
 
 const (
@@ -155,9 +155,6 @@ const (
 	styleParagraph  = "margin:0.8em 0;line-height:1.8"
 	styleBlockquote = "border-left:4px solid #d0d0d0;padding:10px 15px;" +
 		"margin:1em 0;background:#f9f9f9"
-	styleCodeBlockPre  = "background:#f5f5f5;padding:16px;border-radius:4px;overflow-x:auto"
-	styleCodeBlockCode = "background:none;padding:0;" +
-		"font-family:Consolas,'Courier New',monospace;font-size:0.9em"
 	styleCodeSpan = "background:#f0f0f0;padding:2px 4px;border-radius:3px;" +
 		"font-family:Consolas,'Courier New',monospace;font-size:0.9em"
 	styleLink      = "color:#007bff;text-decoration:none"
@@ -230,6 +227,22 @@ func addInlineStyles(doc ast.Node) {
 // goldmark's html.Renderer does not inspect attributes for CodeBlock or
 // FencedCodeBlock, so we provide our own renderer with inline styles baked in.
 
+// WeChat code block format
+//
+// WeChat requires a specific HTML structure for code blocks:
+//
+//   <section class="code-snippet__fix code-snippet__LANG">
+//     <ul class="code-snippet__line-index code-snippet__LANG"><li></li>...</ul>
+//     <pre class="code-snippet__LANG" data-lang="LANG">
+//       <code><span class="code-snippet_outer">line1</span></code>
+//       ...
+//     </pre>
+//   </section>
+//
+// The language suffix (LANG) comes from the fenced code block info string
+// or defaults to "js". Each line gets its own <code><span> wrapper and a
+// corresponding <li> in the line-number index.
+
 type codeBlockRenderer struct{}
 
 func (r *codeBlockRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
@@ -237,33 +250,80 @@ func (r *codeBlockRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(ast.KindFencedCodeBlock, r.renderFencedCodeBlock)
 }
 
+// langSuffix returns the CSS class suffix for a code block language.
+// For indented code blocks lang is empty, so we default to "js".
+func langSuffix(lang string) string {
+	if lang == "" {
+		return "js"
+	}
+	return lang
+}
+
 func (r *codeBlockRenderer) renderCodeBlock(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
-		_, _ = w.WriteString(`<pre style="` + styleCodeBlockPre + `"><code style="` + styleCodeBlockCode + `">`)
-		writeLines(w, source, n)
+		writeWxCodeBlock(w, source, n, "")
 		return ast.WalkSkipChildren, nil
 	}
-	_, _ = w.WriteString("</code></pre>\n")
+	_, _ = w.WriteString("</section>\n")
 	return ast.WalkContinue, nil
 }
 
 func (r *codeBlockRenderer) renderFencedCodeBlock(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
-		_, _ = w.WriteString(`<pre style="` + styleCodeBlockPre + `"><code style="` + styleCodeBlockCode + `">`)
-		writeLines(w, source, n)
+		fenced := n.(*ast.FencedCodeBlock)
+		lang := string(fenced.Language(source))
+		writeWxCodeBlock(w, source, n, lang)
 		return ast.WalkSkipChildren, nil
 	}
-	_, _ = w.WriteString("</code></pre>\n")
+	_, _ = w.WriteString("</section>\n")
 	return ast.WalkContinue, nil
 }
 
-// writeLines writes the raw source segments of a code block.
-func writeLines(w util.BufWriter, source []byte, n ast.Node) {
+// writeWxCodeBlock writes the WeChat code block structure for the given node.
+// lang is the language from the fenced code block info string, or "" for
+// indented code blocks.
+func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) {
 	lines := n.Lines()
-	for i := 0; i < lines.Len(); i++ {
-		line := lines.At(i)
-		_, _ = w.Write(line.Value(source))
+	nLines := lines.Len()
+	if nLines == 0 {
+		return
 	}
+
+	suffix := langSuffix(lang)
+
+	// <section class="code-snippet__fix code-snippet__LANG">
+	_, _ = w.WriteString(`<section class="code-snippet__fix code-snippet__`)
+	_, _ = w.WriteString(suffix)
+	_, _ = w.WriteString(`">`)
+
+	// <ul class="code-snippet__line-index code-snippet__LANG"><li></li>...</ul>
+	_, _ = w.WriteString(`<ul class="code-snippet__line-index code-snippet__`)
+	_, _ = w.WriteString(suffix)
+	_, _ = w.WriteString(`">`)
+	for i := 0; i < nLines; i++ {
+		_, _ = w.WriteString("<li></li>")
+	}
+	_, _ = w.WriteString("</ul>")
+
+	// <pre class="code-snippet__LANG" data-lang="LANG">
+	_, _ = w.WriteString(`<pre class="code-snippet__`)
+	_, _ = w.WriteString(suffix)
+	_, _ = w.WriteString(`" data-lang="`)
+	_, _ = w.WriteString(lang)
+	_, _ = w.WriteString(`">`)
+
+	// <code><span class="code-snippet_outer">line</span></code> per line
+	for i := 0; i < nLines; i++ {
+		line := lines.At(i)
+		_, _ = w.WriteString("<code><span class=\"code-snippet_outer\">")
+		// HTML-escape and strip trailing newline
+		content := bytes.TrimRight(line.Value(source), "\n\r")
+		_, _ = w.WriteString(html.EscapeString(string(content)))
+		_, _ = w.WriteString("</span></code>\n")
+	}
+
+	_, _ = w.WriteString("</pre>")
+	// </section> is written by the caller on exiting
 }
 
 // --- Custom list renderer ---
