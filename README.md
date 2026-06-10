@@ -7,7 +7,7 @@
 ## 安装
 
 ```bash
-go install github.com/nanjj/slingshot@latest
+go install github.com/nanjj/slingshot/cmd/slingshot@latest
 # 或 make build
 ```
 
