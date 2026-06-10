@@ -9,13 +9,37 @@ author: JUN JIE NAN <nanjunjie@gmail.com>
 
 微信公众号文章发布工作流。从 Markdown 到公众号草稿的完整链路。
 
+## 前置条件
+
+### 0. 配置微信凭据
+
+所有操作依赖微信公众平台的 API 凭据。首次使用前必须配置：
+
+```bash
+# 在公众号后台 → 开发 → 基本配置 中获取 AppID 和 AppSecret
+slingshot config set wechat.appid wx1234567890abcdef
+slingshot config set wechat.secret abcdefghijklmnopqrstuvwxyz123456
+```
+
+查看配置状态：
+
+```bash
+slingshot config show          # 查看完整配置
+slingshot config list          # 列出所有配置键
+```
+
+> **AI 智能体注意**：执行任何 draft/meterial 操作前，确认 `wechat.appid` 和
+> `wechat.secret` 已配置。若缺失，需先引导用户提供凭据。
+
 ## 工作流
 
 ### 1. 准备 Markdown 文件
 
 编写文章内容，支持 GFM 语法（表格、删除线、代码块等）。
 
-支持 YAML front matter 设置元数据：
+支持两种方式设置元数据（标题、作者、摘要、封面图）：
+
+**方式一：YAML front matter**（嵌入在 Markdown 文件头部）
 
 ```yaml
 ---
@@ -25,6 +49,19 @@ digest: 摘要内容（选填）
 thumb_media_id: cover.png
 ---
 ```
+
+**方式二（推荐）：sidecar YAML 文件**（与 Markdown 同目录，命名为 `<filename>.yaml`）
+
+```yaml
+# article.md 的同目录 sidecar 文件: article.yaml
+title: 文章标题
+author: 作者名
+digest: 摘要内容（选填）
+thumb_media_id: cover.png
+```
+
+Sidecar YAML 优先级高于 front matter，适合不修改原始 Markdown 文件添加元数据。
+尤其适合从 org-mode 等外部工具导出的场景——Markdown 本身保持干净，元数据放在旁边。
 
 > `thumb_media_id` 可以是本地图片路径（如 `cover.png`），
 > 配合 `--upload` 会自动上传到微信素材库并替换为 media_id。
@@ -96,26 +133,31 @@ slingshot meterial remove <media_id>
 ## 端到端示例
 
 ```bash
-# 1. 编写 Markdown → 转换 → 创建草稿
+# 1. 配置凭据（仅首次）
+slingshot config set wechat.appid wx1234567890abcdef
+slingshot config set wechat.secret abcdefghijklmnopqrstuvwxyz123456
+
+# 2. 编写 Markdown → 转换 → 创建草稿
 slingshot draft convert my-article.md --upload
 slingshot draft add my-article.html
 
-# 2. 查看草稿列表
+# 3. 查看草稿列表
 slingshot draft list
 
-# 3. 查看创建结果
+# 4. 查看创建结果
 slingshot draft show <media_id>
 
-# 4. 修改后更新
+# 5. 修改后更新
 slingshot draft update <media_id> my-article.html
 
-# 5. 管理封面图片
+# 6. 管理封面图片
 slingshot meterial list --type image
 slingshot meterial add cover.jpg
 ```
 
 ## 注意事项
 
+- **配置**：必须配置 `wechat.appid` 和 `wechat.secret`，否则所有 API 操作会失败
 - **封面图**：微信草稿要求必须提供 `thumb_media_id`。可以通过 sidecar YAML
   （`<file>.yaml`）或 HTML `<meta name="thumb_media_id">` 指定
 - **摘要**：可通过 sidecar YAML 的 `digest` 字段或 HTML `<meta name="digest">` 设置

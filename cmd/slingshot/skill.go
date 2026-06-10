@@ -111,16 +111,18 @@ func (c *cmdSkillInstall) command() *cobra.Command {
 
 The skill's SKILL.md is extracted from the binary and written to the
 destination directory. By default the skill is installed under
-$PWD/.dscli/skills/<name>/. Use --path to specify a custom directory.
+<project root>/.dscli/skills/<name>/, where <project root> is the nearest
+ancestor of $PWD that contains a .git or .dscli directory (falling back
+to $PWD if none is found). Use --path to specify a custom directory.
 
 Examples:
   slingshot skill install weixin
   slingshot skill install weixin --path /home/user/.dscli/skills`),
 	)
 	cmd.Flags().StringVarP(&c.path, "path", "p", "",
-		i18n.G("Installation path (default: $PWD/.dscli/skills)"))
-	cmd.RunE = c.run
+		i18n.G("Installation path (default: <project root>/.dscli/skills)"))
 	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = c.run
 	return cmd
 }
 func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
@@ -145,14 +147,18 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(i18n.G("skill %q has no SKILL.md"), skillName)
 	}
 
-	// Determine install path
+	// Determine install path: use --path, or derive from project root
 	installPath := c.path
 	if installPath == "" {
-		cwd, err := os.Getwd()
+		base, err := findProjectRoot()
 		if err != nil {
-			return fmt.Errorf("getting current directory: %w", err)
+			// Fall back to CWD if not in a git repo
+			base, err = os.Getwd()
+			if err != nil {
+				return fmt.Errorf("getting current directory: %w", err)
+			}
 		}
-		installPath = filepath.Join(cwd, ".dscli", "skills")
+		installPath = filepath.Join(base, ".dscli", "skills")
 	}
 
 	// Create destination directory
@@ -170,6 +176,34 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Installed skill %s to %s\n"),
 		color.GreenString(skillName), color.CyanString(destFile))
 	return nil
+}
+
+// findProjectRoot walks up from the current directory to find the
+// project root: the nearest ancestor that contains a .git directory
+// or a .dscli directory. Returns an error if neither is found.
+func findProjectRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	for {
+		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil && info.IsDir() {
+			return dir, nil
+		}
+		if info, err := os.Stat(filepath.Join(dir, ".dscli")); err == nil && info.IsDir() {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root without finding .git or .dscli
+			return "", fmt.Errorf("no .git or .dscli directory found in any parent of current directory")
+		}
+		dir = parent
+	}
 }
 
 // --- cmdSkillSub ---
