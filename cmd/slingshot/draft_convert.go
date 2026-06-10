@@ -95,7 +95,7 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	if !c.upload {
 		// Without --upload: check for thumbnail file that needs uploading
-		if result.ThumbMediaID != "" && isLocalFile(filepath.Dir(file.String), result.ThumbMediaID) {
+		if result.ThumbMediaID != "" && looksLikeImageFile(result.ThumbMediaID) && isLocalFile(filepath.Dir(file.String), result.ThumbMediaID) {
 			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumb_media_id %q looks like a local file.\n"+
 				"  Use --upload to auto-upload the thumbnail image, or upload it manually and \n"+
 				"  replace the value with a real media_id from WeChat material management.\n"), result.ThumbMediaID)
@@ -200,45 +200,45 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 	// Step 5: Handle thumbnail image (thumb_media_id from front matter)
 	thumbMediaID := result.ThumbMediaID
 	if thumbMediaID != "" {
-		// Resolve relative to the markdown file's directory
-		thumbPath := thumbMediaID
-		if !filepath.IsAbs(thumbPath) {
-			thumbPath = filepath.Join(baseDir, thumbPath)
-		}
-		thumbPath = filepath.Clean(thumbPath)
+		if looksLikeImageFile(thumbMediaID) {
+			// Resolve relative to the markdown file's directory
+			thumbPath := thumbMediaID
+			if !filepath.IsAbs(thumbPath) {
+				thumbPath = filepath.Join(baseDir, thumbPath)
+			}
+			thumbPath = filepath.Clean(thumbPath)
 
-		if _, err := os.Stat(thumbPath); err == nil {
-			// File exists — upload as permanent material
-			key, err := uploadcache.Key(thumbPath)
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
-			} else {
-				// Check cache first
-				if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
-					thumbMediaID = cachedMediaID
-					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
-						filepath.Base(thumbPath), thumbMediaID)
+			if _, err := os.Stat(thumbPath); err == nil {
+				// File exists — upload as permanent material
+				key, err := uploadcache.Key(thumbPath)
+				if err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
 				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
-					mediaID, err := uploadimage.UploadThumb(token, thumbPath)
-					if err != nil {
-						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
+					// Check cache first
+					if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
+						thumbMediaID = cachedMediaID
+						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
+							filepath.Base(thumbPath), thumbMediaID)
 					} else {
-						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
-						cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
-						thumbMediaID = mediaID
+						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
+						mediaID, err := uploadimage.UploadThumb(token, thumbPath)
+						if err != nil {
+							fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
+						} else {
+							fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
+							cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
+							thumbMediaID = mediaID
+						}
+					}
+					// Save cache after thumbnail upload (in case of partial updates)
+					if err := cache.Save(); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
 					}
 				}
-				// Save cache after thumbnail upload (in case of partial updates)
-				if err := cache.Save(); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
-				}
 			}
-		} else {
-			// File doesn't exist — treat as an already-valid media_id or warn
-			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail file %q not found, using value as-is "+
-				"(make sure it's a valid media_id from WeChat material management)\n"), thumbPath)
+			// File doesn't exist as a local path — fall through and use original value as-is
 		}
+		// No image extension → treat as an already-valid media_id, keep it as-is
 	}
 
 	// Wrap with metadata and save
@@ -291,6 +291,17 @@ func htmlEscape(s string) string {
 func replaceExt(path, ext string) string {
 	orig := filepath.Ext(path)
 	return path[:len(path)-len(orig)] + ext
+}
+
+// looksLikeImageFile returns true if the path has a common image file extension.
+// This distinguishes file paths from raw media_id values.
+func looksLikeImageFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico", ".tiff", ".tif", ".avif":
+		return true
+	}
+	return false
 }
 
 // isLocalFile checks if a path relative to baseDir exists on disk.
