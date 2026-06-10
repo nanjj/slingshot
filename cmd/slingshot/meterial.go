@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -129,26 +128,20 @@ func (c *cmdMeterialList) run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print summary
-	fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n",
+	fmt.Fprintf(cmd.OutOrStdout(), "%s\n",
 		color.CyanString(i18n.G("Materials (%s, %d total, showing %d):"), c.mtype, resp.TotalCount, resp.ItemCount))
-	fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("─", 80))
 
 	for i, item := range resp.Items {
 		t := time.Unix(item.UpdateTime, 0).Format("2006-01-02 15:04")
-		num := fmt.Sprintf("%d.", i+1)
+		num := fmt.Sprintf("%d.", c.offset+i+1)
 		fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s\n", color.YellowString(num), color.GreenString(item.Name))
 		fmt.Fprintf(cmd.OutOrStdout(), "      %s  %s\n",
 			color.CyanString(i18n.G("ID:")), item.MediaID)
-		if item.URL != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "      %s  %s\n",
-				color.CyanString(i18n.G("URL:")), item.URL)
-		}
 		fmt.Fprintf(cmd.OutOrStdout(), "      %s  %s\n",
 			color.CyanString(i18n.G("Updated:")), t)
 		if i < len(resp.Items)-1 {
 			fmt.Fprintln(cmd.OutOrStdout())
 		}
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), strings.Repeat("─", 80))
 	return nil
 }
