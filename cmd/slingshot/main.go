@@ -98,8 +98,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 
 
 	// 处理 version 标志
-	rootCmd.SetVersionTemplate("slingshot v0.1.0\n")
-	rootCmd.Version = "0.1.0"
+	rootCmd.SetVersionTemplate("slingshot v0.1.1\n")
+	rootCmd.Version = "0.1.1"
 
 	// 执行
 	err := rootCmd.Execute()
