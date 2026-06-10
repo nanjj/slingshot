@@ -8,8 +8,6 @@ import (
 
 	"github.com/fatih/color"
 	cli "github.com/nanjj/slingshot/internal/cmd"
-	"github.com/nanjj/slingshot/internal/config"
-	"github.com/nanjj/slingshot/internal/getaccesstoken"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/material"
 	u "github.com/nanjj/slingshot/internal/usage"
@@ -51,7 +49,7 @@ Examples:
 	cmd.Flags().StringVarP(&c.introduction, "introduction", "", "",
 		i18n.G("Introduction (optional, for video material)"))
 	cmd.RunE = c.run
-	cmd.Args = cobra.ArbitraryArgs
+	cmd.Args = cobra.MinimumNArgs(1)
 	return cmd
 }
 
@@ -79,14 +77,15 @@ func (c *cmdMeterialAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(i18n.G("invalid material type %q: must be one of: image, video, voice"), c.mtype)
 	}
 
-	// Load config and get token
-	cfg, _, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+	// Validate title for video material
+	if mtype == material.TypeVideo && c.title == "" {
+		return errors.New(i18n.G("--title is required for video material"))
 	}
-	token, err := getaccesstoken.GetToken(cfg)
+
+	// Load config and get token
+	token, err := loadToken()
 	if err != nil {
-		return fmt.Errorf("getting access token: %w", err)
+		return err
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading %s as %s...\n"), filepath.Base(filePath), mtype)

@@ -6,8 +6,6 @@ import (
 
 	"github.com/fatih/color"
 	cli "github.com/nanjj/slingshot/internal/cmd"
-	"github.com/nanjj/slingshot/internal/config"
-	"github.com/nanjj/slingshot/internal/getaccesstoken"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/material"
 	"github.com/spf13/cobra"
@@ -72,13 +70,9 @@ func (c *cmdMeterialList) run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load config and get token
-	cfg, _, err := config.Load()
+	token, err := loadToken()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-	token, err := getaccesstoken.GetToken(cfg)
-	if err != nil {
-		return fmt.Errorf("getting access token: %w", err)
+		return err
 	}
 
 	// List materials

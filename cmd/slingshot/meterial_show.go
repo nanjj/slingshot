@@ -8,8 +8,6 @@ import (
 
 	"github.com/fatih/color"
 	cli "github.com/nanjj/slingshot/internal/cmd"
-	"github.com/nanjj/slingshot/internal/config"
-	"github.com/nanjj/slingshot/internal/getaccesstoken"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/material"
 	u "github.com/nanjj/slingshot/internal/usage"
@@ -43,7 +41,7 @@ Examples:
 	cmd.Flags().StringVarP(&c.output, "output", "o", "",
 		i18n.G("Save to file (for image/voice material)"))
 	cmd.RunE = c.run
-	cmd.Args = cobra.ArbitraryArgs
+	cmd.Args = cobra.ExactArgs(1)
 	return cmd
 }
 
@@ -57,13 +55,9 @@ func (c *cmdMeterialShow) run(cmd *cobra.Command, args []string) error {
 	}
 	mediaID := parsed[0].String
 
-	cfg, _, err := config.Load()
+	token, err := loadToken()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-	token, err := getaccesstoken.GetToken(cfg)
-	if err != nil {
-		return fmt.Errorf("getting access token: %w", err)
+		return err
 	}
 
 	resp, err := material.Show(token, mediaID)

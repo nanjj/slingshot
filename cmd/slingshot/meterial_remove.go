@@ -6,8 +6,6 @@ import (
 
 	"github.com/fatih/color"
 	cli "github.com/nanjj/slingshot/internal/cmd"
-	"github.com/nanjj/slingshot/internal/config"
-	"github.com/nanjj/slingshot/internal/getaccesstoken"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/material"
 	u "github.com/nanjj/slingshot/internal/usage"
@@ -34,7 +32,7 @@ Example:
 `),
 	)
 	cmd.RunE = c.run
-	cmd.Args = cobra.ArbitraryArgs
+	cmd.Args = cobra.ExactArgs(1)
 	return cmd
 }
 
@@ -48,13 +46,9 @@ func (c *cmdMeterialRemove) run(cmd *cobra.Command, args []string) error {
 	}
 	mediaID := parsed[0].String
 
-	cfg, _, err := config.Load()
+	token, err := loadToken()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-	token, err := getaccesstoken.GetToken(cfg)
-	if err != nil {
-		return fmt.Errorf("getting access token: %w", err)
+		return err
 	}
 
 	if err := material.Remove(token, mediaID); err != nil {
