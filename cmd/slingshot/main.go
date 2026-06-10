@@ -93,7 +93,9 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdDraft{global: global}).command(),
 		(&cmdConfig{global: global}).command(),
 		(&cmdMeterial{global: global}).command(),
+		(&cmdSkill{global: global}).command(),
 	)
+
 
 	// 处理 version 标志
 	rootCmd.SetVersionTemplate("slingshot v0.1.0\n")

@@ -1,0 +1,123 @@
+---
+name: weixin
+description: 微信公众号文章草稿全流程 — Markdown 转 HTML、上传图片、管理素材、创建/更新草稿
+keywords: weixin, wechat, draft, meterial, article, 公众号, 草稿, 素材
+author: JUN JIE NAN <nanjunjie@gmail.com>
+---
+
+# weixin
+
+微信公众号文章发布工作流。从 Markdown 到公众号草稿的完整链路。
+
+## 工作流
+
+### 1. 准备 Markdown 文件
+
+编写文章内容，支持 GFM 语法（表格、删除线、代码块等）。
+
+支持 YAML front matter 设置元数据：
+
+```yaml
+---
+title: 文章标题
+author: 作者名
+digest: 摘要内容（选填）
+thumb_media_id: cover.png
+---
+```
+
+> `thumb_media_id` 可以是本地图片路径（如 `cover.png`），
+> 配合 `--upload` 会自动上传到微信素材库并替换为 media_id。
+
+### 2. 转换为微信 HTML
+
+```bash
+# 基本转换（不处理图片）
+slingshot draft convert article.md
+
+# 完整转换：上传图片 + 缩略图
+slingshot draft convert article.md --upload
+```
+
+输出：`article.html`（与输入文件同目录）。
+
+### 3. 创建草稿
+
+```bash
+# 从 HTML 创建草稿
+slingshot draft add article.html
+
+# 指定标题（覆盖 HTML 中的 <title>）
+slingshot draft add article.html --title "我的文章标题"
+
+# 指定封面 media_id（覆盖 HTML 中的 <meta>）
+slingshot draft add article.html --thumb <media_id>
+```
+
+### 4. 管理草稿
+
+```bash
+# 列出所有草稿
+slingshot draft list
+
+# 查看草稿详情（查看文章内容等）
+slingshot draft show <media_id>
+
+# 更新草稿
+slingshot draft update <media_id> article.html
+
+# 删除草稿
+slingshot draft remove <media_id>
+```
+
+### 5. 管理素材
+
+```bash
+# 列出素材
+slingshot meterial list
+slingshot meterial list --type image
+slingshot meterial list --type video
+slingshot meterial list --type voice
+slingshot meterial list --type news
+
+# 上传素材
+slingshot meterial add image.png
+slingshot meterial add video.mp4 --type video --title "视频标题"
+slingshot meterial add voice.amr --type voice
+
+# 查看素材详情
+slingshot meterial show <media_id>
+slingshot meterial show <media_id> --output image.jpg
+
+# 删除素材
+slingshot meterial remove <media_id>
+```
+
+## 端到端示例
+
+```bash
+# 1. 编写 Markdown → 转换 → 创建草稿
+slingshot draft convert my-article.md --upload
+slingshot draft add my-article.html
+
+# 2. 查看草稿列表
+slingshot draft list
+
+# 3. 查看创建结果
+slingshot draft show <media_id>
+
+# 4. 修改后更新
+slingshot draft update <media_id> my-article.html
+
+# 5. 管理封面图片
+slingshot meterial list --type image
+slingshot meterial add cover.jpg
+```
+
+## 注意事项
+
+- **封面图**：微信草稿要求必须提供 `thumb_media_id`。可以通过 sidecar YAML
+  （`<file>.yaml`）或 HTML `<meta name="thumb_media_id">` 指定
+- **摘要**：可通过 sidecar YAML 的 `digest` 字段或 HTML `<meta name="digest">` 设置
+- **图片缓存**：首次上传的图片会缓存到 `images.yaml`（当前目录），下次跳过重复上传
+- **缩略图缓存**：封面图片的 media_id 也会缓存到 `images.yaml`，避免重复上传
