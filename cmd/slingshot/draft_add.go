@@ -159,6 +159,9 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 				"(make sure it's a valid media_id)\n"), thumbPath)
 		}
 	}
+	// Sanitize HTML before sending to WeChat (strip mailto links, footnote backlinks)
+	sanitized := mdtowx.SanitizeHTML(htmlContent)
+
 	// Create draft
 	resp, err := draft.Add(token, []draft.Article{
 		{
@@ -168,9 +171,10 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 			Digest:             digest,
 			NeedOpenComment:    needOpenComment,
 			OnlyFansCanComment: onlyFansCanComment,
-			Content:            string(htmlContent),
+			Content:            string(sanitized),
 		},
 	})
+
 	if err != nil {
 		return fmt.Errorf("creating draft: %w", err)
 	}

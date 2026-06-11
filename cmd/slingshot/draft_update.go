@@ -156,6 +156,9 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Sanitize HTML before sending to WeChat (strip mailto links, footnote backlinks)
+	sanitized := mdtowx.SanitizeHTML(htmlContent)
+
 	// Build article
 	article := draft.Article{
 		Title:              title,
@@ -163,7 +166,7 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 		Digest:             digest,
 		NeedOpenComment:    needOpenComment,
 		OnlyFansCanComment: onlyFansCanComment,
-		Content:            string(htmlContent),
+		Content:            string(sanitized),
 	}
 	if thumbMediaID != "" {
 		article.ThumbMediaID = thumbMediaID
@@ -177,4 +180,3 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft updated: %s\n"), color.GreenString(mediaID))
 	return nil
 }
-
