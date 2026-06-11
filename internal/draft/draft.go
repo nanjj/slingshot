@@ -18,11 +18,12 @@ import (
 
 // API endpoints — made variables so tests can override them.
 var (
-	AddURL    = "https://api.weixin.qq.com/cgi-bin/draft/add"
-	ListURL   = "https://api.weixin.qq.com/cgi-bin/draft/batchget"
-	GetURL    = "https://api.weixin.qq.com/cgi-bin/draft/get"
-	UpdateURL = "https://api.weixin.qq.com/cgi-bin/draft/update"
-	DeleteURL = "https://api.weixin.qq.com/cgi-bin/draft/delete"
+	AddURL      = "https://api.weixin.qq.com/cgi-bin/draft/add"
+	ListURL     = "https://api.weixin.qq.com/cgi-bin/draft/batchget"
+	GetURL      = "https://api.weixin.qq.com/cgi-bin/draft/get"
+	UpdateURL   = "https://api.weixin.qq.com/cgi-bin/draft/update"
+	DeleteURL   = "https://api.weixin.qq.com/cgi-bin/draft/delete"
+	PublishURL  = "https://api.weixin.qq.com/cgi-bin/freepublish/submit"
 )
 
 // Article represents a single article in a WeChat draft.
@@ -210,6 +211,34 @@ func Remove(token, mediaID string) error {
 		ErrMsg  string `json:"errmsg"`
 	}](resp.Body)
 	return err
+}
+
+// --- Publish (FreePublish/submit) ---
+
+// PublishResponse is the response from the freepublish/submit API.
+type PublishResponse struct {
+	PublishID string `json:"publish_id"`
+	ErrCode   int    `json:"errcode,omitempty"`
+	ErrMsg    string `json:"errmsg,omitempty"`
+}
+
+// Publish submits a draft for publishing via the FreePublish API.
+// It returns the publish_id for tracking the submission status.
+func Publish(token, mediaID string) (*PublishResponse, error) {
+	body := map[string]string{"media_id": mediaID}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s?access_token=%s", PublishURL, token)
+	resp, err := http.Post(url, "application/json; charset=utf-8", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return decodeResponse[PublishResponse](resp.Body)
 }
 
 // --- helpers ---

@@ -252,3 +252,16 @@ msgstr "警告: %s 校验失败: %v\n"
 
 msgid "Warning: failed to save image cache: %v\n"
 msgstr "警告: 图片缓存保存失败: %v\n"
+
+# Draft publish translations
+msgid "Publish a draft to WeChat"
+msgstr "发布草稿到微信公众号"
+
+msgid "Submit a draft for publishing via the WeChat FreePublish API.\n\nOnly one thing: submit. No polling, no retry, no status check.\n\nThe publish_id is returned for tracking the submission status.\nUse it with the WeChat freepublish/get API to check the result."
+msgstr "通过微信 FreePublish API 提交草稿发布。\n\n只做一件事：提交。不做轮询、不做重试、不查状态。\n\n返回 publish_id 用于追踪发布状态。\n使用该 id 调用微信 freepublish/get API 查询结果。"
+
+msgid "expected a media_id argument"
+msgstr "需要一个 media_id 参数"
+
+msgid "Draft published: %s  publish_id: %s\n"
+msgstr "草稿已发布: %s  publish_id: %s\n"

@@ -271,3 +271,51 @@ func TestHTTPError(t *testing.T) {
 		t.Fatal("expected error from empty response, got nil")
 	}
 }
+
+func TestPublish(t *testing.T) {
+	var gotBody map[string]string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Query().Get("access_token") != "test-token" {
+			t.Errorf("expected access_token=test-token")
+		}
+		defer r.Body.Close()
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(`{"publish_id": "100000001"}`))
+	}))
+	defer ts.Close()
+
+	PublishURL = ts.URL + "/freepublish/submit"
+
+	resp, err := Publish("test-token", "test_media_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.PublishID != "100000001" {
+		t.Errorf("expected publish_id '100000001', got %q", resp.PublishID)
+	}
+	if gotBody["media_id"] != "test_media_id" {
+		t.Errorf("expected media_id 'test_media_id', got %q", gotBody["media_id"])
+	}
+}
+
+func TestPublishAPIError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"errcode": 40007, "errmsg": "invalid media_id"}`))
+	}))
+	defer ts.Close()
+
+	PublishURL = ts.URL + "/freepublish/submit"
+
+	_, err := Publish("test-token", "bad_media_id")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != "WeChat API error (code 40007): invalid media_id" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
