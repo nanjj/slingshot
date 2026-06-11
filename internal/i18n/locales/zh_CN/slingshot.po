@@ -265,3 +265,54 @@ msgstr "需要一个 media_id 参数"
 
 msgid "Draft published: %s  publish_id: %s\n"
 msgstr "草稿已发布: %s  publish_id: %s\n"
+
+# Draft submit translations
+msgid "Submit a draft for publishing (FreePublish, no mass send)"
+msgstr "提交草稿发布（FreePublish，不群发推送）"
+
+msgid "Draft submitted: %s  publish_id: %s\n"
+msgstr "草稿已提交: %s  publish_id: %s\n"
+
+# Draft publish (SendAll) translations
+msgid "Publish and mass send a draft to subscribers"
+msgstr "发布并群发草稿到订阅者"
+
+msgid "Publish a draft article and send it to subscribers via the\nWeChat mass send API (SendAll).\n\nBy default, the article is sent to all subscribers (--to-all=true).\nUse --tag-id to target a specific user group instead.\n\nThis matches the \"发布\" behavior in the WeChat web backend where\nmass send (群发推送) settings are configurable.\n\nThe msg_id is returned for tracking the send status via\nthe masssend/get API.\n\nTo publish without sending to subscribers, use \"draft submit\"."
+msgstr "通过微信群发 API (SendAll) 发布文章并推送到订阅者。\n\n默认发送到所有订阅者 (--to-all=true)。\n使用 --tag-id 指定发送到特定用户组。\n\n这匹配微信后台的「发布」行为——包含群发推送设置。\n\n返回 msg_id 用于通过 masssend/get API 追踪发送状态。\n\n如只需发布到时间线而不推送，使用 \"draft submit\"。"
+
+msgid "Send to all subscribers (default true). Set --to-all=false and --tag-id to target a group"
+msgstr "发送到所有订阅者（默认 true）。设为 false 并配合 --tag-id 发送到特定标签组"
+
+msgid "Send to a specific tag group (requires --to-all=false)"
+msgstr "发送到特定标签组（需要配合 --to-all=false）"
+
+msgid "Continue sending even if the article is deemed a reprint"
+msgstr "即使文章被判定为转载也继续发送"
+
+msgid "Client message ID for deduplication (max 32 bytes, prevents duplicate sends within 24h)"
+msgstr "客户端消息 ID 用于去重（最多 32 字节，防止 24 小时内重复发送）"
+
+msgid "sending draft: %s"
+msgstr "发送草稿失败: %s"
+
+msgid "Draft published: %s  msg_id: %d\n"
+msgstr "草稿已发布: %s  msg_id: %d\n"
+
+# Draft preview translations
+msgid "Preview a draft by sending to a specific user"
+msgstr "发送预览给指定用户"
+
+msgid "Send a draft article to a specific user for preview before publishing.\n\nUses the WeChat preview API. Provide either:\n  --touser   <openid>    Send to a user by their OpenID\n  --towxname <wxname>    Send to a user by their WeChat ID (limited to 100/day)\n\nThe preview lets you check the article layout and formatting\nin the mobile client before mass sending."
+msgstr "在发布前将草稿发送给指定用户预览。\n\n使用微信预览 API，提供以下之一：\n  --touser   <openid>    通过 OpenID 发送给用户\n  --towxname <wxname>    通过微信号发送给用户（每天限制 100 次）\n\n预览可让你在移动端检查文章排版和格式。\n\n提交草稿: %s  publish_id: %s\n"
+
+msgid "User's OpenID to receive the preview"
+msgstr "接收预览的用户 OpenID"
+
+msgid "User's WeChat ID to receive the preview (100/day limit)"
+msgstr "接收预览的用户微信号（每日 100 次限制）"
+
+msgid "either --touser or --towxname is required for preview"
+msgstr "预览需要提供 --touser 或 --towxname 参数"
+
+msgid "Preview sent for %s\n"
+msgstr "预览已发送: %s\n"

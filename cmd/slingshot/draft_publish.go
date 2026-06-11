@@ -15,23 +15,43 @@ import (
 // --- cmdDraftPublish ---
 
 // cmdDraftPublish implements "slingshot draft publish <media_id>".
+// Uses the SendAll API (群发推送) to publish and optionally send to subscribers.
 type cmdDraftPublish struct {
-	global *cmdGlobal
+	global            *cmdGlobal
+	toAll             bool
+	tagID             int
+	sendIgnoreReprint bool
+	clientMsgID       string
 }
 
 func (c *cmdDraftPublish) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "publish " + u.ID.Render()
-	cmd.Short = i18n.G("Publish a draft to WeChat")
+	cmd.Short = i18n.G("Publish and mass send a draft to subscribers")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		i18n.G(`Submit a draft for publishing via the WeChat FreePublish API.
+		i18n.G(`Publish a draft article and send it to subscribers via the
+WeChat mass send API (SendAll).
 
-Only one thing: submit. No polling, no retry, no status check.
+By default, the article is sent to all subscribers (--to-all=true).
+Use --tag-id to target a specific user group instead.
 
-The publish_id is returned for tracking the submission status.
-Use it with the WeChat freepublish/get API to check the result.`),
+This matches the "发布" behavior in the WeChat web backend where
+mass send (群发推送) settings are configurable.
+
+The msg_id is returned for tracking the send status via
+the masssend/get API.
+
+To publish without sending to subscribers, use "draft submit".`),
 	)
+	cmd.Flags().BoolVarP(&c.toAll, "to-all", "", true,
+		i18n.G("Send to all subscribers (default true). Set --to-all=false and --tag-id to target a group"))
+	cmd.Flags().IntVarP(&c.tagID, "tag-id", "", 0,
+		i18n.G("Send to a specific tag group (requires --to-all=false)"))
+	cmd.Flags().BoolVarP(&c.sendIgnoreReprint, "send-ignore-reprint", "", false,
+		i18n.G("Continue sending even if the article is deemed a reprint"))
+	cmd.Flags().StringVarP(&c.clientMsgID, "clientmsgid", "", "",
+		i18n.G("Client message ID for deduplication (max 32 bytes, prevents duplicate sends within 24h)"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
@@ -53,13 +73,23 @@ func (c *cmdDraftPublish) run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Submit for publishing
-	resp, err := draft.Publish(token, mediaID)
-	if err != nil {
-		return fmt.Errorf("publishing draft: %w", err)
+	// Determine send target
+	var tagID *int
+	if c.tagID > 0 {
+		tagID = &c.tagID
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft published: %s  publish_id: %s\n"),
-		color.GreenString(mediaID), color.YellowString(resp.PublishID))
+	sendIgnore := 0
+	if c.sendIgnoreReprint {
+		sendIgnore = 1
+	}
+
+	resp, err := draft.SendAll(token, mediaID, c.toAll, tagID, sendIgnore, c.clientMsgID)
+	if err != nil {
+		return fmt.Errorf("sending draft: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft published: %s  msg_id: %d\n"),
+		color.GreenString(mediaID), resp.MsgID)
 	return nil
 }

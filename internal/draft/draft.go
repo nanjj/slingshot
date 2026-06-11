@@ -1,4 +1,4 @@
-// Package draft provides WeChat Draft API operations.
+// Package draft provides WeChat Draft and Mass Send API operations.
 //
 // WeChat Draft Box (草稿箱) API allows managing draft articles:
 //   - Add:    POST /cgi-bin/draft/add
@@ -6,6 +6,11 @@
 //   - Show:   POST /cgi-bin/draft/get
 //   - Update: POST /cgi-bin/draft/update
 //   - Remove: POST /cgi-bin/draft/delete
+//
+// Publishing and sending:
+//   - Publish (FreePublish): POST /cgi-bin/freepublish/submit
+//   - SendAll (mass send):   POST /cgi-bin/message/mass/sendall
+//   - Preview:               POST /cgi-bin/message/mass/preview
 package draft
 
 import (
@@ -18,13 +23,16 @@ import (
 
 // API endpoints — made variables so tests can override them.
 var (
-	AddURL      = "https://api.weixin.qq.com/cgi-bin/draft/add"
-	ListURL     = "https://api.weixin.qq.com/cgi-bin/draft/batchget"
-	GetURL      = "https://api.weixin.qq.com/cgi-bin/draft/get"
-	UpdateURL   = "https://api.weixin.qq.com/cgi-bin/draft/update"
-	DeleteURL   = "https://api.weixin.qq.com/cgi-bin/draft/delete"
-	PublishURL  = "https://api.weixin.qq.com/cgi-bin/freepublish/submit"
+	AddURL       = "https://api.weixin.qq.com/cgi-bin/draft/add"
+	ListURL      = "https://api.weixin.qq.com/cgi-bin/draft/batchget"
+	GetURL       = "https://api.weixin.qq.com/cgi-bin/draft/get"
+	UpdateURL    = "https://api.weixin.qq.com/cgi-bin/draft/update"
+	DeleteURL    = "https://api.weixin.qq.com/cgi-bin/draft/delete"
+	PublishURL   = "https://api.weixin.qq.com/cgi-bin/freepublish/submit"
+	SendAllURL   = "https://api.weixin.qq.com/cgi-bin/message/mass/sendall"
+	PreviewURL   = "https://api.weixin.qq.com/cgi-bin/message/mass/preview"
 )
+
 
 // Article represents a single article in a WeChat draft.
 type Article struct {
@@ -241,7 +249,111 @@ func Publish(token, mediaID string) (*PublishResponse, error) {
 	return decodeResponse[PublishResponse](resp.Body)
 }
 
-// --- helpers ---
+// --- SendAll (Mass Send) ---
+
+// SendAllFilter controls who receives the mass send.
+type SendAllFilter struct {
+	IsToAll bool `json:"is_to_all"`
+	TagID   *int `json:"tag_id,omitempty"`
+}
+
+// SendAllRequest is the request body for the mass send all API.
+type SendAllRequest struct {
+	Filter            SendAllFilter `json:"filter"`
+	MPNews            MPNewsMedia   `json:"mpnews,omitempty"`
+	MsgType           string        `json:"msgtype"`
+	SendIgnoreReprint int           `json:"send_ignore_reprint,omitempty"`
+	ClientMsgID       string        `json:"clientmsgid,omitempty"`
+}
+
+// MPNewsMedia wraps a media_id for mpnews-type mass send or preview.
+type MPNewsMedia struct {
+	MediaID string `json:"media_id"`
+}
+
+// SendAllResponse is the response from the mass send all API.
+type SendAllResponse struct {
+	ErrCode   int    `json:"errcode,omitempty"`
+	ErrMsg    string `json:"errmsg,omitempty"`
+	MsgID     int64  `json:"msg_id,omitempty"`
+	MsgDataID int64  `json:"msg_data_id,omitempty"`
+	Type      string `json:"type,omitempty"`
+}
+
+// SendAll sends a draft article to subscribers via the mass send API.
+// When isToAll is true, it sends to all subscribers. Set tagID to target
+// a specific tag group instead. Returns msg_id for tracking send status.
+func SendAll(token, mediaID string, isToAll bool, tagID *int, sendIgnoreReprint int, clientMsgID string) (*SendAllResponse, error) {
+	req := SendAllRequest{
+		Filter: SendAllFilter{
+			IsToAll: isToAll,
+			TagID:   tagID,
+		},
+		MPNews: MPNewsMedia{
+			MediaID: mediaID,
+		},
+		MsgType:           "mpnews",
+		SendIgnoreReprint: sendIgnoreReprint,
+		ClientMsgID:       clientMsgID,
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s?access_token=%s", SendAllURL, token)
+	resp, err := http.Post(url, "application/json; charset=utf-8", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return decodeResponse[SendAllResponse](resp.Body)
+}
+
+// --- Preview ---
+
+// PreviewRequest is the request body for the preview API.
+type PreviewRequest struct {
+	ToUser   string      `json:"touser,omitempty"`
+	ToWxName string      `json:"towxname,omitempty"`
+	MPNews   MPNewsMedia `json:"mpnews"`
+	MsgType  string      `json:"msgtype"`
+}
+
+// PreviewResponse is the response from the preview API.
+type PreviewResponse struct {
+	ErrCode int    `json:"errcode,omitempty"`
+	ErrMsg  string `json:"errmsg,omitempty"`
+}
+
+// Preview sends a draft article to a specific user for preview.
+// Provide either touser (openid) or towxname (微信号). The towxname
+// option is limited to 100 times per day.
+func Preview(token, mediaID, touser, towxname string) (*PreviewResponse, error) {
+	req := PreviewRequest{
+		ToUser:   touser,
+		ToWxName: towxname,
+		MPNews: MPNewsMedia{
+			MediaID: mediaID,
+		},
+		MsgType: "mpnews",
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s?access_token=%s", PreviewURL, token)
+	resp, err := http.Post(url, "application/json; charset=utf-8", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return decodeResponse[PreviewResponse](resp.Body)
+}
+
 
 // wechatError is the common error fields in WeChat API responses.
 type wechatError struct {
