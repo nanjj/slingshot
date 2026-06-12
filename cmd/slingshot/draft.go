@@ -10,7 +10,7 @@ import (
 )
 
 // draft 子命令语法定义
-// 注意: cobra 已处理子命令名 (list/add/update/remove/show/convert/publish/preview),
+// 注意: cobra 已处理子命令名 (list/add/update/remove/show/convert),
 // 这里只定义子命令后的参数。所有用法使用顶层 atom 序列。
 
 var draftListUsage = u.Usage{}
@@ -31,15 +31,6 @@ var draftRemoveUsage = u.Usage{
 var draftShowUsage = u.Usage{
 	u.ID,
 }
-
-var draftPublishUsage = u.Usage{
-	u.ID,
-}
-
-var draftPreviewUsage = u.Usage{
-	u.ID,
-}
-
 // cmdDraft 是 draft 的父命令。
 type cmdDraft struct {
 	global *cmdGlobal
@@ -59,8 +50,6 @@ Subcommands:
   update <id> <file> Update an existing draft
   remove <id>       Remove a draft
   show   <id>       Show a draft's details
-  publish <id>      Publish a draft to the public timeline (optionally mass send with --mass)
-  preview <id>      Send a preview to a specific user
   convert <file>    Convert Markdown to WeChat HTML format
 `),
 	)
@@ -75,8 +64,6 @@ Subcommands:
 		c.cmdUpdate().command(),
 		c.cmdRemove().command(),
 		c.cmdShow().command(),
-		c.cmdPublish().command(),
-		c.cmdPreview().command(),
 		c.cmdConvert().command(),
 	)
 
@@ -125,18 +112,6 @@ func (c *cmdDraft) cmdShow() *cmdDraftSub {
 		short:  i18n.G("Show a draft's details"),
 		long:   i18n.G(`Show detailed information about a WeChat draft by ID.`),
 		action: c.doShow,
-	}
-}
-
-func (c *cmdDraft) cmdPublish() *cmdDraftPublish {
-	return &cmdDraftPublish{
-		global: c.global,
-	}
-}
-
-func (c *cmdDraft) cmdPreview() *cmdDraftPreview {
-	return &cmdDraftPreview{
-		global: c.global,
 	}
 }
 
