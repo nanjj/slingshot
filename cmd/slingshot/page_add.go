@@ -195,7 +195,7 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Regenerate site index
-	if err := regenerateSiteIndex(site.Dir, siteName); err != nil {
+	if err := regenerateSiteIndex(site.Dir, siteName, site.Title); err != nil {
 		return fmt.Errorf("regenerating site index: %w", err)
 	}
 
@@ -290,17 +290,24 @@ func copyFile(src, dst string) error {
 // It lists all page subdirectories containing index.html and creates a
 // date-grouped listing page with links to each page, using the format:
 //
-//	<h1>{siteName}'s blog</h1>
+//	<h1>{siteTitle}</h1>
 //	<section class="articles">
 //	  <div class="date">June 05, 2026</div>
 //	  <div class="link">
 //	    <a href="/page-name/">Page Title</a>
 //	  </div>
 //	</section>
-func regenerateSiteIndex(siteDir, siteName string) error {
+//
+// siteTitle can be empty — in that case it falls back to "{siteName}'s blog".
+func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 	pages, err := listPages(siteDir)
 	if err != nil {
 		return fmt.Errorf("listing pages: %w", err)
+	}
+
+	title := siteTitle
+	if title == "" {
+		title = siteName + "'s blog"
 	}
 
 	var sb strings.Builder
@@ -308,14 +315,25 @@ func regenerateSiteIndex(siteDir, siteName string) error {
 	sb.WriteString("<html lang=\"en\">\n<head>\n")
 	sb.WriteString(`<meta charset="utf-8">` + "\n")
 	sb.WriteString(`<meta name="viewport" content="width=device-width, initial-scale=1">` + "\n")
-	sb.WriteString("<title>" + htmlEscape(siteName) + "'s blog</title>\n")
+	sb.WriteString("<title>" + htmlEscape(title) + "</title>\n")
+	sb.WriteString("<style>\n")
+	sb.WriteString("  .articles {\n")
+	sb.WriteString("    display: grid;\n")
+	sb.WriteString("    grid-template-columns: auto 1fr;\n")
+	sb.WriteString("  }\n")
+	sb.WriteString("  .articles .date {\n")
+	sb.WriteString("    text-align: right;\n")
+	sb.WriteString("    border-right: 4px groove #ccc;\n")
+	sb.WriteString("    margin-right: 15px;\n")
+	sb.WriteString("  }\n")
+	sb.WriteString("</style>\n")
 	sb.WriteString("</head>\n<body>\n")
 
 	if len(pages) == 0 {
-		sb.WriteString("  <h1>" + htmlEscape(siteName) + "'s blog</h1>\n")
+		sb.WriteString("  <h1>" + htmlEscape(title) + "</h1>\n")
 		sb.WriteString("  <p>No pages yet.</p>\n")
 	} else {
-		sb.WriteString("  <h1>" + htmlEscape(siteName) + "'s blog</h1>\n")
+		sb.WriteString("  <h1>" + htmlEscape(title) + "</h1>\n")
 		sb.WriteString("  <section class=\"articles\">\n")
 
 		var lastDate string
@@ -336,13 +354,13 @@ func regenerateSiteIndex(siteDir, siteName string) error {
 				lastDate = dateStr
 			}
 
-			title := p.Title
-			if title == "" {
-				title = p.Name
+			ptitle := p.Title
+			if ptitle == "" {
+				ptitle = p.Name
 			}
 			sb.WriteString("    <div class=\"link\">\n")
 			sb.WriteString(fmt.Sprintf("      <a href=\"/%s/\">%s</a>\n",
-				htmlEscape(p.Name), htmlEscape(title)))
+				htmlEscape(p.Name), htmlEscape(ptitle)))
 			sb.WriteString("    </div>\n")
 		}
 

@@ -13,6 +13,7 @@ import (
 type Site struct {
 	Dir   string `yaml:"dir"`
 	Rsync string `yaml:"rsync"`
+	Title string `yaml:"title"`
 }
 
 // GetSites returns all configured sites.
@@ -43,6 +44,9 @@ func GetSites(cfg *Config) map[string]Site {
 		}
 		if rsync, ok := siteMap["rsync"].(string); ok {
 			site.Rsync = rsync
+		}
+		if title, ok := siteMap["title"].(string); ok {
+			site.Title = title
 		}
 		sites[name] = site
 	}

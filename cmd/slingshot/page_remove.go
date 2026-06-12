@@ -44,7 +44,7 @@ func (c *cmdPage) doRemove(cfg *config.Config, parsed []*u.Parsed) error {
 	}
 
 	// Regenerate site index
-	if err := regenerateSiteIndex(site.Dir, siteName); err != nil {
+	if err := regenerateSiteIndex(site.Dir, siteName, site.Title); err != nil {
 		return fmt.Errorf("regenerating site index: %w", err)
 	}
 
