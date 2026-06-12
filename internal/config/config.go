@@ -76,11 +76,36 @@ func Save(cfg *Config, path string) error {
 	return nil
 }
 
+// splitKey splits a dot-separated key path into parts.
+// A backslash before a dot (\.) is treated as a literal dot,
+// not a path separator. This allows keys containing dots.
+func splitKey(key string) []string {
+	if !strings.ContainsRune(key, '\\') {
+		return strings.Split(key, ".")
+	}
+	var parts []string
+	var buf strings.Builder
+	for i := 0; i < len(key); i++ {
+		if key[i] == '\\' && i+1 < len(key) && key[i+1] == '.' {
+			buf.WriteByte('.')
+			i++
+		} else if key[i] == '.' {
+			parts = append(parts, buf.String())
+			buf.Reset()
+		} else {
+			buf.WriteByte(key[i])
+		}
+	}
+	parts = append(parts, buf.String())
+	return parts
+}
+
 // Get retrieves a config value by dot-separated key path.
 // It traverses nested maps inside Extra.
-// Examples: "wechat.appid", "some.nested.key"
+// Use \. to include a literal dot in a key segment.
+// Examples: "wechat.appid", "sites.fermi\.dscli\.io.dir"
 func Get(cfg *Config, key string) (any, error) {
-	parts := strings.Split(key, ".")
+	parts := splitKey(key)
 	current := any(cfg.Extra)
 	for _, part := range parts {
 		m, ok := current.(map[string]any)
@@ -97,8 +122,9 @@ func Get(cfg *Config, key string) (any, error) {
 
 // Set sets a config value by dot-separated key path.
 // Intermediate map nodes are created as needed.
+// Use \. to include a literal dot in a key segment.
 func Set(cfg *Config, key string, value string) error {
-	parts := strings.Split(key, ".")
+	parts := splitKey(key)
 	if cfg.Extra == nil {
 		cfg.Extra = make(map[string]any)
 	}
@@ -127,8 +153,9 @@ func Set(cfg *Config, key string, value string) error {
 }
 
 // Del deletes a config key by dot-separated key path.
+// Use \. to include a literal dot in a key segment.
 func Del(cfg *Config, key string) error {
-	parts := strings.Split(key, ".")
+	parts := splitKey(key)
 	if len(parts) == 0 || cfg.Extra == nil {
 		return nil
 	}

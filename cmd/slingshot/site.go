@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -149,7 +150,13 @@ func (c *cmdSite) doAdd(cfg *config.Config, parsed []*u.Parsed, dir, rsync strin
 		return fmt.Errorf("creating site directory: %w", err)
 	}
 
-	site := config.Site{Dir: dir, Rsync: rsync}
+	// Replace $HOME prefix with ~ for portability
+	dirDisplay := dir
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(dir, home) {
+		dirDisplay = "~" + dir[len(home):]
+	}
+
+	site := config.Site{Dir: dirDisplay, Rsync: rsync}
 	if err := config.AddSite(cfg, name, site); err != nil {
 		return fmt.Errorf("adding site: %w", err)
 	}
