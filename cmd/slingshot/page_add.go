@@ -419,7 +419,8 @@ func extractOrgDate(orgPath string) time.Time {
 func parseOrgDate(content string) time.Time {
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "#+DATE:") {
+		// Org mode property keys are case-insensitive; match #+date: regardless of case.
+		if !strings.HasPrefix(strings.ToUpper(trimmed), "#+DATE:") {
 			continue
 		}
 		dateStr := strings.TrimSpace(trimmed[len("#+DATE:"):])
