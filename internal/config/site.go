@@ -57,15 +57,15 @@ func GetSite(cfg *Config, name string) (Site, bool) {
 	return site, ok
 }
 
-// escapeName escapes dots in a site name so it can be used as a single
+// EscapeName escapes dots in a site name so it can be used as a single
 // key segment in Set/Del paths.
-func escapeName(name string) string {
+func EscapeName(name string) string {
 	return strings.ReplaceAll(name, ".", "\\.")
 }
 
 // AddSite adds or updates a site in the configuration.
 func AddSite(cfg *Config, name string, site Site) error {
-	escaped := escapeName(name)
+	escaped := EscapeName(name)
 	if err := Set(cfg, "sites."+escaped+".dir", site.Dir); err != nil {
 		return fmt.Errorf("setting site dir: %w", err)
 	}
@@ -77,7 +77,7 @@ func AddSite(cfg *Config, name string, site Site) error {
 
 // RemoveSite removes a site from the configuration.
 func RemoveSite(cfg *Config, name string) error {
-	escaped := escapeName(name)
+	escaped := EscapeName(name)
 	if err := Del(cfg, "sites."+escaped); err != nil {
 		return fmt.Errorf("removing site: %w", err)
 	}

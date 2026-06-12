@@ -18,10 +18,12 @@ import (
 )
 
 // site 子命令语法
+
 var siteListUsage = u.Usage{}
 
 var siteAddUsage = u.Usage{
 	u.Name,
+	u.Sequence(u.Key, u.Value).List(0),
 }
 
 var siteRemoveUsage = u.Usage{
@@ -30,6 +32,12 @@ var siteRemoveUsage = u.Usage{
 
 var siteRsyncUsage = u.Usage{
 	u.Name,
+}
+
+var siteUpdateUsage = u.Usage{
+	u.Name,
+	u.Key,
+	u.Value,
 }
 
 // cmdSite 是 site 的父命令。
@@ -45,11 +53,12 @@ func (c *cmdSite) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Manage static site deployment targets.
 
-Each site has a local directory and an optional rsync command for deployment.
+Each site has a local directory and optional configuration keys (dir, rsync, etc.).
 
 Subcommands:
   list                  List all configured sites
-  add    <name>         Add a new site (use --dir and --rsync)
+  add    <name> ...     Add a new site with key=value pairs
+  update <name> <k> <v> Update a site's configuration key
   remove <name>         Remove a site
   rsync  <name>         Deploy site via rsync
 `),
@@ -61,6 +70,7 @@ Subcommands:
 	cmd.AddCommand(
 		c.cmdList().command(),
 		c.cmdAdd().command(),
+		c.cmdUpdate().command(),
 		c.cmdRemove().command(),
 		c.cmdRsync().command(),
 	)
@@ -68,134 +78,8 @@ Subcommands:
 	return cmd
 }
 
-func (c *cmdSite) cmdList() *cmdSiteSub {
-	return &cmdSiteSub{
-		global:  c.global,
-		name:    "list",
-		usage:   siteListUsage,
-		short:   i18n.G("List all sites"),
-		long:    i18n.G("List all configured deployment sites."),
-		minArgs: 0,
-		action:  c.doList,
-	}
-}
+// --- cmdSiteSub (通用模板: list, remove) ---
 
-func (c *cmdSite) cmdAdd() *cmdSiteAdd {
-	return &cmdSiteAdd{
-		global: c.global,
-	}
-}
-
-func (c *cmdSite) cmdRemove() *cmdSiteSub {
-	return &cmdSiteSub{
-		global:  c.global,
-		name:    "remove",
-		usage:   siteRemoveUsage,
-		short:   i18n.G("Remove a site"),
-		long:    i18n.G("Remove a deployment site from configuration."),
-		minArgs: 1,
-		action:  c.doRemove,
-	}
-}
-
-func (c *cmdSite) cmdRsync() *cmdSiteRsync {
-	return &cmdSiteRsync{
-		global: c.global,
-	}
-}
-
-// Actions
-
-func (c *cmdSite) doList(cfg *config.Config, parsed []*u.Parsed) error {
-	sites := config.GetSites(cfg)
-	if len(sites) == 0 {
-		fmt.Println(i18n.G("No sites configured."))
-		return nil
-	}
-
-	sorted := make([]string, 0, len(sites))
-	for name := range sites {
-		sorted = append(sorted, name)
-	}
-	sort.Strings(sorted)
-
-	fmt.Fprintf(color.Output, "%s\n\n",
-		color.CyanString(i18n.G("Sites (%d total):"), len(sites)))
-
-	for _, name := range sorted {
-		site := sites[name]
-		fmt.Fprintf(color.Output, "  %s\n", color.GreenString(name))
-		if site.Dir != "" {
-			fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Dir:")), site.Dir)
-		}
-		if site.Rsync != "" {
-			fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Rsync:")), site.Rsync)
-		}
-	}
-	return nil
-}
-
-func (c *cmdSite) doAdd(cfg *config.Config, parsed []*u.Parsed, dir, rsync string) error {
-	if len(parsed) < 1 || parsed[0].Skipped {
-		return errors.New(i18n.G("expected a site name argument"))
-	}
-	name := parsed[0].String
-
-	if dir == "" {
-		return errors.New(i18n.G("--dir is required"))
-	}
-
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("creating site directory: %w", err)
-	}
-
-	// Replace $HOME prefix with ~ for portability
-	dirDisplay := dir
-	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(dir, home) {
-		dirDisplay = "~" + dir[len(home):]
-	}
-
-	site := config.Site{Dir: dirDisplay, Rsync: rsync}
-	if err := config.AddSite(cfg, name, site); err != nil {
-		return fmt.Errorf("adding site: %w", err)
-	}
-
-	path := config.Path()
-	if err := config.Save(cfg, path); err != nil {
-		return fmt.Errorf("%s: %w", i18n.G("saving config"), err)
-	}
-
-	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Site added:"), color.GreenString(name))
-	return nil
-}
-
-func (c *cmdSite) doRemove(cfg *config.Config, parsed []*u.Parsed) error {
-	if len(parsed) < 1 || parsed[0].Skipped {
-		return errors.New(i18n.G("expected a site name argument"))
-	}
-	name := parsed[0].String
-
-	if _, ok := config.GetSite(cfg, name); !ok {
-		return fmt.Errorf(i18n.G("site %q not found"), name)
-	}
-
-	if err := config.RemoveSite(cfg, name); err != nil {
-		return fmt.Errorf("removing site: %w", err)
-	}
-
-	path := config.Path()
-	if err := config.Save(cfg, path); err != nil {
-		return fmt.Errorf("%s: %w", i18n.G("saving config"), err)
-	}
-
-	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Site removed:"), color.GreenString(name))
-	return nil
-}
-
-// --- cmdSiteSub ---
-
-// cmdSiteSub 是 site 的通用子命令模板（用于 list/remove 等无额外标志的子命令）。
 type cmdSiteSub struct {
 	global  *cmdGlobal
 	name    string
@@ -237,54 +121,215 @@ func (s *cmdSiteSub) run(cmd *cobra.Command, args []string) error {
 	return s.action(cfg, parsed)
 }
 
+func (c *cmdSite) cmdList() *cmdSiteSub {
+	return &cmdSiteSub{
+		global:  c.global,
+		name:    "list",
+		usage:   siteListUsage,
+		short:   i18n.G("List all sites"),
+		long:    i18n.G("List all configured deployment sites."),
+		minArgs: 0,
+		action:  c.doList,
+	}
+}
+
+func (c *cmdSite) cmdRemove() *cmdSiteSub {
+	return &cmdSiteSub{
+		global:  c.global,
+		name:    "remove",
+		usage:   siteRemoveUsage,
+		short:   i18n.G("Remove a site"),
+		long:    i18n.G("Remove a deployment site from configuration."),
+		minArgs: 1,
+		action:  c.doRemove,
+	}
+}
+
+func (c *cmdSite) cmdAdd() *cmdSiteAdd {
+	return &cmdSiteAdd{
+		global: c.global,
+	}
+}
+
+func (c *cmdSite) cmdUpdate() *cmdSiteUpdate {
+	return &cmdSiteUpdate{
+		global: c.global,
+	}
+}
+
+func (c *cmdSite) cmdRsync() *cmdSiteRsync {
+	return &cmdSiteRsync{
+		global: c.global,
+	}
+}
+
+
+
 // --- cmdSiteAdd ---
 
-// cmdSiteAdd implements "slingshot site add <name>".
 type cmdSiteAdd struct {
 	global *cmdGlobal
-	dir    string
-	rsync  string
 }
 
 func (c *cmdSiteAdd) command() *cobra.Command {
 	cmd := &cobra.Command{}
-	cmd.Use = "add " + u.Name.Render()
+	cmd.Use = "add " + u.Name.Render() + " [" + u.Key.Render() + " " + u.Value.Render() + "...]"
 	cmd.Short = i18n.G("Add a new site")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		i18n.G(`Add a new deployment site.
+		i18n.G(`Add a new deployment site with key-value configuration pairs.
 
-The --dir flag specifies the local site directory (required).
-The --rsync flag specifies the rsync deployment command (optional).`),
+The first positional argument is the site name. Subsequent arguments are
+key-value pairs for site configuration.
+
+Required keys:
+  dir   Local site directory
+
+Optional keys:
+  rsync Rsync deployment command
+
+Example:
+  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path'`),
 	)
-	cmd.Flags().StringVarP(&c.dir, "dir", "d", "",
-		i18n.G("Local site directory (required)"))
-	cmd.Flags().StringVarP(&c.rsync, "rsync", "r", "",
-		i18n.G("Rsync deployment command"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
 }
 
 func (c *cmdSiteAdd) run(cmd *cobra.Command, args []string) error {
-	cfg, _, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
-	}
-
 	parsed, err := c.global.Parse(siteAddUsage, cmd, args)
 	if err != nil {
 		return err
 	}
 
-	// We need a cmdSite to call doAdd. Let's create a temporary one.
-	siteCmd := &cmdSite{global: c.global}
-	return siteCmd.doAdd(cfg, parsed, c.dir, c.rsync)
+	name := parsed[0].String
+
+	// Extract key-value pairs from the list atom
+	kvs := make(map[string]string)
+	if !parsed[1].Skipped {
+		for _, kv := range parsed[1].List {
+			key := kv.List[0].String
+			value := kv.List[1].String
+			kvs[key] = value
+		}
+	}
+
+	// Validate required keys
+	dir, ok := kvs["dir"]
+	if !ok {
+		return errors.New(i18n.G("'dir' is required"))
+	}
+
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating site directory: %w", err)
+	}
+
+	// Replace $HOME prefix with ~ for portability
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(dir, home) {
+		kvs["dir"] = "~" + dir[len(home):]
+	}
+
+	// Load config
+	cfg, _, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
+	}
+
+	// Set all key-value pairs
+	escaped := config.EscapeName(name)
+	for key, value := range kvs {
+		if err := config.Set(cfg, "sites."+escaped+"."+key, value); err != nil {
+			return fmt.Errorf("setting site %s: %w", key, err)
+		}
+	}
+
+	// Save config
+	path := config.Path()
+	if err := config.Save(cfg, path); err != nil {
+		return fmt.Errorf("%s: %w", i18n.G("saving config"), err)
+	}
+
+	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Site added:"), color.GreenString(name))
+	return nil
+}
+
+// --- cmdSiteUpdate ---
+
+type cmdSiteUpdate struct {
+	global *cmdGlobal
+}
+
+func (c *cmdSiteUpdate) command() *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.Use = "update " + u.Name.Render() + " " + u.Key.Render() + " " + u.Value.Render()
+	cmd.Short = i18n.G("Update a site setting")
+	cmd.Long = cli.FormatSection(
+		color.CyanString("Description:"),
+		i18n.G(`Update a single configuration field on an existing site.
+
+Arguments:
+  <name>  Site name
+  <key>   Configuration key (e.g. dir, rsync)
+  <value> New value
+
+Example:
+  slingshot site update mysite rsync 'rsync -avz --delete ./ user@host:/path'`),
+	)
+	cmd.RunE = c.run
+	cmd.Args = cobra.ArbitraryArgs
+	return cmd
+}
+
+func (c *cmdSiteUpdate) run(cmd *cobra.Command, args []string) error {
+	parsed, err := c.global.Parse(siteUpdateUsage, cmd, args)
+	if err != nil {
+		return err
+	}
+
+	name := parsed[0].String
+	key := parsed[1].String
+	value := parsed[2].String
+
+	// Load config
+	cfg, _, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
+	}
+
+	// Validate site exists
+	if _, ok := config.GetSite(cfg, name); !ok {
+		return fmt.Errorf(i18n.G("site %q not found"), name)
+	}
+
+	// For dir: create directory and convert $HOME to ~ for portability
+	if key == "dir" {
+		if err := os.MkdirAll(value, 0755); err != nil {
+			return fmt.Errorf("creating site directory: %w", err)
+		}
+		if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(value, home) {
+			value = "~" + value[len(home):]
+		}
+	}
+
+	// Set the field
+	escaped := config.EscapeName(name)
+	if err := config.Set(cfg, "sites."+escaped+"."+key, value); err != nil {
+		return fmt.Errorf("setting site %s: %w", key, err)
+	}
+
+	// Save config
+	path := config.Path()
+	if err := config.Save(cfg, path); err != nil {
+		return fmt.Errorf("%s: %w", i18n.G("saving config"), err)
+	}
+
+	fmt.Fprintf(color.Output, "%s %s %s=%s\n", i18n.G("Site updated:"), color.GreenString(name), key, value)
+	return nil
 }
 
 // --- cmdSiteRsync ---
 
-// cmdSiteRsync implements "slingshot site rsync <name>".
 type cmdSiteRsync struct {
 	global *cmdGlobal
 }
@@ -355,5 +400,59 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("Rsync completed successfully."))
+	return nil
+}
+
+// --- Actions ---
+
+func (c *cmdSite) doList(cfg *config.Config, parsed []*u.Parsed) error {
+	sites := config.GetSites(cfg)
+	if len(sites) == 0 {
+		fmt.Println(i18n.G("No sites configured."))
+		return nil
+	}
+
+	sorted := make([]string, 0, len(sites))
+	for name := range sites {
+		sorted = append(sorted, name)
+	}
+	sort.Strings(sorted)
+
+	fmt.Fprintf(color.Output, "%s\n\n",
+		color.CyanString(i18n.G("Sites (%d total):"), len(sites)))
+
+	for _, name := range sorted {
+		site := sites[name]
+		fmt.Fprintf(color.Output, "  %s\n", color.GreenString(name))
+		if site.Dir != "" {
+			fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Dir:")), site.Dir)
+		}
+		if site.Rsync != "" {
+			fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Rsync:")), site.Rsync)
+		}
+	}
+	return nil
+}
+
+func (c *cmdSite) doRemove(cfg *config.Config, parsed []*u.Parsed) error {
+	if len(parsed) < 1 || parsed[0].Skipped {
+		return errors.New(i18n.G("expected a site name argument"))
+	}
+	name := parsed[0].String
+
+	if _, ok := config.GetSite(cfg, name); !ok {
+		return fmt.Errorf(i18n.G("site %q not found"), name)
+	}
+
+	if err := config.RemoveSite(cfg, name); err != nil {
+		return fmt.Errorf("removing site: %w", err)
+	}
+
+	path := config.Path()
+	if err := config.Save(cfg, path); err != nil {
+		return fmt.Errorf("%s: %w", i18n.G("saving config"), err)
+	}
+
+	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Site removed:"), color.GreenString(name))
 	return nil
 }
