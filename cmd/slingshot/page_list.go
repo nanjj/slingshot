@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -100,14 +101,14 @@ func (c *cmdPage) doList(cfg *config.Config, parsed []*u.Parsed) error {
 	return nil
 }
 
-// pageInfo holds information about a page.
 type pageInfo struct {
-	Name  string // directory name
-	Title string // extracted from index.html <title>
+	Name  string    // directory name
+	Title string    // extracted from index.html <title>
+	Date  time.Time // extracted date (zero if unknown)
 }
 
 // listPages reads the site directory and returns page info for each subdirectory
-// containing an index.html.
+// containing an index.html, sorted by date descending (newest first), then by name.
 func listPages(siteDir string) ([]pageInfo, error) {
 	entries, err := os.ReadDir(siteDir)
 	if err != nil {
@@ -129,17 +130,59 @@ func listPages(siteDir string) ([]pageInfo, error) {
 		}
 
 		title := extractPageTitle(indexPath, entry.Name())
+		date := extractPageDate(indexPath)
 		pages = append(pages, pageInfo{
 			Name:  entry.Name(),
 			Title: title,
+			Date:  date,
 		})
 	}
 
 	sort.Slice(pages, func(i, j int) bool {
+		// Sort by date descending (newest first); undated pages sort last.
+		hasDateI := !pages[i].Date.IsZero()
+		hasDateJ := !pages[j].Date.IsZero()
+		if hasDateI && hasDateJ {
+			if !pages[i].Date.Equal(pages[j].Date) {
+				return pages[i].Date.After(pages[j].Date)
+			}
+			return pages[i].Name < pages[j].Name
+		}
+		if hasDateI {
+			return true
+		}
+		if hasDateJ {
+			return false
+		}
 		return pages[i].Name < pages[j].Name
 	})
 
 	return pages, nil
+}
+
+// extractPageDate reads an HTML file and extracts the page date.
+// Priority:
+//  1. <!-- slingshot-date: YYYY-MM-DD --> comment (written by page add)
+//  2. File modification time (fallback)
+func extractPageDate(path string) time.Time {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return time.Time{}
+	}
+
+	// Try slingshot date comment first
+	if m := slingshotDateRe.FindSubmatch(data); len(m) >= 2 {
+		if t, err := time.Parse("2006-01-02", string(m[1])); err == nil {
+			return t
+		}
+	}
+
+	// Fallback: file modification time
+	if fi, err := os.Stat(path); err == nil {
+		return fi.ModTime()
+	}
+
+	return time.Time{}
 }
 
 // extractPageTitle reads an HTML file and extracts the <title> tag content.
