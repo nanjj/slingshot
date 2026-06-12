@@ -1,13 +1,13 @@
 ---
 name: weixin
-description: 微信公众号文章草稿全流程 — Markdown 转 HTML、上传图片、管理素材、创建/更新草稿
+description: 微信公众号文章草稿全流程 — Markdown / Org mode 转 HTML、上传图片、管理素材、创建/更新草稿
 keywords: weixin, wechat, draft, meterial, article, 公众号, 草稿, 素材
 author: JUN JIE NAN <nanjunjie@gmail.com>
 ---
 
 # weixin
 
-微信公众号文章发布工作流。从 Markdown 到公众号草稿的完整链路。
+微信公众号文章发布工作流。从 Markdown / Org mode 到公众号草稿的完整链路。
 
 ## 前置条件
 
@@ -33,7 +33,7 @@ slingshot config list          # 列出所有配置键
 
 ## 工作流
 
-### 1. 准备 Markdown 文件
+### 1. 准备文章（Markdown / Org mode）
 
 编写文章内容，支持 GFM 语法（表格、删除线、代码块等）。
 
@@ -63,6 +63,10 @@ thumb_media_id: cover.png
 Sidecar YAML 优先级高于 front matter，适合不修改原始 Markdown 文件添加元数据。
 尤其适合从 org-mode 等外部工具导出的场景——Markdown 本身保持干净，元数据放在旁边。
 
+**直接支持 Org mode**：`.org` 文件可直接转换，无需事先导出为 Markdown：
+  slingshot draft convert article.org --upload
+系统调用 Emacs 完成 Org→Markdown 转换（要求系统已安装 Emacs）。
+
 > `thumb_media_id` 可以是本地图片路径（如 `cover.png`），
 > 配合 `--upload` 会自动上传到微信素材库并替换为 media_id。
 
@@ -71,10 +75,11 @@ Sidecar YAML 优先级高于 front matter，适合不修改原始 Markdown 文�
 ```bash
 # 基本转换（不处理图片）
 slingshot draft convert article.md
+slingshot draft convert article.org    # 直接转换 Org mode
 
 # 完整转换：上传图片 + 缩略图
 slingshot draft convert article.md --upload
-```
+slingshot draft convert article.org --upload
 
 输出：`article.html`（与输入文件同目录）。
 
@@ -137,8 +142,12 @@ slingshot meterial remove <media_id>
 slingshot config set wechat.appid wx1234567890abcdef
 slingshot config set wechat.secret abcdefghijklmnopqrstuvwxyz123456
 
-# 2. 编写 Markdown → 转换 → 创建草稿
+# 2a. Markdown → 转换 → 创建草稿
 slingshot draft convert my-article.md --upload
+slingshot draft add my-article.html
+
+# 2b. Org mode 同样支持（需安装 Emacs）
+slingshot draft convert my-article.org --upload
 slingshot draft add my-article.html
 
 # 3. 查看草稿列表
@@ -153,7 +162,6 @@ slingshot draft update <media_id> my-article.html
 # 6. 管理封面图片
 slingshot meterial list --type image
 slingshot meterial add cover.jpg
-```
 
 ## 注意事项
 
@@ -163,3 +171,5 @@ slingshot meterial add cover.jpg
 - **摘要**：可通过 sidecar YAML 的 `digest` 字段或 HTML `<meta name="digest">` 设置
 - **图片缓存**：首次上传的图片会缓存到 `images.yaml`（当前目录），下次跳过重复上传
 - **缩略图缓存**：封面图片的 media_id 也会缓存到 `images.yaml`，避免重复上传
+- **Emacs 依赖**：转换 `.org` 文件需要系统安装 `emacs`（Emacs 26+）。
+  大多数 Linux/macOS 环境默认可用；若缺失，降级使用 `.md` 文件即可。

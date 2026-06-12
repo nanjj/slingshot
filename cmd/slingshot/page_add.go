@@ -336,6 +336,10 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	cmd := exec.CommandContext(ctx, "emacs",
 		"--batch",
 		"--visit="+orgPath,
+		// Suppress the postamble (<div id="postamble">) — the auto-generated
+		// date/author/validation boilerplate doesn't suit our page layout.
+		"--eval", "(setq org-html-postamble nil)",
+		"--eval", "(setq org-html-validation-link nil)",
 		"--eval", "(org-html-export-to-html)",
 	)
 	cmd.Stderr = &stderr
