@@ -1,13 +1,13 @@
 ---
 name: weixin
-description: 微信公众号文章草稿全流程 — Markdown 转 HTML、上传图片、管理素材、创建/更新草稿
-keywords: weixin, wechat, draft, meterial, article, 公众号, 草稿, 素材
+description: 微信公众号文章草稿全流程 — Markdown 转 HTML、上传图片、管理素材、创建/更新草稿、发布/群发/预览
+keywords: weixin, wechat, draft, meterial, article, 公众号, 草稿, 素材, publish, preview, mass, 发布, 群发
 author: JUN JIE NAN <nanjunjie@gmail.com>
 ---
 
 # weixin
 
-微信公众号文章发布工作流。从 Markdown 到公众号草稿的完整链路。
+微信公众号文章发布工作流。从 Markdown 到公众号草稿、再到发布/群发的完整链路。
 
 ## 前置条件
 
@@ -130,6 +130,48 @@ slingshot meterial show <media_id> --output image.jpg
 slingshot meterial remove <media_id>
 ```
 
+### 6. 发布/群发/预览
+
+草稿创建完成后，根据需要选择发布方式：
+
+```bash
+# ① 发布到时间线（FreePublish），不群发推送（默认）
+slingshot draft publish <media_id>
+
+# ② 发布到时间线 + 群发给所有订阅者
+slingshot draft publish <media_id> --mass
+
+# ③ 发布到时间线 + 群发给指定标签组
+slingshot draft publish <media_id> --mass --to-all=false --tag-id 2
+
+# ④ 发布 + 群发（启用转载忽略）
+slingshot draft publish <media_id> --mass --send-ignore-reprint
+
+# ⑤ 发送预览给指定用户（发布前检查排版效果）
+# 按 OpenID 发送
+slingshot draft preview <media_id> --touser <openid>
+
+# 按微信号发送（每天限 100 次）
+slingshot draft preview <media_id> --towxname <wxname>
+```
+
+**draft publish 的两种模式**：
+
+| 模式 | API | 时间线展示 | 订阅者推送 | 适用场景 |
+|------|-----|-----------|-----------|---------|
+| 不加 `--mass`（默认） | FreePublish | ✅ | ❌ | 仅发布到时间线，不打扰订阅者 |
+| 加 `--mass` | FreePublish + SendAll | ✅ | ✅ | 正常发布 + 群发推送 |
+
+**draft preview 与 draft publish 的关系**：
+
+- `draft preview` 只是发送预览给特定用户检查排版，不会产生发布记录
+- 预览确认无误后，再用 `draft publish` 正式发布
+
+> **AI 智能体注意**：
+> - `draft publish` 不加 `--mass` 返回 `publish_id`（通过 FreePublish API 追踪发布状态）
+> - `draft publish --mass` 额外返回 `msg_id` 和 `msg_data_id`（通过 MassSend API 追踪群发状态）
+> - `draft preview` 可选择按 OpenID（推荐）或微信号发送
+
 ## 端到端示例
 
 ```bash
@@ -153,6 +195,15 @@ slingshot draft update <media_id> my-article.html
 # 6. 管理封面图片
 slingshot meterial list --type image
 slingshot meterial add cover.jpg
+
+# 7a. 预览排版效果
+slingshot draft preview <media_id> --touser <openid>
+
+# 7b. 确认无误后发布到时间线（不群发）
+slingshot draft publish <media_id>
+
+# 7c. 或发布到时间线并群发给所有订阅者
+slingshot draft publish <media_id> --mass
 ```
 
 ## 注意事项
@@ -163,3 +214,5 @@ slingshot meterial add cover.jpg
 - **摘要**：可通过 sidecar YAML 的 `digest` 字段或 HTML `<meta name="digest">` 设置
 - **图片缓存**：首次上传的图片会缓存到 `images.yaml`（当前目录），下次跳过重复上传
 - **缩略图缓存**：封面图片的 media_id 也会缓存到 `images.yaml`，避免重复上传
+- **群发限制**：微信对群发有频率限制（取决于公众号类型），`--mass` 超额会返回错误
+- **预览限制**：`--towxname` 方式每天限 100 次，`--touser` 方式不限

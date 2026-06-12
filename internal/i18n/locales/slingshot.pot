@@ -289,3 +289,41 @@ msgstr ""
 
 msgid "Built-in skills:"
 msgstr ""
+
+# Draft publish translations
+msgid "Publish a draft to WeChat"
+msgstr ""
+
+msgid "Publish a draft article to your account's public timeline.\n\nBy default, this calls the FreePublish API to make the article visible\non your official account's timeline (no push notification to subscribers).\n\nTo also mass-send (群发推送) to subscribers, add --mass.\nUse --tag-id to target a specific user group instead of all subscribers.\n\nThis matches the \"发布\" behavior in the WeChat web backend, where\nmass send settings are configurable options.\n\nWithout --mass: returns publish_id for tracking via freepublish/get.\nWith --mass: also returns msg_id for tracking via masssend/get."
+msgstr ""
+
+msgid "Also mass send (群发推送) to subscribers after publishing"
+msgstr ""
+
+msgid "Mass send: msg_id: %d  msg_data_id: %d\n"
+msgstr ""
+
+msgid "publishing draft: %s"
+msgstr ""
+
+msgid "mass sending draft: %s"
+msgstr ""
+
+# Draft preview translations
+msgid "Preview a draft by sending to a specific user"
+msgstr ""
+
+msgid "Send a draft article to a specific user for preview before publishing.\n\nUses the WeChat preview API. Provide either:\n  --touser   <openid>    Send to a user by their OpenID\n  --towxname <wxname>    Send to a user by their WeChat ID (limited to 100/day)\n\nThe preview lets you check the article layout and formatting\nin the mobile client before mass sending."
+msgstr ""
+
+msgid "User's OpenID to receive the preview"
+msgstr ""
+
+msgid "User's WeChat ID to receive the preview (100/day limit)"
+msgstr ""
+
+msgid "either --touser or --towxname is required for preview"
+msgstr ""
+
+msgid "Preview sent for %s\n"
+msgstr ""

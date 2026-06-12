@@ -10,7 +10,7 @@ import (
 )
 
 // draft 子命令语法定义
-// 注意: cobra 已处理子命令名 (list/add/update/remove/show/convert/publish/submit/preview),
+// 注意: cobra 已处理子命令名 (list/add/update/remove/show/convert/publish/preview),
 // 这里只定义子命令后的参数。所有用法使用顶层 atom 序列。
 
 var draftListUsage = u.Usage{}
@@ -33,10 +33,6 @@ var draftShowUsage = u.Usage{
 }
 
 var draftPublishUsage = u.Usage{
-	u.ID,
-}
-
-var draftSubmitUsage = u.Usage{
 	u.ID,
 }
 
@@ -63,8 +59,7 @@ Subcommands:
   update <id> <file> Update an existing draft
   remove <id>       Remove a draft
   show   <id>       Show a draft's details
-  submit <id>       Submit a draft for publishing (no mass send)
-  publish <id>      Publish and mass send to subscribers
+  publish <id>      Publish a draft to the public timeline (optionally mass send with --mass)
   preview <id>      Send a preview to a specific user
   convert <file>    Convert Markdown to WeChat HTML format
 `),
@@ -80,7 +75,6 @@ Subcommands:
 		c.cmdUpdate().command(),
 		c.cmdRemove().command(),
 		c.cmdShow().command(),
-		c.cmdSubmit().command(),
 		c.cmdPublish().command(),
 		c.cmdPreview().command(),
 		c.cmdConvert().command(),
@@ -131,12 +125,6 @@ func (c *cmdDraft) cmdShow() *cmdDraftSub {
 		short:  i18n.G("Show a draft's details"),
 		long:   i18n.G(`Show detailed information about a WeChat draft by ID.`),
 		action: c.doShow,
-	}
-}
-
-func (c *cmdDraft) cmdSubmit() *cmdDraftSubmit {
-	return &cmdDraftSubmit{
-		global: c.global,
 	}
 }
 
