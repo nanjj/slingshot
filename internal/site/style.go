@@ -6,6 +6,12 @@ import (
 	"path/filepath"
 )
 
+// CSSVersion is a cache-busting version number for the site stylesheet.
+// Bump this whenever DefaultCSS() changes so that regenerated index.html
+// gets a ?v=N query parameter, forcing browsers to fetch the new CSS.
+const CSSVersion = "1"
+
+
 // DefaultCSS returns the default style.css for a slingshot site.
 // It includes base layout, navbar, Org-mode HTML export defaults, and the
 // article-index grid. This is the single shared stylesheet for the entire site.

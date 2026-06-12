@@ -134,7 +134,7 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 	// Inject <link> to the shared stylesheet. The page lives at
 	// siteDir/<pageName>/index.html so ../style.css resolves
 	// to the site root stylesheet.
-	htmlContent = injectStyleLink(htmlContent, "../style.css")
+	htmlContent = injectStyleLink(htmlContent, "../style.css?v="+site.CSSVersion)
 
 	// Load config and get site
 	cfg, _, err := config.Load()
@@ -319,7 +319,7 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 	sb.WriteString(`<meta charset="utf-8">` + "\n")
 	sb.WriteString(`<meta name="viewport" content="width=device-width, initial-scale=1">` + "\n")
 	sb.WriteString("<title>" + htmlEscape(title) + "</title>\n")
-	sb.WriteString(`<link rel="stylesheet" href="style.css">` + "\n")
+	sb.WriteString(`<link rel="stylesheet" href="style.css?v=` + site.CSSVersion + `">` + "\n")
 	sb.WriteString("</head>\n<body>\n")
 
 	if len(pages) == 0 {
