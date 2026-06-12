@@ -450,10 +450,14 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	cmd := exec.CommandContext(ctx, "emacs",
 		"--batch",
 		"--visit="+orgPath,
-		// Suppress the postamble (<div id="postamble">) — the auto-generated
-		// date/author/validation boilerplate doesn't suit our page layout.
+		// Suppress boilerplate that Org export emits by default:
+		// - Postamble (<div id="postamble">) with date/author/validation links
+		// - XML declaration (<?xml version="1.0" encoding="utf-8"?>)
+		// - XHTML doctype — use clean HTML5 <!DOCTYPE html> instead
 		"--eval", "(setq org-html-postamble nil)",
 		"--eval", "(setq org-html-validation-link nil)",
+		"--eval", "(setq org-html-xml-declaration nil)",
+		"--eval", "(setq org-html-doctype \"html5\")",
 		"--eval", "(org-html-export-to-html)",
 	)
 	cmd.Stderr = &stderr
