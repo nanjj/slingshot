@@ -16,6 +16,8 @@ import (
 //  1. mailto links: <a href="mailto:...">text</a> → text (keep label, remove link)
 //  2. Footnote backlinks: <sup><a role="doc-backlink" class="footref"...>N</a></sup>
 //     → N (remove <sup> and <a>, keep the number as plain text)
+//  3. Footnote definition anchors: <sup><a id="fn.X" href="#fnr.X">N</a></sup>
+//     → N (same treatment)
 //
 // The function uses html.NewTokenizer so it works on HTML fragments without
 // wrapping them in a full document structure.
@@ -163,6 +165,12 @@ func isProblematicA(z *html.Tokenizer) bool {
 					return true
 				}
 			}
+		}
+		// Footnote definition anchors: <a id="fn.1" href="#fnr.1">.
+		// Pandoc generates these without role/class, so they need a
+		// separate check on id prefix.
+		if sk == "id" && (strings.HasPrefix(sv, "fn.") || strings.HasPrefix(sv, "fnr.")) {
+			return true
 		}
 		if !more {
 			break
