@@ -336,13 +336,12 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	cmd := exec.CommandContext(ctx, "emacs",
 		"--batch",
 		"--visit="+orgPath,
-		"--eval", "(org-html-export-to-html nil nil nil nil nil nil nil)",
+		"--eval", "(org-html-export-to-html)",
 	)
 	cmd.Stderr = &stderr
-
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf(i18n.G("emacs org-to-html conversion timed out (30s)"))
+			return "", errors.New(i18n.G("emacs org-to-html conversion timed out (30s)"))
 		}
 		errMsg := stderr.String()
 		if len(errMsg) > 1024 {
