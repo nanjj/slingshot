@@ -19,6 +19,7 @@ import (
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/site"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
 
@@ -121,7 +122,6 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 	// Strip <p class="date">…</p> inserted by Emacs org export (belt-and-suspenders
 	// for cases where the postamble suppression didn't apply, e.g. pre-existing HTML).
 	htmlContent = stripDateParagraphs(htmlContent)
-
 	// If source was Org, extract #+DATE: and embed it as a machine-readable comment
 	// so the site index generator can use it for date-grouped rendering.
 	if wasOrg {
@@ -130,19 +130,30 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 			htmlContent = embedDateComment(htmlContent, pageDate)
 		}
 	}
+
+	// Inject <link> to the shared stylesheet. The page lives at
+	// siteDir/<pageName>/index.html so ../style.css resolves
+	// to the site root stylesheet.
+	htmlContent = injectStyleLink(htmlContent, "../style.css")
+
 	// Load config and get site
 	cfg, _, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
 	}
 
-	site, ok := config.GetSite(cfg, siteName)
+	siteConfig, ok := config.GetSite(cfg, siteName)
 	if !ok {
 		return fmt.Errorf(i18n.G("site %q not found"), siteName)
 	}
 
-	if site.Dir == "" {
+	if siteConfig.Dir == "" {
 		return fmt.Errorf(i18n.G("site %q has no directory configured"), siteName)
+	}
+
+	// Ensure shared style.css exists in the site directory
+	if err := site.EnsureCSS(siteConfig.Dir); err != nil {
+		return fmt.Errorf("ensuring site style.css: %w", err)
 	}
 
 	// Derive page name from filename (strip extension)
@@ -156,19 +167,7 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(i18n.G("invalid page name %q: use only letters, numbers, hyphens, and underscores"), pageName)
 	}
 
-	pageDir := filepath.Join(site.Dir, pageName)
-
-	// Check existence based on mode
-	_, dirErr := os.Stat(pageDir)
-	if c.update {
-		if os.IsNotExist(dirErr) {
-			return fmt.Errorf(i18n.G("page %q does not exist in site %q"), pageName, siteName)
-		}
-	} else {
-		if dirErr == nil {
-			return fmt.Errorf(i18n.G("page %q already exists in site %q"), pageName, siteName)
-		}
-	}
+	pageDir := filepath.Join(siteConfig.Dir, pageName)
 
 	// Create page directory
 	if err := os.MkdirAll(pageDir, 0755); err != nil {
@@ -193,9 +192,8 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "%s %d %s\n",
 			color.CyanString("→"), copied, i18n.G("image(s) copied"))
 	}
-
 	// Regenerate site index
-	if err := regenerateSiteIndex(site.Dir, siteName, site.Title); err != nil {
+	if err := regenerateSiteIndex(siteConfig.Dir, siteName, siteConfig.Title); err != nil {
 		return fmt.Errorf("regenerating site index: %w", err)
 	}
 
@@ -291,8 +289,8 @@ func copyFile(src, dst string) error {
 // date-grouped listing page with links to each page, using the format:
 //
 //	<h1>{siteTitle}</h1>
-//	<section class="articles">
-//	  <div class="date">June 05, 2026</div>
+//	<section class="article-grid">
+//	  <div class="article-date">June 05, 2026</div>
 //	  <div class="link">
 //	    <a href="/page-name/">Page Title</a>
 //	  </div>
@@ -310,23 +308,18 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 		title = siteName + "'s blog"
 	}
 
+	// Ensure shared style.css exists
+	if err := site.EnsureCSS(siteDir); err != nil {
+		return fmt.Errorf("ensuring site style.css: %w", err)
+	}
+
 	var sb strings.Builder
 	sb.WriteString("<!DOCTYPE html>\n")
 	sb.WriteString("<html lang=\"en\">\n<head>\n")
 	sb.WriteString(`<meta charset="utf-8">` + "\n")
 	sb.WriteString(`<meta name="viewport" content="width=device-width, initial-scale=1">` + "\n")
 	sb.WriteString("<title>" + htmlEscape(title) + "</title>\n")
-	sb.WriteString("<style>\n")
-	sb.WriteString("  .articles {\n")
-	sb.WriteString("    display: grid;\n")
-	sb.WriteString("    grid-template-columns: auto 1fr;\n")
-	sb.WriteString("  }\n")
-	sb.WriteString("  .articles .date {\n")
-	sb.WriteString("    text-align: right;\n")
-	sb.WriteString("    border-right: 4px groove #ccc;\n")
-	sb.WriteString("    margin-right: 15px;\n")
-	sb.WriteString("  }\n")
-	sb.WriteString("</style>\n")
+	sb.WriteString(`<link rel="stylesheet" href="style.css">` + "\n")
 	sb.WriteString("</head>\n<body>\n")
 
 	if len(pages) == 0 {
@@ -334,7 +327,7 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 		sb.WriteString("  <p>No pages yet.</p>\n")
 	} else {
 		sb.WriteString("  <h1>" + htmlEscape(title) + "</h1>\n")
-		sb.WriteString("  <section class=\"articles\">\n")
+		sb.WriteString("  <section class=\"article-grid\">\n")
 
 		var lastDate string
 		for _, p := range pages {
@@ -347,9 +340,9 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 			if dateStr != lastDate {
 				sb.WriteString("\n")
 				if dateStr != "" {
-					sb.WriteString("    <div class=\"date\">" + htmlEscape(dateStr) + "</div>\n")
+					sb.WriteString("    <div class=\"article-date\">" + htmlEscape(dateStr) + "</div>\n")
 				} else {
-					sb.WriteString("    <div class=\"date\">Undated</div>\n")
+					sb.WriteString("    <div class=\"article-date\">Undated</div>\n")
 				}
 				lastDate = dateStr
 			}
@@ -473,10 +466,12 @@ func orgToHTMLFile(orgPath string) (string, error) {
 		// - Postamble (<div id="postamble">) with date/author/validation links
 		// - XML declaration (<?xml version="1.0" encoding="utf-8"?>)
 		// - XHTML doctype — use clean HTML5 <!DOCTYPE html> instead
+		// - Default inline <style> — we use a shared style.css instead
 		"--eval", "(setq org-html-postamble nil)",
 		"--eval", "(setq org-html-validation-link nil)",
 		"--eval", "(setq org-html-xml-declaration nil)",
 		"--eval", "(setq org-html-doctype \"html5\")",
+		"--eval", "(setq org-html-head-include-default-style nil)",
 		"--eval", "(org-html-export-to-html)",
 	)
 	cmd.Stderr = &stderr
@@ -500,4 +495,25 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	}
 
 	return htmlPath, nil
+}
+
+// injectStyleLink inserts a <link rel="stylesheet" href="..."> tag into the
+// <head> section of the HTML, right before </head>. If the link is already
+// present it is a no-op.
+func injectStyleLink(html []byte, href string) []byte {
+	link := fmt.Sprintf(`<link rel="stylesheet" href="%s">`, href)
+	headEnd := bytes.Index(html, []byte("</head>"))
+	if headEnd < 0 {
+		// No </head> — prepend before </html> as fallback
+		htmlEnd := bytes.Index(html, []byte("</html>"))
+		if htmlEnd < 0 {
+			return append(html, []byte(link+"\n")...)
+		}
+		return []byte(string(html[:htmlEnd]) + link + "\n" + string(html[htmlEnd:]))
+	}
+	// Check if the link is already present
+	if bytes.Contains(html[:headEnd], []byte(href)) {
+		return html
+	}
+	return []byte(string(html[:headEnd]) + "  " + link + "\n" + string(html[headEnd:]))
 }

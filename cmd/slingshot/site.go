@@ -14,6 +14,7 @@ import (
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/site"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
 
@@ -225,9 +226,9 @@ func (c *cmdSiteAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating site directory: %w", err)
 	}
 
-	// Replace $HOME prefix with ~ for portability
-	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(dir, home) {
-		kvs["dir"] = "~" + dir[len(home):]
+	// Write default shared style.css
+	if err := site.EnsureCSS(dir); err != nil {
+		return fmt.Errorf("writing style.css: %w", err)
 	}
 
 	// Load config
