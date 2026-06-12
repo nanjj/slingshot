@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -85,6 +89,17 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 	// Validate source file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf(i18n.G("file not found: %s"), filePath)
+	}
+
+	// If source is an Org file, convert to HTML using Emacs first
+	if strings.HasSuffix(filePath, ".org") {
+		htmlPath, err := orgToHTMLFile(filePath)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s\n",
+			color.CyanString("→"), filepath.Base(filePath), filepath.Base(htmlPath))
+		filePath = htmlPath
 	}
 
 	// Read source HTML
@@ -302,4 +317,47 @@ func isValidPageName(name string) bool {
 		}
 	}
 	return true
+}
+
+// orgToHTMLFile converts an Org file to HTML using Emacs batch mode.
+// It calls emacs --batch with org-html-export-to-html, which writes
+// the .html file alongside the .org file. Returns the HTML file path.
+func orgToHTMLFile(orgPath string) (string, error) {
+	if _, err := exec.LookPath("emacs"); err != nil {
+		return "", fmt.Errorf(i18n.G("emacs not found: %w")+
+			"\n"+i18n.G("Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. "+
+				"Install it or use an .html file instead."), err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "emacs",
+		"--batch",
+		"--visit="+orgPath,
+		"--eval", "(org-html-export-to-html nil nil nil nil nil nil nil)",
+	)
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf(i18n.G("emacs org-to-html conversion timed out (30s)"))
+		}
+		errMsg := stderr.String()
+		if len(errMsg) > 1024 {
+			errMsg = errMsg[:1024] + "... (truncated)"
+		}
+		return "", fmt.Errorf(i18n.G("emacs org-to-html conversion failed: %w\nstderr: %s"), err, errMsg)
+	}
+
+	// The HTML file is created alongside the org file with .html extension
+	base := strings.TrimSuffix(orgPath, filepath.Ext(orgPath))
+	htmlPath := base + ".html"
+
+	if _, err := os.Stat(htmlPath); os.IsNotExist(err) {
+		return "", fmt.Errorf(i18n.G("emacs did not produce expected HTML file: %s"), htmlPath)
+	}
+
+	return htmlPath, nil
 }
