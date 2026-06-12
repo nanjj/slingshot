@@ -45,39 +45,41 @@ type cmdPageAdd struct {
 func (c *cmdPageAdd) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	if c.update {
-		cmd.Use = "update " + u.Name.Render() + " " + u.File.Render()
-		cmd.Short = i18n.G("Update an existing page from HTML file")
+		cmd.Use = "update " + u.Name.Render() + " " + u.File.List(1).Render()
+		cmd.Short = i18n.G("Update existing pages from HTML files")
 		cmd.Long = cli.FormatSection(
 			color.CyanString("Description:"),
-			i18n.G(`Update an existing page in a deployment site with new content.
+			i18n.G(`Update existing pages in a deployment site with new content.
 
-The page name is derived from the HTML filename (without extension).
+Each page name is derived from its HTML filename (without extension).
 The page directory named <page-name> must already exist in the site directory.
 
 Images referenced in the HTML (<img src="...">) are copied from their
 source locations into the page directory.
 
+The site's index.html is regenerated once after all pages are processed.
+
 Use --rsync to automatically deploy the site after the update.`),
 		)
 	} else {
-		cmd.Use = "add " + u.Name.Render() + " " + u.File.Render()
-		cmd.Short = i18n.G("Add a new page from HTML file")
+		cmd.Use = "add " + u.Name.Render() + " " + u.File.List(1).Render()
+		cmd.Short = i18n.G("Add new pages from HTML files")
 		cmd.Long = cli.FormatSection(
 			color.CyanString("Description:"),
-			i18n.G(`Add a new page to a deployment site from an HTML file.
+			i18n.G(`Add new pages to a deployment site from HTML files.
 
-The page name is derived from the HTML filename (without extension).
+Each page name is derived from its HTML filename (without extension).
 A new subdirectory named <page-name> is created under the site's directory.
 
 Images referenced in the HTML (<img src="...">) are copied from their
 source locations into the page directory.
 
-The site's index.html is automatically regenerated after adding the page.
+The site's index.html is regenerated once after all pages are processed.
 
-Use --rsync to automatically deploy the site after adding the page.`),
+Use --rsync to automatically deploy the site after adding the pages.`),
 		)
 	}
-	cmd.Flags().BoolVar(&c.flagRsync, "rsync", false, i18n.G("Deploy site via rsync after adding/updating the page"))
+	cmd.Flags().BoolVar(&c.flagRsync, "rsync", false, i18n.G("Deploy site via rsync after adding/updating pages"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
@@ -93,65 +95,24 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(parsed) < 2 || parsed[1].Skipped {
-		return errors.New(i18n.G("expected site and file arguments"))
+	if len(parsed) < 2 || parsed[0].Skipped {
+		return errors.New(i18n.G("expected site name"))
+	}
+	if len(parsed) < 2 || parsed[1].Skipped || len(parsed[1].StringList) == 0 {
+		return errors.New(i18n.G("expected at least one file argument"))
 	}
 	siteName := parsed[0].String
-	filePath := parsed[1].String
+	filePaths := parsed[1].StringList
 
-	// Validate source file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return fmt.Errorf(i18n.G("file not found: %s"), filePath)
-	}
-	// Save original path before possible .org → .html conversion
-	originalPath := filePath
-
-	// If source is an Org file, convert to HTML using Emacs first
-	var wasOrg bool
-	if strings.HasSuffix(filePath, ".org") {
-		wasOrg = true
-		htmlPath, err := orgToHTMLFile(filePath)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s\n",
-			color.CyanString("→"), filepath.Base(filePath), filepath.Base(htmlPath))
-		filePath = htmlPath
-	}
-
-	// Read source HTML
-	htmlContent, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("reading %q: %w", filePath, err)
-	}
-
-	// Strip <p class="date">…</p> inserted by Emacs org export (belt-and-suspenders
-	// for cases where the postamble suppression didn't apply, e.g. pre-existing HTML).
-	htmlContent = stripDateParagraphs(htmlContent)
-	// If source was Org, extract #+DATE: and embed it as a machine-readable comment
-	// so the site index generator can use it for date-grouped rendering.
-	if wasOrg {
-		pageDate := extractOrgDate(originalPath)
-		if !pageDate.IsZero() {
-			htmlContent = embedDateComment(htmlContent, pageDate)
-		}
-	}
-
-	// Inject <link> to the shared stylesheet using an absolute path
-	// from the root so it works at any nesting depth.
-	htmlContent = injectStyleLink(htmlContent, "/style.css?v="+site.CSSVersion)
-
-	// Load config and get site
+	// Load config and get site (once, before processing files)
 	cfg, _, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
 	}
-
 	siteConfig, ok := config.GetSite(cfg, siteName)
 	if !ok {
 		return fmt.Errorf(i18n.G("site %q not found"), siteName)
 	}
-
 	if siteConfig.Dir == "" {
 		return fmt.Errorf(i18n.G("site %q has no directory configured"), siteName)
 	}
@@ -161,58 +122,104 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ensuring site style.css: %w", err)
 	}
 
-	// Inject site title heading as a clickable link to the homepage
-	htmlContent = injectSiteTitle(htmlContent, siteConfig.Title)
-	// Downgrade the article's <h1 class="title"> to <h2> so it doesn't
-	// compete with the site title <h1> above it.
-	htmlContent = downgradeTitleHeading(htmlContent)
+	var processed int
+	for _, filePath := range filePaths {
+		// Validate source file exists
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			return fmt.Errorf(i18n.G("file not found: %s"), filePath)
+		}
+		// Save original path before possible .org -> .html conversion
+		originalPath := filePath
 
-	// Derive page name from filename (strip extension)
-	pageName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
-	if pageName == "" {
-		return errors.New(i18n.G("invalid page name derived from filename"))
+		// If source is an Org file, convert to HTML using Emacs first
+		var wasOrg bool
+		if strings.HasSuffix(filePath, ".org") {
+			wasOrg = true
+			htmlPath, err := orgToHTMLFile(filePath)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s\n",
+				color.CyanString("\xe2\x86\x92"), filepath.Base(filePath), filepath.Base(htmlPath))
+			filePath = htmlPath
+		}
+
+		// Read source HTML
+		htmlContent, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("reading %q: %w", filePath, err)
+		}
+
+		// Strip <p class="date">...</p> inserted by Emacs org export
+		htmlContent = stripDateParagraphs(htmlContent)
+		// If source was Org, extract #+DATE: and embed it as a machine-readable comment
+		if wasOrg {
+			pageDate := extractOrgDate(originalPath)
+			if !pageDate.IsZero() {
+				htmlContent = embedDateComment(htmlContent, pageDate)
+			}
+		}
+
+		// Inject <link> to the shared stylesheet
+		htmlContent = injectStyleLink(htmlContent, "/style.css?v="+site.CSSVersion)
+
+		// Inject site title heading as a clickable link to the homepage
+		htmlContent = injectSiteTitle(htmlContent, siteConfig.Title)
+		// Downgrade the article's <h1 class="title"> to <h2>
+		htmlContent = downgradeTitleHeading(htmlContent)
+
+		// Derive page name from filename (strip extension)
+		pageName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+		if pageName == "" {
+			return errors.New(i18n.G("invalid page name derived from filename"))
+		}
+
+		// Validate page name: only allow safe characters
+		if !isValidPageName(pageName) {
+			return fmt.Errorf(i18n.G("invalid page name %q: use only letters, numbers, hyphens, and underscores"), pageName)
+		}
+
+		pageDir := filepath.Join(siteConfig.Dir, pageName)
+
+		// Create page directory
+		if err := os.MkdirAll(pageDir, 0755); err != nil {
+			return fmt.Errorf("creating page directory: %w", err)
+		}
+
+		// Write index.html
+		indexPath := filepath.Join(pageDir, "index.html")
+		if err := os.WriteFile(indexPath, htmlContent, 0644); err != nil {
+			return fmt.Errorf("writing index.html: %w", err)
+		}
+
+		// Extract and copy image assets
+		sourceDir := filepath.Dir(filePath)
+		copied, err := copyPageImages(htmlContent, sourceDir, pageDir)
+		if err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s %v\n",
+				color.YellowString(i18n.G("Warning:")), err)
+		}
+		if copied > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %d %s\n",
+				color.CyanString("\xe2\x86\x92"), copied, i18n.G("image(s) copied"))
+		}
+
+		verb := i18n.G("Added")
+		if c.update {
+			verb = i18n.G("Updated")
+		}
+		fmt.Fprintf(color.Output, "%s %s/%s\n", color.GreenString(verb+":"), siteName, color.GreenString(pageName))
+		processed++
 	}
 
-	// Validate page name: only allow safe characters
-	if !isValidPageName(pageName) {
-		return fmt.Errorf(i18n.G("invalid page name %q: use only letters, numbers, hyphens, and underscores"), pageName)
+	if processed == 0 {
+		return errors.New(i18n.G("no files processed"))
 	}
 
-	pageDir := filepath.Join(siteConfig.Dir, pageName)
-
-	// Create page directory
-	if err := os.MkdirAll(pageDir, 0755); err != nil {
-		return fmt.Errorf("creating page directory: %w", err)
-	}
-
-	// Write index.html
-	indexPath := filepath.Join(pageDir, "index.html")
-	if err := os.WriteFile(indexPath, htmlContent, 0644); err != nil {
-		return fmt.Errorf("writing index.html: %w", err)
-	}
-
-	// Extract and copy image assets
-	sourceDir := filepath.Dir(filePath)
-	copied, err := copyPageImages(htmlContent, sourceDir, pageDir)
-	if err != nil {
-		// Non-fatal: warn but continue
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s %v\n",
-			color.YellowString(i18n.G("Warning:")), err)
-	}
-	if copied > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s %d %s\n",
-			color.CyanString("→"), copied, i18n.G("image(s) copied"))
-	}
-	// Regenerate site index
+	// Regenerate site index (once, after all pages)
 	if err := regenerateSiteIndex(siteConfig.Dir, siteName, siteConfig.Title); err != nil {
 		return fmt.Errorf("regenerating site index: %w", err)
 	}
-
-	verb := i18n.G("Added")
-	if c.update {
-		verb = i18n.G("Updated")
-	}
-	fmt.Fprintf(color.Output, "%s %s/%s\n", color.GreenString(verb+":"), siteName, color.GreenString(pageName))
 
 	// --rsync: deploy site via rsync after success
 	if c.flagRsync {
@@ -223,7 +230,7 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		if err := doRsync(siteConfig.Dir, siteConfig.Rsync); err != nil {
 			return err
 		}
-		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("Rsync completed successfully."))
+		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("\xe2\x9c\x93"), i18n.G("Rsync completed successfully."))
 	}
 
 	return nil

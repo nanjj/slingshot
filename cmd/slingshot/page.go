@@ -16,12 +16,12 @@ var pageListUsage = u.Usage{
 
 var pageAddUsage = u.Usage{
 	u.Name,
-	u.File,
+	u.File.List(1),
 }
 
 var pageUpdateUsage = u.Usage{
 	u.Name,
-	u.File,
+	u.File.List(1),
 }
 
 var pageRemoveUsage = u.Usage{
@@ -46,10 +46,10 @@ Each page is a subdirectory under the site's directory containing an
 index.html and its assets (images, etc.).
 
 Subcommands:
-  list    <site>           List all pages in a site
-  add     <site> <file>    Add a new page from an HTML file
-  update  <site> <file>    Update an existing page from an HTML file
-  remove  <site> <page>    Remove a page
+  list    <site>            List all pages in a site
+  add     <site> <file>...  Add new pages from HTML/Org files
+  update  <site> <file>...  Update existing pages from HTML/Org files
+  remove  <site> <page>     Remove a page
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
