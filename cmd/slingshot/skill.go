@@ -161,8 +161,11 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 		installPath = filepath.Join(base, ".dscli", "skills")
 	}
 
-	// Create destination directory
+	// Clean any previous installation, then create destination directory
 	destDir := filepath.Join(installPath, skillName)
+	if err := os.RemoveAll(destDir); err != nil {
+		return fmt.Errorf("cleaning previous installation %q: %w", destDir, err)
+	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("creating directory %q: %w", destDir, err)
 	}
