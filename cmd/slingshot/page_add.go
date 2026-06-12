@@ -37,8 +37,9 @@ var slingshotDateRe = regexp.MustCompile(`(?i)<!--\s*slingshot-date:\s*(\d{4}-\d
 // cmdPageAdd implements both "slingshot page add <site> <file>"
 // and "slingshot page update <site> <file>".
 type cmdPageAdd struct {
-	global *cmdGlobal
-	update bool // false = add, true = update
+	global    *cmdGlobal
+	update    bool // false = add, true = update
+	flagRsync bool // --rsync: deploy site via rsync after success
 }
 
 func (c *cmdPageAdd) command() *cobra.Command {
@@ -54,7 +55,9 @@ The page name is derived from the HTML filename (without extension).
 The page directory named <page-name> must already exist in the site directory.
 
 Images referenced in the HTML (<img src="...">) are copied from their
-source locations into the page directory.`),
+source locations into the page directory.
+
+Use --rsync to automatically deploy the site after the update.`),
 		)
 	} else {
 		cmd.Use = "add " + u.Name.Render() + " " + u.File.Render()
@@ -69,9 +72,12 @@ A new subdirectory named <page-name> is created under the site's directory.
 Images referenced in the HTML (<img src="...">) are copied from their
 source locations into the page directory.
 
-The site's index.html is automatically regenerated after adding the page.`),
+The site's index.html is automatically regenerated after adding the page.
+
+Use --rsync to automatically deploy the site after adding the page.`),
 		)
 	}
+	cmd.Flags().BoolVar(&c.flagRsync, "rsync", false, i18n.G("Deploy site via rsync after adding/updating the page"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
@@ -207,6 +213,19 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		verb = i18n.G("Updated")
 	}
 	fmt.Fprintf(color.Output, "%s %s/%s\n", color.GreenString(verb+":"), siteName, color.GreenString(pageName))
+
+	// --rsync: deploy site via rsync after success
+	if c.flagRsync {
+		if siteConfig.Rsync == "" {
+			return fmt.Errorf(i18n.G("site %q has no rsync command configured"), siteName)
+		}
+		fmt.Fprintf(color.Output, "\n%s %s\n", i18n.G("Deploying via rsync for site:"), color.GreenString(siteName))
+		if err := doRsync(siteConfig.Dir, siteConfig.Rsync); err != nil {
+			return err
+		}
+		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("Rsync completed successfully."))
+	}
+
 	return nil
 }
 

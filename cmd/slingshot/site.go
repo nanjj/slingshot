@@ -329,6 +329,37 @@ func (c *cmdSiteUpdate) run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// --- doRsync (shared helper) ---
+
+// doRsync executes the rsync command in the given directory.
+// It changes to the directory, runs the command via shell, and restores
+// the original working directory.
+func doRsync(dir, rsyncCmd string) error {
+	if rsyncCmd == "" {
+		return fmt.Errorf(i18n.G("no rsync command configured"))
+	}
+	if dir == "" {
+		return fmt.Errorf(i18n.G("no directory configured"))
+	}
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting current directory: %w", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		return fmt.Errorf("changing to site directory: %w", err)
+	}
+	defer os.Chdir(origDir)
+
+	cmd := exec.Command("sh", "-c", rsyncCmd)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("rsync failed: %w", err)
+	}
+	return nil
+}
+
 // --- cmdSiteRsync ---
 
 type cmdSiteRsync struct {
@@ -374,30 +405,12 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(i18n.G("site %q has no rsync command configured"), name)
 	}
 
-	if site.Dir == "" {
-		return fmt.Errorf(i18n.G("site %q has no directory configured"), name)
-	}
-
-	// Change to site directory
-	origDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("getting current directory: %w", err)
-	}
-	if err := os.Chdir(site.Dir); err != nil {
-		return fmt.Errorf("changing to site directory: %w", err)
-	}
-	defer os.Chdir(origDir)
-
 	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Running rsync for site:"), color.GreenString(name))
 	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Dir:")), site.Dir)
 	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Command:")), site.Rsync)
 
-	// Execute the rsync command via shell
-	rsyncCmd := exec.Command("sh", "-c", site.Rsync)
-	rsyncCmd.Stdout = os.Stdout
-	rsyncCmd.Stderr = os.Stderr
-	if err := rsyncCmd.Run(); err != nil {
-		return fmt.Errorf("rsync failed: %w", err)
+	if err := doRsync(site.Dir, site.Rsync); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("Rsync completed successfully."))
