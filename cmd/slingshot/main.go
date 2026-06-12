@@ -94,6 +94,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdConfig{global: global}).command(),
 		(&cmdMeterial{global: global}).command(),
 		(&cmdSkill{global: global}).command(),
+		(&cmdSite{global: global}).command(),
+		(&cmdPage{global: global}).command(),
 	)
 
 
