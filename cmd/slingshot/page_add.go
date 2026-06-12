@@ -155,6 +155,12 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ensuring site style.css: %w", err)
 	}
 
+	// Inject site title heading as a clickable link to the homepage
+	htmlContent = injectSiteTitle(htmlContent, siteConfig.Title)
+	// Downgrade the article's <h1 class="title"> to <h2> so it doesn't
+	// compete with the site title <h1> above it.
+	htmlContent = downgradeTitleHeading(htmlContent)
+
 	// Derive page name from filename (strip extension)
 	pageName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
 	if pageName == "" {
@@ -322,10 +328,10 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 	sb.WriteString("</head>\n<body>\n")
 
 	if len(pages) == 0 {
-		sb.WriteString("  <h1>" + htmlEscape(title) + "</h1>\n")
+		sb.WriteString("  <h1><a href=\"/\">" + htmlEscape(title) + "</a> </h1>\n")
 		sb.WriteString("  <p>No pages yet.</p>\n")
 	} else {
-		sb.WriteString("  <h1>" + htmlEscape(title) + "</h1>\n")
+		sb.WriteString("  <h1><a href=\"/\">" + htmlEscape(title) + "</a> </h1>\n")
 		sb.WriteString("  <section class=\"article-grid\">\n")
 
 		var lastDate string
@@ -515,4 +521,65 @@ func injectStyleLink(html []byte, href string) []byte {
 		return html
 	}
 	return []byte(string(html[:headEnd]) + "  " + link + "\n" + string(html[headEnd:]))
+}
+
+// injectSiteTitle inserts <h1><a href="/">title</a> </h1> right after <body>
+// so every page has a clickable site-title link back to the homepage.
+func injectSiteTitle(html []byte, title string) []byte {
+	link := fmt.Sprintf("<h1><a href=\"/\">%s</a> </h1>\n", htmlEscape(title))
+
+	bodyTag := []byte("<body")
+	idx := bytes.Index(html, bodyTag)
+	if idx < 0 {
+		return html
+	}
+
+	// Find the closing > of the <body> tag
+	rest := html[idx:]
+	gtIdx := bytes.IndexByte(rest, '>')
+	if gtIdx < 0 {
+		return html
+	}
+
+	insertPos := idx + gtIdx + 1
+	result := make([]byte, 0, len(html)+len(link)+1)
+	result = append(result, html[:insertPos]...)
+	result = append(result, '\n')
+	result = append(result, link...)
+	result = append(result, html[insertPos:]...)
+	return result
+}
+
+// downgradeTitleHeading changes <h1 class="title"> to <h2 class="title">
+// and the corresponding </h1> to </h2>. This is called after injectSiteTitle
+// so that the page has exactly one <h1> (the site title link).
+func downgradeTitleHeading(html []byte) []byte {
+	startOld := []byte(`<h1 class="title">`)
+	startNew := []byte(`<h2 class="title">`)
+	closeOld := []byte(`</h1>`)
+	closeNew := []byte(`</h2>`)
+
+	// Find opening tag
+	idx := bytes.Index(html, startOld)
+	if idx < 0 {
+		return html
+	}
+
+	// Build result: replace opening tag
+	var buf bytes.Buffer
+	buf.Write(html[:idx])
+	buf.Write(startNew)
+	rest := html[idx+len(startOld):]
+
+	// Find matching closing tag
+	closeIdx := bytes.Index(rest, closeOld)
+	if closeIdx < 0 {
+		buf.Write(rest)
+		return buf.Bytes()
+	}
+
+	buf.Write(rest[:closeIdx])
+	buf.Write(closeNew)
+	buf.Write(rest[closeIdx+len(closeOld):])
+	return buf.Bytes()
 }
