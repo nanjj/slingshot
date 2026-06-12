@@ -144,9 +144,9 @@ func (c *cmdSite) doAdd(cfg *config.Config, parsed []*u.Parsed, dir, rsync strin
 		return errors.New(i18n.G("--dir is required"))
 	}
 
-	// Validate directory exists
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return fmt.Errorf(i18n.G("directory not found: %s"), dir)
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating site directory: %w", err)
 	}
 
 	site := config.Site{Dir: dir, Rsync: rsync}
