@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -31,25 +32,26 @@ type cmdDraftConvert struct {
 func (c *cmdDraftConvert) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "convert " + u.File.Render()
-	cmd.Short = i18n.G("Convert Markdown to WeChat public account HTML")
+	cmd.Short = i18n.G("Convert Markdown or Org to WeChat public account HTML")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		i18n.G(`Convert a Markdown file to HTML format suitable for WeChat public accounts.
+		i18n.G(`Convert a Markdown (.md) or Org (.org) file to HTML format suitable for WeChat public accounts.
 
 The conversion process:
-  1. Parse the Markdown file using goldmark (supports GFM tables, strikethrough)
-  2. Inject inline CSS styles on every element (required by WeChat)
-  3. Save the result as <filename>.html
+  1. If the input is a .org file, convert to Markdown using Emacs batch mode
+  2. Parse the Markdown using goldmark (supports GFM tables, strikethrough)
+  3. Inject inline CSS styles on every element (required by WeChat)
+  4. Save the result as <filename>.html
 
 With --upload:
-  4. Parse local image references from the HTML
-  5. Upload images to WeChat material management (with caching via images.yaml)
-  6. Update image URLs in the HTML
-  7. If the YAML front matter contains 'thumb_media_id: <path>', upload the
+  5. Parse local image references from the HTML
+  6. Upload images to WeChat material management (with caching via images.yaml)
+  7. Update image URLs in the HTML
+  8. If the YAML front matter or sidecar YAML contains 'thumb_media_id: <path>', upload the
      thumbnail image as permanent material and replace with the real media_id
 
 WeChat only supports inline styles and a limited set of HTML elements.
-This command handles all common Markdown syntax:
+This command handles all common syntax:
   - Headings (h1-h4), paragraphs, blockquotes
   - Bold, italic, inline code, strikethrough
   - Fenced code blocks with syntax highlighting
@@ -78,7 +80,16 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Converting %s to WeChat HTML...\n"), file.String)
 
-	result, err := mdtowx.ConvertFile(file.String)
+	// Route based on file extension: .org -> new Org converter, .md -> existing Markdown converter
+	ext := strings.ToLower(filepath.Ext(file.String))
+
+	var result *mdtowx.Result
+	switch ext {
+	case ".org":
+		result, err = mdtowx.ConvertOrgFile(file.String)
+	default:
+		result, err = mdtowx.ConvertFile(file.String)
+	}
 	if err != nil {
 		return fmt.Errorf("conversion failed: %w", err)
 	}
