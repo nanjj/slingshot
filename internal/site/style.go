@@ -39,11 +39,19 @@ body {
   display: grid;
   grid-template-columns: auto 1fr;
 }
-.article-grid .article-date {
+.article-date {
+  grid-column: 1;
   text-align: right;
-  border-right: 4px groove #ccc;
-  margin-right: 15px;
+  padding-right: 1em;
+  margin-right: 1em;
+  border-right: 2px solid #ddd;
+  white-space: nowrap;
 }
+.link {
+  grid-column: 2;
+}
+
+
 
 /* === Org-mode HTML export defaults === */
 #content { max-width: 60em; margin: auto; }
