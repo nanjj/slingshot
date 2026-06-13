@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -433,18 +434,6 @@ func extractOrgDate(orgPath string) time.Time {
 	}
 	return parseOrgDate(string(data))
 }
-
-// parseOrgDate scans content for #+DATE: and tries to parse the value.
-// Supports common Org timestamp formats:
-//
-//	#+DATE: <2007-06-18 Mon>
-//	#+DATE: <2007-06-18>
-//	#+DATE: <Monday, 18 June 2007>
-//	#+DATE: <Mon, 18 Jun 2007>
-//	#+DATE: <18 June 2007>
-//	#+DATE: 2007-06-18
-//	#+DATE: Monday, 18 June 2007
-//	#+DATE: June 18, 2007
 // parseOrgDate scans content for #+DATE: and tries to parse the value.
 // Supports common Org timestamp formats:
 //
@@ -452,12 +441,14 @@ func extractOrgDate(orgPath string) time.Time {
 //	#+DATE: <2007-06-18 Mon>
 //	#+DATE: <2007-06-18 12:30>
 //	#+DATE: <2007-06-18>
+//	#+DATE: <2007-06-18 二>              (Chinese locale)
 //	#+DATE: <Monday, 18 June 2007>
 //	#+DATE: <Mon, 18 Jun 2007>
 //	#+DATE: <18 June 2007>
 //	#+DATE: 2007-06-18
 //	#+DATE: Monday, 18 June 2007
 //	#+DATE: June 18, 2007
+//	#+DATE: 2007-06-18 15:04:05
 func parseOrgDate(content string) time.Time {
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -468,6 +459,13 @@ func parseOrgDate(content string) time.Time {
 		dateStr := strings.TrimSpace(trimmed[len("#+DATE:"):])
 		if dateStr == "" {
 			continue
+		}
+		// Strip trailing CJK weekday character and preceding space.
+		// Org mode in Chinese locale: <2019-12-03 二> → <2019-12-03>
+		if runes := []rune(dateStr); len(runes) >= 4 {
+			if unicode.Is(unicode.Han, runes[len(runes)-2]) && runes[len(runes)-3] == ' ' {
+				dateStr = string(runes[:len(runes)-3]) + string(runes[len(runes)-1])
+			}
 		}
 		// Try common Org date formats. Time formats go first so they
 		// match before their shorter counterparts (e.g. <... Mon 12:30>
