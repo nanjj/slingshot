@@ -445,6 +445,19 @@ func extractOrgDate(orgPath string) time.Time {
 //	#+DATE: 2007-06-18
 //	#+DATE: Monday, 18 June 2007
 //	#+DATE: June 18, 2007
+// parseOrgDate scans content for #+DATE: and tries to parse the value.
+// Supports common Org timestamp formats:
+//
+//	#+DATE: <2007-06-18 Mon 12:30>
+//	#+DATE: <2007-06-18 Mon>
+//	#+DATE: <2007-06-18 12:30>
+//	#+DATE: <2007-06-18>
+//	#+DATE: <Monday, 18 June 2007>
+//	#+DATE: <Mon, 18 Jun 2007>
+//	#+DATE: <18 June 2007>
+//	#+DATE: 2007-06-18
+//	#+DATE: Monday, 18 June 2007
+//	#+DATE: June 18, 2007
 func parseOrgDate(content string) time.Time {
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -456,13 +469,23 @@ func parseOrgDate(content string) time.Time {
 		if dateStr == "" {
 			continue
 		}
-		// Try common Org date formats
+		// Try common Org date formats. Time formats go first so they
+		// match before their shorter counterparts (e.g. <... Mon 12:30>
+		// before <... Mon>, since the latter would fail on trailing text).
 		formats := []string{
+			// Active timestamps with time (with and without weekday)
+			"<2006-01-02 Mon 15:04>",
+			"<2006-01-02 15:04>",
+			"<2006-01-02 Mon 15:04:05>",
+			"<2006-01-02 15:04:05>",
+			// Active timestamps without time
 			"<2006-01-02 Mon>",
 			"<2006-01-02>",
+			// Diary-style active timestamps
 			"<Monday, 2 January 2006>",
 			"<Mon, 2 Jan 2006>",
 			"<2 January 2006>",
+			// Plain (non-bracketed) date values
 			"2006-01-02",
 			"Monday, 2 January 2006",
 			"January 2, 2006",
