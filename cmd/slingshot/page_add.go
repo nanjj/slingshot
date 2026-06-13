@@ -449,6 +449,10 @@ func extractOrgDate(orgPath string) time.Time {
 //	#+DATE: Monday, 18 June 2007
 //	#+DATE: June 18, 2007
 //	#+DATE: 2007-06-18 15:04:05
+//	#+DATE: <12/19/21 Sunday 12AM>       (US-style MM/DD/YY)
+//	#+DATE: <12/19/21 Sunday 12:30AM>
+//	#+DATE: <12/19/21 12AM>
+//	#+DATE: <12/19/21>
 func parseOrgDate(content string) time.Time {
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -483,6 +487,14 @@ func parseOrgDate(content string) time.Time {
 			"<Monday, 2 January 2006>",
 			"<Mon, 2 Jan 2006>",
 			"<2 January 2006>",
+			// US-style (MM/DD/YY) with 12-hour time
+			"<01/02/06 Monday 3:04PM>",
+			"<01/02/06 Monday 3PM>",
+			"<01/02/06 3:04PM>",
+			"<01/02/06 3PM>",
+			// US-style without time
+			"<01/02/06 Monday>",
+			"<01/02/06>",
 			// Plain (non-bracketed) date values
 			"2006-01-02",
 			"Monday, 2 January 2006",
