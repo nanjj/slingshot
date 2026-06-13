@@ -118,8 +118,8 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(i18n.G("site %q has no directory configured"), siteName)
 	}
 
-	// Ensure shared style.css exists in the site directory
-	if err := site.EnsureCSS(siteConfig.Dir); err != nil {
+	// Ensure site has an optimized style.css (creates if missing, upgrades if old)
+	if _, err := site.UpgradeCSS(siteConfig.Dir, false); err != nil {
 		return fmt.Errorf("ensuring site style.css: %w", err)
 	}
 
@@ -340,8 +340,8 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 		title = siteName + "'s blog"
 	}
 
-	// Ensure shared style.css exists
-	if err := site.EnsureCSS(siteDir); err != nil {
+	// Ensure optimized style.css exists (creates if missing, upgrades if old)
+	if _, err := site.UpgradeCSS(siteDir, false); err != nil {
 		return fmt.Errorf("ensuring site style.css: %w", err)
 	}
 

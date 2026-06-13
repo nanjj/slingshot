@@ -2,25 +2,37 @@
 package site
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // CSSVersion is a cache-busting version number for the site stylesheet.
 // Bump this whenever DefaultCSS() changes so that regenerated index.html
 // gets a ?v=N query parameter, forcing browsers to fetch the new CSS.
-const CSSVersion = "2"
+const CSSVersion = "3"
 
+// responsiveSentinel is a marker embedded at the top of the CSS to indicate
+// that the site has been upgraded to the responsive stylesheet.
+// UpgradeCSS checks for this sentinel to decide whether an upgrade is needed.
+const responsiveSentinel = "/* === slingshot-responsive: v1 === */"
 
 // DefaultCSS returns the default style.css for a slingshot site.
 // It includes base layout, navbar, Org-mode HTML export defaults, and the
 // article-index grid. This is the single shared stylesheet for the entire site.
 func DefaultCSS() string {
-	return `/* === Base === */
+	return `` + responsiveSentinel + `
+/* === Base === */
+* {
+  box-sizing: border-box;
+}
+
 body {
   font-family: sans-serif;
   margin: auto;
   max-width: 1280px;
+  padding: 0 20px;
 }
 
 /* === Navbar === */
@@ -45,6 +57,7 @@ body {
   display: grid;
   grid-template-columns: auto 1fr;
 }
+
 .year-heading {
   grid-column: 1 / -1;
   font-size: 1.5em;
@@ -52,6 +65,7 @@ body {
   padding-bottom: 0.25em;
   border-bottom: 2px solid #ddd;
 }
+
 .article-date {
   grid-column: 1;
   text-align: right;
@@ -60,20 +74,52 @@ body {
   border-right: 2px solid #ddd;
   white-space: nowrap;
 }
+
 .link {
   grid-column: 2;
 }
 
+/* === Responsive: stack date above title on small screens === */
+@media (max-width: 640px) {
+  body {
+    padding: 0 12px;
+  }
 
+  .article-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .article-date {
+    grid-column: 1;
+    text-align: left;
+    padding-right: 0;
+    margin-right: 0;
+    border-right: none;
+    white-space: normal;
+    font-size: 0.85em;
+    color: #666;
+    padding-bottom: 2px;
+  }
+
+  .link {
+    grid-column: 1;
+    padding-left: 0;
+    padding-bottom: 0.8em;
+  }
+
+  .year-heading {
+    margin: 1em 0 0.3em;
+  }
+}
 
 /* === Org-mode HTML export defaults === */
-#content { max-width: 60em; margin: auto; }
+#content { max-width: 60em; margin: auto; padding: 0 1em; }
 .title  { text-align: center;
-           margin-bottom: .2em; }
+          margin-bottom: .2em; }
 .subtitle { text-align: center;
-            font-size: medium;
-            font-weight: bold;
-            margin-top:0; }
+             font-size: medium;
+             font-weight: bold;
+             margin-top:0; }
 .todo   { font-family: monospace; color: red; }
 .done   { font-family: monospace; color: green; }
 .priority { font-family: monospace; color: orange; }
@@ -250,6 +296,30 @@ textarea { overflow-x: auto; }
 .org-info-js_search-highlight
   { background-color: #ffff00; color: #000000; font-weight: bold; }
 .org-svg { }
+
+/* === Responsive images === */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* === Responsive tables: horizontal scroll on small screens === */
+@media (max-width: 640px) {
+  #content {
+    padding: 0;
+  }
+
+  pre {
+    margin: 0.8em 0;
+    padding: 6pt;
+  }
+
+  table {
+    font-size: 0.9em;
+    display: block;
+    overflow-x: auto;
+  }
+}
 `
 }
 
@@ -261,4 +331,41 @@ func EnsureCSS(siteDir string) error {
 		return nil
 	}
 	return os.WriteFile(path, []byte(DefaultCSS()), 0644)
+}
+
+// UpgradeCSS upgrades the site's style.css to the latest responsive version.
+// It checks for the responsiveSentinel marker: if present, the CSS is already
+// optimized and nothing is done (unless force is true).
+// If the sentinel is absent, the file is replaced with the new DefaultCSS(),
+// upgrading from any older version. Returns whether an upgrade was performed.
+func UpgradeCSS(siteDir string, force bool) (bool, error) {
+	path := filepath.Join(siteDir, "style.css")
+
+	// If the file doesn't exist, create it
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte(DefaultCSS()), 0644); err != nil {
+			return false, fmt.Errorf("creating style.css: %w", err)
+		}
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("checking style.css: %w", err)
+	}
+
+	// Read existing CSS
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, fmt.Errorf("reading style.css: %w", err)
+	}
+
+	// Check sentinel
+	if !force && strings.Contains(string(data), responsiveSentinel) {
+		return false, nil // already optimized
+	}
+
+	// Upgrade: replace with new CSS
+	if err := os.WriteFile(path, []byte(DefaultCSS()), 0644); err != nil {
+		return false, fmt.Errorf("upgrading style.css: %w", err)
+	}
+
+	return true, nil
 }

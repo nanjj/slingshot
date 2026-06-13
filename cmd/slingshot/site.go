@@ -61,7 +61,8 @@ Subcommands:
   add    <name> ...     Add a new site with key=value pairs
   update <name> <k> <v> Update a site's configuration key
   remove <name>         Remove a site
-  rsync  <name>         Deploy site via rsync
+  optimize <name>       Optimize site CSS for responsive display
+  rsync  <name>         Deploy site via rsync (auto-optimizes CSS)
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -73,10 +74,17 @@ Subcommands:
 		c.cmdAdd().command(),
 		c.cmdUpdate().command(),
 		c.cmdRemove().command(),
+		c.cmdOptimize().command(),
 		c.cmdRsync().command(),
 	)
 
 	return cmd
+}
+
+func (c *cmdSite) cmdOptimize() *cmdSiteOptimize {
+	return &cmdSiteOptimize{
+		global: c.global,
+	}
 }
 
 // --- cmdSiteSub (通用模板: list, remove) ---
@@ -226,8 +234,8 @@ func (c *cmdSiteAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating site directory: %w", err)
 	}
 
-	// Write default shared style.css
-	if err := site.EnsureCSS(dir); err != nil {
+	// Write optimized shared style.css
+	if _, err := site.UpgradeCSS(dir, false); err != nil {
 		return fmt.Errorf("writing style.css: %w", err)
 	}
 
@@ -396,20 +404,29 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
 	}
 
-	site, ok := config.GetSite(cfg, name)
+	siteConfig, ok := config.GetSite(cfg, name)
 	if !ok {
 		return fmt.Errorf(i18n.G("site %q not found"), name)
 	}
 
-	if site.Rsync == "" {
+	if siteConfig.Rsync == "" {
 		return fmt.Errorf(i18n.G("site %q has no rsync command configured"), name)
 	}
 
-	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Running rsync for site:"), color.GreenString(name))
-	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Dir:")), site.Dir)
-	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Command:")), site.Rsync)
+	// Auto-optimize CSS before deploying
+	upgraded, err := site.UpgradeCSS(siteConfig.Dir, false)
+	if err != nil {
+		return fmt.Errorf("optimizing site CSS: %w", err)
+	}
+	if upgraded {
+		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("CSS upgraded to responsive version."))
+	}
 
-	if err := doRsync(site.Dir, site.Rsync); err != nil {
+	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Running rsync for site:"), color.GreenString(name))
+	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Dir:")), siteConfig.Dir)
+	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Command:")), siteConfig.Rsync)
+
+	if err := doRsync(siteConfig.Dir, siteConfig.Rsync); err != nil {
 		return err
 	}
 
