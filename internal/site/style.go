@@ -9,7 +9,7 @@ import (
 // CSSVersion is a cache-busting version number for the site stylesheet.
 // Bump this whenever DefaultCSS() changes so that regenerated index.html
 // gets a ?v=N query parameter, forcing browsers to fetch the new CSS.
-const CSSVersion = "1"
+const CSSVersion = "2"
 
 
 // DefaultCSS returns the default style.css for a slingshot site.
@@ -44,6 +44,13 @@ body {
 .article-grid {
   display: grid;
   grid-template-columns: auto 1fr;
+}
+.year-heading {
+  grid-column: 1 / -1;
+  font-size: 1.5em;
+  margin: 1.2em 0 0.5em;
+  padding-bottom: 0.25em;
+  border-bottom: 2px solid #ddd;
 }
 .article-date {
   grid-column: 1;

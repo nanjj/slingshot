@@ -360,12 +360,20 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 	} else {
 		sb.WriteString("  <h1><a href=\"/\">" + htmlEscape(title) + "</a> </h1>\n")
 		sb.WriteString("  <section class=\"article-grid\">\n")
-
 		var lastDate string
+		var lastYear int
 		for _, p := range pages {
 			dateStr := ""
+			year := 0
 			if !p.Date.IsZero() {
 				dateStr = p.Date.Format("January 02, 2006")
+				year = p.Date.Year()
+			}
+
+			// Print year heading when it changes
+			if year != 0 && year != lastYear {
+				sb.WriteString(fmt.Sprintf("\n    <h2 class=\"year-heading\">%d</h2>\n", year))
+				lastYear = year
 			}
 
 			// Print date heading when it changes
@@ -388,7 +396,6 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 				htmlEscape(p.Name), htmlEscape(ptitle)))
 			sb.WriteString("    </div>\n")
 		}
-
 		sb.WriteString("  </section>\n")
 	}
 
