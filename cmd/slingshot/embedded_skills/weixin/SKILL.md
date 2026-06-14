@@ -177,3 +177,40 @@ slingshot meterial add cover.jpg
 - **缩略图缓存**：封面图片的 media_id 也会缓存到 `images.yaml`，避免重复上传
 - **Emacs 依赖**：转换 `.org` 文件需要系统安装 `emacs`（Emacs 26+）。
   大多数 Linux/macOS 环境默认可用；若缺失，降级使用 `.md` 文件即可。
+
+## SVG 图片处理
+
+微信公众平台**不支持 SVG 格式图片**。`--upload` 流程会自动将 SVG 转换为 PNG。
+
+### 系统依赖
+
+需要安装 `rsvg-convert`（来自 `librsvg`）：
+
+```bash
+# Debian/Ubuntu
+apt install librsvg2-bin
+
+# macOS
+brew install librsvg
+
+# Arch Linux
+pacman -S librsvg
+```
+
+若 `rsvg-convert` 未安装，SVG 文件会原样传给微信（上传将失败）。
+
+### 实现机制
+
+- **检测**：按文件后缀（`.svg`，大小写不敏感）识别 SVG
+- **转换**：调用 `rsvg-convert` 生成临时 PNG 文件
+- **缓存**：按原始 SVG 文件内容（md5）缓存上传后的 URL，SVG 未变时不重复转换/上传
+- **适用范围**：文章内图片 + 封面缩略图均自动转换
+
+### 覆盖的上传路径
+
+| 路径 | 说明 |
+|------|------|
+| `convert --upload` 内容图片 | 自动 SVG→PNG 后上传 |
+| `convert --upload` 缩略图 | 自动转换 |
+| `draft add --thumb` | 封面 SVG 自动转换 |
+| `draft update --thumb` | 封面 SVG 自动转换 |
