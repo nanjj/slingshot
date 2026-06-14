@@ -47,6 +47,7 @@ title: 文章标题
 author: 作者名
 digest: 摘要内容（选填）
 thumb_media_id: cover.png
+content_source_url: https://example.com/article  # "阅读原文"跳转链接（选填）
 ---
 ```
 
@@ -58,11 +59,13 @@ title: 文章标题
 author: 作者名
 digest: 摘要内容（选填）
 thumb_media_id: cover.png
+content_source_url: https://example.com/article  # "阅读原文"跳转链接（选填）
 ```
 
 Sidecar YAML 优先级高于 front matter，适合不修改原始 Markdown 文件添加元数据。
 尤其适合从 org-mode 等外部工具导出的场景——Markdown 本身保持干净，元数据放在旁边。
-
+> **`content_source_url`**：设置"阅读原文"跳转链接。sidecar YAML 或 HTML `<meta name="content_source_url">` 指定。
+> 典型场景：`slingshot page add --rsync` 部署站点后，把站点 URL 填进来，形成公众号→个人站导流。
 **直接支持 Org mode**：`.org` 文件可直接转换，无需事先导出为 Markdown：
   slingshot draft convert article.org --upload
 系统调用 Emacs 完成 Org→Markdown 转换（要求系统已安装 Emacs）。
