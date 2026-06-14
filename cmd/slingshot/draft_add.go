@@ -94,6 +94,9 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 	// Extract digest from HTML meta or sidecar YAML
 	digest := extractDigest(htmlStr, file)
 
+	// Extract content_source_url from sidecar YAML or HTML meta
+	contentSourceURL := extractContentSourceURL(htmlStr, file)
+
 	// NeedOpenComment and OnlyFansCanComment: default to 1 (open, fans-only)
 	// to help attract attention and gain more followers. Sidecar YAML can override.
 	needOpenComment := 1
@@ -169,6 +172,7 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 			Author:             author,
 			ThumbMediaID:       thumbMediaID,
 			Digest:             digest,
+			ContentSourceURL:   contentSourceURL,
 			NeedOpenComment:    needOpenComment,
 			OnlyFansCanComment: onlyFansCanComment,
 			Content:            string(sanitized),

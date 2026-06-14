@@ -98,6 +98,7 @@ type sidecarMeta struct {
 	Author             string `yaml:"author"`
 	ThumbMediaID       string `yaml:"thumb_media_id"`
 	Digest             string `yaml:"digest"`
+	ContentSourceURL   string `yaml:"content_source_url"`
 	NeedOpenComment    *int   `yaml:"need_open_comment"`
 	OnlyFansCanComment *int   `yaml:"only_fans_can_comment"`
 }
@@ -133,6 +134,31 @@ func extractDigest(htmlContent, filePath string) string {
 	lower := strings.ToLower(htmlContent)
 	for _, quote := range []string{`"`, `'`} {
 		marker := `<meta name="digest" content=` + quote
+		start := strings.Index(lower, marker)
+		if start < 0 {
+			continue
+		}
+		start += len(marker)
+		end := strings.Index(htmlContent[start:], quote)
+		if end < 0 {
+			continue
+		}
+		return strings.TrimSpace(htmlContent[start : start+end])
+	}
+	return ""
+}
+
+// extractContentSourceURL extracts the content_source_url from sidecar YAML first,
+// falling back to <meta name="content_source_url" content="..."> in the HTML content.
+func extractContentSourceURL(htmlContent, filePath string) string {
+	// Prefer sidecar YAML
+	if meta, ok := readSidecarYAML(filePath); ok && meta.ContentSourceURL != "" {
+		return meta.ContentSourceURL
+	}
+	// Fallback: <meta name="content_source_url" content="..."> in HTML
+	lower := strings.ToLower(htmlContent)
+	for _, quote := range []string{`"`, `'`} {
+		marker := `<meta name="content_source_url" content=` + quote
 		start := strings.Index(lower, marker)
 		if start < 0 {
 			continue
