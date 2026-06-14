@@ -160,6 +160,9 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Replace local image paths with CDN URLs from upload cache (if available)
+	htmlContent = replaceLocalImagePaths(htmlContent, file, cmd.ErrOrStderr())
+
 	// Sanitize HTML before sending to WeChat (strip mailto links, footnote backlinks)
 	sanitized := mdtowx.SanitizeHTML(htmlContent)
 
