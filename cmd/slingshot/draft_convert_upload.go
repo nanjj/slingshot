@@ -79,9 +79,15 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 			continue
 		}
 
+		// Convert SVG to PNG if needed (WeChat does not support SVG)
+		uploadPath, cleanup := maybeConvertSVG(ref.AbsPath, cmd.ErrOrStderr())
+
 		// Not cached — upload to WeChat
-		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading %s...\n"), ref.AbsPath)
-		resp, err := uploadimage.Upload(token, ref.AbsPath)
+		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading %s...\n"), uploadPath)
+		resp, err := uploadimage.Upload(token, uploadPath)
+		if cleanup {
+			os.Remove(uploadPath)
+		}
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: upload failed for %s: %v\n"), ref.AbsPath, err)
 			continue
@@ -128,8 +134,14 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
 							filepath.Base(thumbPath), thumbMediaID)
 					} else {
-						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
-						mediaID, err := uploadimage.UploadThumb(token, thumbPath)
+						// Convert SVG thumbnail to PNG if needed
+						thumbUploadPath, thumbCleanup := maybeConvertSVG(thumbPath, cmd.ErrOrStderr())
+
+						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbUploadPath)
+						mediaID, err := uploadimage.UploadThumb(token, thumbUploadPath)
+						if thumbCleanup {
+							os.Remove(thumbUploadPath)
+						}
 						if err != nil {
 							fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
 						} else {
@@ -143,8 +155,9 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
 					}
 				}
+			} else {
+				// File doesn't exist as a local path — fall through and use original value as-is
 			}
-			// File doesn't exist as a local path — fall through and use original value as-is
 		}
 		// No image extension → treat as an already-valid media_id, keep it as-is
 	}

@@ -142,8 +142,14 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
 						filepath.Base(thumbPath), thumbMediaID)
 				} else {
-					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbPath)
-					mediaID, err := uploadimage.UploadThumb(token, thumbPath)
+					// Convert SVG thumbnail to PNG if needed
+					thumbUploadPath, thumbCleanup := maybeConvertSVG(thumbPath, cmd.ErrOrStderr())
+
+					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbUploadPath)
+					mediaID, err := uploadimage.UploadThumb(token, thumbUploadPath)
+					if thumbCleanup {
+						os.Remove(thumbUploadPath)
+					}
 					if err != nil {
 						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
 					} else {

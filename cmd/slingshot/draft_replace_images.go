@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/imgconv"
 	"github.com/nanjj/slingshot/internal/mdtowx"
 	"github.com/nanjj/slingshot/internal/uploadcache"
 )
@@ -47,4 +48,27 @@ func replaceLocalImagePaths(html []byte, file string, stderr io.Writer) []byte {
 	}
 
 	return mdtowx.ReplaceImageURLs(html, replacements)
+}
+
+// maybeConvertSVG checks if the file is an SVG and converts it to a temporary
+// PNG for WeChat upload. WeChat does not support SVG images.
+//
+// Returns the path to use for upload (original path if not SVG, temp PNG if
+// converted) and whether the caller must clean up the temp file.
+// If conversion fails, it prints a warning and returns the original path
+// (the upload will likely fail, but that's preferable to silently dropping
+// the image).
+func maybeConvertSVG(path string, stderr io.Writer) (uploadPath string, needsCleanup bool) {
+	if !imgconv.IsSVG(path) {
+		return path, false
+	}
+
+	pngPath, err := imgconv.ToPNG(path)
+	if err != nil {
+		fmt.Fprintf(stderr, i18n.G("Warning: SVG->PNG conversion failed for %s: %v; uploading original\n"), path, err)
+		return path, false
+	}
+
+	fmt.Fprintf(stderr, i18n.G("Converted SVG to PNG: %s -> %s\n"), path, pngPath)
+	return pngPath, true
 }
