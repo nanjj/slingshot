@@ -32,10 +32,12 @@ type cmdDraftUpdate struct {
 func (c *cmdDraftUpdate) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "update " + u.File.Render()
-	cmd.Short = i18n.G("Update an existing draft")
+	cmd.Short = i18n.G("Update an existing draft from .org/.md/.html file")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		i18n.G(`Update an existing WeChat draft with new HTML content.
+		i18n.G(`Update an existing WeChat draft with new content. Supports .org, .md,
+and .html files. If a .org or .md file is provided, it is auto-converted
+to HTML first (with image uploads and thumbnail resolution).
 
 The draft is identified by (in priority order):
   1. Sidecar YAML — if <file>.yaml/.yml exists with a "media_id" field
@@ -47,6 +49,7 @@ Usage:
 The --index flag specifies which article in a multi-article draft to update
 (default 0, the first article). Use --thumb to update the cover image.`),
 	)
+
 	cmd.Flags().StringVarP(&c.title, "title", "t", "",
 		i18n.G("New article title (default: auto-detect from HTML)"))
 	cmd.Flags().StringVarP(&c.thumb, "thumb", "", "",
@@ -80,6 +83,13 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	// Resolve media_id and file path
 	var mediaID string
 	file := parsed[0].String
+
+	// Auto-convert .org/.md to .html if needed
+	file, err = ensureHTMLFile(cmd, file)
+	if err != nil {
+		return err
+	}
+
 	meta, ok := readSidecarYAML(file)
 	if ok && meta.MediaID != "" {
 		mediaID = meta.MediaID

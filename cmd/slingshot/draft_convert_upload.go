@@ -15,8 +15,10 @@ import (
 	"github.com/nanjj/slingshot/internal/uploadimage"
 )
 
-// runUpload implements the full upload pipeline for draft convert --upload.
-func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, html []byte, outPath, sourceFile string) error {
+// runUploadPipeline runs the full upload pipeline for draft convert --upload.
+// It uploads local images to WeChat, updates URLs, handles thumbnails, and
+// saves the final HTML file. Standalone so it can be reused by auto-convert.
+func runUploadPipeline(cmd *cobra.Command, result *mdtowx.Result, html []byte, outPath, sourceFile string) error {
 	baseDir := filepath.Dir(sourceFile)
 
 	// Step 2: Extract local image paths from HTML

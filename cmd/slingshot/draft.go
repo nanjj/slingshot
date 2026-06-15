@@ -53,9 +53,9 @@ sidecar YAML automatically. If no sidecar exists, the first draft in
 the list is used as a default.
 
 Subcommands:
-  list              List all drafts
-  add    <file>     Create a new draft from HTML file
-  update <file>     Update a draft (auto-detect from sidecar YAML or first draft)
+	hILz   list              List all drafts
+	7ckj   add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)
+	qbD5   update <file>     Update a draft from .org/.md/.html (auto-converts if needed)
   remove <id>       Remove a draft (id, index, or file with sidecar YAML)
   show   <id>       Show a draft's details (id, index, or file with sidecar YAML)
   convert <file>    Convert Markdown to WeChat HTML format

@@ -113,5 +113,5 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	return c.runUpload(cmd, result, html, outPath, file.String)
+	return runUploadPipeline(cmd, result, html, outPath, file.String)
 }
