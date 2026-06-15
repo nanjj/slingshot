@@ -10,23 +10,48 @@ import (
 
 // SanitizeHTML removes HTML elements that WeChat's API may reject.
 //
-// WeChat editor is stricter than the browser. Pandoc-generated HTML often
-// contains elements that trigger error 45166 ("Invalid Content"):
+// WeChat editor is stricter than the browser. Org-mode, Pandoc, and Goldmark
+// generated HTML often contains elements that trigger error 45166
+// ("Invalid Content"):
 //
-//  1. mailto links: <a href="mailto:...">text</a> → text (keep label, remove link)
-//  2. Footnote backlinks: <sup><a role="doc-backlink" class="footref"...>N</a></sup>
+//  1. Full HTML document structure: <!DOCTYPE>, <html>, <head>, <body>
+//     → stripped, keeping only the content inside <body>
+//  2. Org-mode artifacts: \equal{} → =
+//  3. mailto links: <a href="mailto:...">text</a> → text (keep label, remove link)
+//  4. Footnote backlinks: <sup><a role="doc-backlink" class="footref"...>N</a></sup>
 //     → N (remove <sup> and <a>, keep the number as plain text)
-//  3. Footnote definition anchors: <sup><a id="fn.X" href="#fnr.X">N</a></sup>
+//  5. Footnote definition anchors: <sup><a id="fn.X" href="#fnr.X">N</a></sup>
 //     → N (same treatment)
-//
-// The function uses html.NewTokenizer so it works on HTML fragments without
-// wrapping them in a full document structure.
 func SanitizeHTML(src []byte) []byte {
+	// Preprocess: extract body content, fix common artifacts
+	content := prepareContent(src)
+
 	s := &sanitizer{
-		z: html.NewTokenizer(bytes.NewReader(src)),
+		z: html.NewTokenizer(bytes.NewReader(content)),
 	}
 	s.run()
 	return s.out.Bytes()
+}
+
+// prepareContent preprocesses HTML content before sanitization:
+//  1. Extracts content between <body> and </body> (removes DOCTYPE, html, head)
+//  2. Replaces Org-mode \equal{} with =
+func prepareContent(src []byte) []byte {
+	// Extract body content if this is a full HTML document
+	bodyStart := bytes.Index(src, []byte("<body"))
+	bodyEnd := bytes.LastIndex(src, []byte("</body>"))
+	if bodyStart >= 0 && bodyEnd > bodyStart {
+		tagEnd := bytes.Index(src[bodyStart:], []byte(">"))
+		if tagEnd >= 0 {
+			contentStart := bodyStart + tagEnd + 1
+			src = src[contentStart:bodyEnd]
+		}
+	}
+
+	// Replace Org-mode \equal{} with =
+	src = bytes.ReplaceAll(src, []byte(`\equal{}`), []byte(`=`))
+
+	return src
 }
 
 // sanitizer holds the state while processing HTML tokens.
