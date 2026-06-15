@@ -79,7 +79,28 @@ release-gh:
 		--generate-notes
 	@echo "---"
 	@echo "Release $(TAG) created at https://github.com/$(MODULE)/releases/tag/$(TAG)"
+# --- Site release ---
+#
+# Update the slingshot.dscli.io site with the latest version and rebuild.
+# The site repo is expected at SITE_DIR.
+# Usage: make release-site TAG=v0.2.0
+SITE_DIR := $(HOME)/.local/src/gitlab.com/dscli/slingshot.dscli.io
 
+.PHONY: release-site
+release-site:
+	@test -n "$(TAG)" || { echo "Usage: make release-site TAG=vX.Y.Z"; exit 1; }
+	@test -d "$(SITE_DIR)" || { echo "Site repo not found at $(SITE_DIR)"; exit 1; }
+	cd "$(SITE_DIR)" && \
+		git pull --ff-only && \
+		./scripts/update-version.sh "$(TAG)" && \
+		rm -rf public && \
+		zine release && \
+		git add assets/version.ziggy && \
+		git diff --cached --quiet || \
+			git commit -m "chore: update version to $(TAG)" && \
+		git push
+	@echo "---"
+	@echo "Site updated and built at $(SITE_DIR)/public/"
 # --- Clean ---
 
 .PHONY: clean
