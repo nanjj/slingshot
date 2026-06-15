@@ -4,7 +4,8 @@
 #   build         go build
 #   test          go test
 #   install       go install
-#   release       cross-compile for linux/macos/windows amd64 & arm64
+#   release       cross-compile for linux/macos/windows amd64 & arm64 + gzip + sha256
+#   release-gh    release + create/upload GitHub release (requires gh CLI)
 #   clean         remove build artifacts
 #   fmt           go fmt
 
@@ -37,13 +38,18 @@ install:
 
 RELEASE_DIR  := _release
 
-# Build a single release binary
+# sha256sum command (portable across Linux & macOS)
+SHA256_CMD := $(if $(filter darwin,$(shell go env GOHOSTOS)),shasum -a 256,sha256sum)
+
+# Build a single release binary, then gzip + sha256
 define build-release
 	GOOS=$(word 1,$(subst /, ,$(1))) \
 	GOARCH=$(word 2,$(subst /, ,$(1))) \
 	CGO_ENABLED=0 \
 	go build -trimpath -ldflags="-s -w" -o $(RELEASE_DIR)/$(2) $(CMD_PATH)
 	$(if $(HAVE_UPX),upx --best --lzma $(RELEASE_DIR)/$(2),true)
+	gzip -fk $(RELEASE_DIR)/$(2)
+	cd $(RELEASE_DIR) && $(SHA256_CMD) $(2).gz > $(2).gz.sha256
 endef
 
 .PHONY: release
@@ -56,8 +62,23 @@ release:
 	$(call build-release,windows/amd64,$(BINARY)-windows-amd64.exe)
 	$(call build-release,windows/arm64,$(BINARY)-windows-arm64.exe)
 	@echo "---"
-	@echo "Release binaries in $(RELEASE_DIR)/:"
+	@echo "Release artifacts in $(RELEASE_DIR)/:"
 	@ls -lh $(RELEASE_DIR)/
+
+# --- GitHub release helper ---
+#
+# Creates a GitHub release with the given tag and uploads all _release/*.gz files.
+# Usage: make release-gh TAG=v0.1.0
+.PHONY: release-gh
+release-gh:
+	@test -n "$(TAG)" || { echo "Usage: make release-gh TAG=vX.Y.Z"; exit 1; }
+	@test -d "$(RELEASE_DIR)" || { echo "Run 'make release' first"; exit 1; }
+	gh release create "$(TAG)" $(RELEASE_DIR)/*.gz $(RELEASE_DIR)/*.sha256 \
+		--repo $(MODULE) \
+		--title "$(TAG)" \
+		--generate-notes
+	@echo "---"
+	@echo "Release $(TAG) created at https://github.com/$(MODULE)/releases/tag/$(TAG)"
 
 # --- Clean ---
 
