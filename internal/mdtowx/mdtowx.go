@@ -173,7 +173,7 @@ const (
 
 	// WeChat list styles — rendered as <ol>/<ul> + <li> with inline styles.
 	// Native HTML list elements are used for better compatibility and nesting.
-	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";margin:20px 10px;margin-left:0;padding-left:1.5em"
+	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";margin:20px 10px;margin-left:0;padding-left:1.5em;list-style:none"
 	styleListItem      = "display:block;margin:0.5em 8px;color:#3f3f3f"
 )
 
