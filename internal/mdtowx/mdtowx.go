@@ -140,14 +140,14 @@ func parseFrontMatter(source []byte) (fm frontMatter, body []byte) {
 }
 
 // --- Inline style definitions ---
-
-// fontFamily is the common font stack used by all text elements.
-const fontFamily = "Optima-Regular, Optima, PingFangSC-light, PingFangTC-light, 'PingFang SC', Cambria, Cochin, Georgia, Times, 'Times New Roman', serif"
+//
+// No font-family is specified — WeChat's reader uses its own default fonts.
+// This matches how manually crafted WeChat articles look.
 
 // headingStyle returns the inline style for a heading level.
 // Quaily groups: h1/h2 → centered h2; h3+ → left-aligned bold h3.
 func headingStyle(level int) string {
-	base := "color:#3f3f3f;line-height:1.5;font-family:" + fontFamily
+	base := "color:#3f3f3f;line-height:1.5"
 	switch {
 	case level <= 2:
 		return "text-align:center;" + base + ";font-size:140%;margin:80px 10px 40px 10px;font-weight:normal"
@@ -157,23 +157,24 @@ func headingStyle(level int) string {
 }
 
 // style constants — each targets one AST node kind.
+// No font-family is specified to match real WeChat articles.
 const (
-	styleParagraph  = "text-align:left;color:#3f3f3f;line-height:1.6;font-size:16px;font-family:" + fontFamily + ";margin:10px 10px"
-	styleBlockquote = "text-align:left;color:rgb(91,91,91);line-height:1.5;font-size:16px;font-family:" + fontFamily +
+	styleParagraph  = "text-align:left;color:#3f3f3f;line-height:1.6;font-size:16px;margin:10px 10px"
+	styleBlockquote = "text-align:left;color:rgb(91,91,91);line-height:1.5;font-size:16px" +
 		";margin:20px 10px;padding:1px 0 1px 10px;background:rgba(158,158,158,0.1);border-left:3px solid rgb(158,158,158)"
 	styleCodeSpan = "text-align:left;color:#ff3502;line-height:1.5;font-size:90%;" +
 		"font-family:Operator Mono, Consolas, Monaco, Menlo, monospace;background:#f8f5ec;padding:3px 5px;border-radius:2px"
 	styleLink      = "color:rgb(13,117,252);text-decoration:none"
 	styleImage     = "max-width:100%;height:auto;display:block;margin:0.8em 0"
-	styleTable     = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";border-collapse:collapse;margin:20px 0"
-	styleTableHead = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";background:rgba(0,0,0,0.05)"
-	styleTableCell = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:80%;font-family:" + fontFamily + ";border:1px solid #dfdfdf;padding:4px 8px"
+	styleTable     = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;border-collapse:collapse;margin:20px 0"
+	styleTableHead = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;background:rgba(0,0,0,0.05)"
+	styleTableCell = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:80%;border:1px solid #dfdfdf;padding:4px 8px"
 	styleHR        = "margin:1.5em 0;border:none;border-top:1px solid #eee"
 	styleDel       = "text-decoration:line-through"
 
 	// WeChat list styles — rendered as <ol>/<ul> + <li> with inline styles.
 	// Native HTML list elements are used for better compatibility and nesting.
-	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";margin:20px 10px;margin-left:0;padding-left:1.5em;list-style:none"
+	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;margin:20px 10px;margin-left:0;padding-left:1.5em;list-style:none"
 	styleListItem      = "display:block;margin:0.5em 8px;color:#3f3f3f"
 )
 
@@ -385,6 +386,10 @@ func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Nod
 		_, _ = w.WriteString(`<li style="`)
 		_, _ = w.WriteString(styleListItem)
 		_, _ = w.WriteString(`">`)
+		// Open <section> wrapper — WeChat's standard content container.
+		// This matches how manually crafted WeChat articles structure list items,
+		// providing consistent spacing in WeChat's renderer.
+		_, _ = w.WriteString(`<section>`)
 		// Determine bullet character or number
 		parent := n.Parent()
 		if parent != nil && parent.Kind() == ast.KindList {
@@ -404,7 +409,7 @@ func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Nod
 			_, _ = w.WriteString("• ")
 		}
 	} else {
-		_, _ = w.WriteString("</li>\n")
+		_, _ = w.WriteString(`</section></li>` + "\n")
 	}
 	return ast.WalkContinue, nil
 }
