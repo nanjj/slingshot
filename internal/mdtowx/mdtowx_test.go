@@ -23,8 +23,8 @@ func TestConvertMarkdown(t *testing.T) {
 			input: `Hello world.`,
 			want: []string{
 				`<p`, `>Hello world.</p>`,
-				`color:#3f3f3f`, `line-height:1.6`, `font-size:16px`,
-				// No font-family — WeChat Reader uses its own default fonts
+				`line-height:1.6`, `font-size:16px`,
+				// No font-family or color — WeChat Reader uses its own defaults
 			},
 		},
 		{
@@ -34,13 +34,13 @@ func TestConvertMarkdown(t *testing.T) {
 ### H3
 #### H4`,
 			want: []string{
-				`<h2 style="text-align:center;color:#3f3f3f;line-height:1.5`,
+				`<h2 style="text-align:center;line-height:1.5`,
 				`font-size:140%;margin:80px 10px 40px 10px;font-weight:normal">H1</h2>`,
-				`<h2 style="text-align:center;color:#3f3f3f;line-height:1.5`,
+				`<h2 style="text-align:center;line-height:1.5`,
 				`font-size:140%;margin:80px 10px 40px 10px;font-weight:normal">H2</h2>`,
-				`<h3 style="text-align:left;color:#3f3f3f;line-height:1.5`,
+				`<h3 style="text-align:left;line-height:1.5`,
 				`font-size:120%;margin:40px 10px 20px 10px;font-weight:bold">H3</h3>`,
-				`<h3 style="text-align:left;color:#3f3f3f;line-height:1.5`,
+				`<h3 style="text-align:left;line-height:1.5`,
 				`font-size:120%;margin:40px 10px 20px 10px;font-weight:bold">H4</h3>`,
 			},
 		},
@@ -160,9 +160,9 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<ul style="`,
 				`padding-left:1.5em`,
-				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f"><section>• a</section></li>`,
-				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f"><section>• b</section></li>`,
-				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f"><section>• c</section></li>`,
+				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">• a</section></li>`,
+				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">• b</section></li>`,
+				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">• c</section></li>`,
 				`</ul>`,
 			},
 			not: []string{
@@ -176,8 +176,8 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<ol style="`,
 				`padding-left:1.5em`,
-				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f"><section>1. one</section></li>`,
-				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f"><section>2. two</section></li>`,
+				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">1. one</section></li>`,
+				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">2. two</section></li>`,
 				`</ol>`,
 			},
 			not: []string{
@@ -200,10 +200,10 @@ func TestConvertMarkdown(t *testing.T) {
 				`border-collapse:collapse;margin:20px 0`,
 				`<th`, `font-size:80%`,
 				`border:1px solid #dfdfdf;padding:4px 8px`,
-				`<td style="text-align:left;color:#3f3f3f;line-height:1.5;font-size:80%`,
+				`<td style="text-align:left;line-height:1.5;font-size:80%`,
 				`border:1px solid #dfdfdf;padding:4px 8px`,
 				`A`, `B`, `1`, `2`,
-				// No font-family — matches real WeChat articles
+				// No font-family or color — matches real WeChat articles
 			},
 		},
 		{
@@ -225,8 +225,8 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "bold_inside_paragraph",
 			input: `p **b** p`,
 			want: []string{
-				`<p style="text-align:left;color:#3f3f3f;line-height:1.6;font-size:16px`, `p <strong>b</strong> p</p>`,
-				// No font-family — matches real WeChat articles
+				`<p style="text-align:left;line-height:1.6;font-size:16px`, `p <strong>b</strong> p</p>`,
+				// No font-family or color — matches real WeChat articles
 			},
 		},
 		// Front matter tests
