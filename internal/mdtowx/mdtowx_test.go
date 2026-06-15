@@ -156,31 +156,31 @@ func TestConvertMarkdown(t *testing.T) {
 			input: `- a
 - b
 - c`,
-			want: []string{
-				`font-family:Optima-Regular`,
-				`margin:20px 10px;margin-left:0;padding-left:20px;list-style:circle`,
-				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>a</span>`,
-				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>b</span>`,
-				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">•</span>c</span>`,
-				`</p>`,
+		want: []string{
+				`<ul style="`,
+				`padding-left:1.5em`,
+				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f">• a</li>`,
+				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f">• b</li>`,
+				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f">• c</li>`,
+				`</ul>`,
 			},
 			not: []string{
-				`<ul`, `<ol`, `<li`,
+				`<p style="`, `<ol`, `<span`, `text-indent`, `margin:10px 10px`, `margin-right: 10px`,
 			},
 		},
 		{
 			name: "ordered_list",
 			input: `1. one
 2. two`,
-			want: []string{
-				`font-family:Optima-Regular`,
-				`margin:20px 10px;margin-left:0;padding-left:20px`,
-				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">1.</span>one</span>`,
-				`<span style="text-indent:-20px;display:block;margin:10px 10px"><span style="margin-right: 10px;">2.</span>two</span>`,
-				`</p>`,
+		want: []string{
+				`<ol style="`,
+				`padding-left:1.5em`,
+				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f">1. one</li>`,
+				`<li style="display:block;margin:0.5em 8px;color:#3f3f3f">2. two</li>`,
+				`</ol>`,
 			},
 			not: []string{
-				`<ul`, `<ol`, `<li`,
+				`<p style="`, `<ul`, `<span`, `text-indent`, `margin:10px 10px`, `margin-right: 10px`,
 			},
 		},
 		{

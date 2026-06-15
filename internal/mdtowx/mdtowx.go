@@ -171,11 +171,10 @@ const (
 	styleHR        = "margin:1.5em 0;border:none;border-top:1px solid #eee"
 	styleDel       = "text-decoration:line-through"
 
-	// WeChat list styles — WeChat does not support <ul>/<ol>/<li>, so lists
-	// are rendered as <p> with <span> items using bullet/number characters.
-	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";margin:20px 10px;margin-left:0;padding-left:20px"
-	styleListItemWx    = "text-indent:-20px;display:block;margin:10px 10px"
-	styleListBullet    = "margin-right: 10px;"
+	// WeChat list styles — rendered as <ol>/<ul> + <li> with inline styles.
+	// Native HTML list elements are used for better compatibility and nesting.
+	styleListContainer = "text-align:left;color:#3f3f3f;line-height:1.5;font-size:16px;font-family:" + fontFamily + ";margin:20px 10px;margin-left:0;padding-left:1.5em"
+	styleListItem      = "display:block;margin:0.5em 8px;color:#3f3f3f"
 )
 
 // --- AST walker: inject style attributes ---
@@ -362,26 +361,29 @@ func (r *listRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 }
 
 func (r *listRenderer) renderList(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	list := n.(*ast.List)
 	if entering {
-		_, _ = w.WriteString(`<p style="`)
-		_, _ = w.WriteString(styleListContainer)
-		list := n.(*ast.List)
-		if !list.IsOrdered() {
-			_, _ = w.WriteString(`;list-style:circle`)
+		if list.IsOrdered() {
+			_, _ = w.WriteString(`<ol style="`)
+		} else {
+			_, _ = w.WriteString(`<ul style="`)
 		}
+		_, _ = w.WriteString(styleListContainer)
 		_, _ = w.WriteString(`">` + "\n")
 	} else {
-		_, _ = w.WriteString("</p>\n")
+		if list.IsOrdered() {
+			_, _ = w.WriteString("</ol>\n")
+		} else {
+			_, _ = w.WriteString("</ul>\n")
+		}
 	}
 	return ast.WalkContinue, nil
 }
 
 func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
-		_, _ = w.WriteString(`<span style="`)
-		_, _ = w.WriteString(styleListItemWx)
-		_, _ = w.WriteString(`"><span style="`)
-		_, _ = w.WriteString(styleListBullet)
+		_, _ = w.WriteString(`<li style="`)
+		_, _ = w.WriteString(styleListItem)
 		_, _ = w.WriteString(`">`)
 		// Determine bullet character or number
 		parent := n.Parent()
@@ -394,16 +396,15 @@ func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Nod
 						num++
 					}
 				}
-				_, _ = fmt.Fprintf(w, "%d.", num)
+				_, _ = fmt.Fprintf(w, "%d. ", num)
 			} else {
-				_, _ = w.WriteString("•")
+				_, _ = w.WriteString("• ")
 			}
 		} else {
-			_, _ = w.WriteString("•")
+			_, _ = w.WriteString("• ")
 		}
-		_, _ = w.WriteString("</span>")
 	} else {
-		_, _ = w.WriteString("</span>\n")
+		_, _ = w.WriteString("</li>\n")
 	}
 	return ast.WalkContinue, nil
 }
