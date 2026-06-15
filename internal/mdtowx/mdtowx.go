@@ -176,8 +176,8 @@ const (
 
 	// WeChat list styles — rendered as <ol>/<ul> + <li> with inline styles.
 	// Native HTML list elements are used for better compatibility and nesting.
-	styleListContainer = "text-align:left;line-height:1.5;font-size:16px;margin:20px 10px;margin-left:0;padding-left:1.5em;list-style:none"
-	styleListItem      = "display:block;margin:0.2em 8px"
+	styleListContainer = "text-align:left;line-height:1.5;font-size:16px;margin:10px 10px;margin-left:0;padding-left:1.5em;list-style:none"
+	styleListItem      = "display:block;margin:0 8px"
 )
 
 // --- AST walker: inject style attributes ---
@@ -487,6 +487,32 @@ func newGoldmark() goldmark.Markdown {
 	)
 }
 
+// replaceMathSymbols replaces >= with ≥ and <= with ≤ in Markdown text,
+// skipping fenced code blocks. This avoids relying on HTML named entities
+// (&ge;, &le;) which WeChat's XML-based pipeline may not decode correctly.
+func replaceMathSymbols(source []byte) []byte {
+	lines := bytes.Split(source, []byte("\n"))
+	var result [][]byte
+	inFence := false
+	for _, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if bytes.HasPrefix(trimmed, []byte("```")) {
+			inFence = !inFence
+			result = append(result, line)
+			continue
+		}
+		if inFence {
+			result = append(result, line)
+			continue
+		}
+		// Outside fenced code: replace >= and <=
+		line = bytes.ReplaceAll(line, []byte(">="), []byte("≥"))
+		line = bytes.ReplaceAll(line, []byte("<="), []byte("≤"))
+		result = append(result, line)
+	}
+	return bytes.Join(result, []byte("\n"))
+}
+
 // --- Public API ---
 // ConvertMarkdown converts Markdown source bytes to WeChat-friendly HTML.
 //
@@ -504,16 +530,21 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 	}
 	author := SanitizeAuthor(fm.Author)
 
+	// 3. Pre-process: replace >= with ≥ and <= with ≤ outside code blocks.
+	//    WeChat's XML pipeline may not decode named HTML entities correctly,
+	//    so we use Unicode characters directly.
+	body = replaceMathSymbols(body)
+
 	md := newGoldmark()
 
-	// 3. Parse to AST.
+	// 4. Parse to AST.
 	reader := text.NewReader(body)
 	doc := md.Parser().Parse(reader)
 
-	// 4. Inject inline style attributes.
+	// 5. Inject inline style attributes.
 	addInlineStyles(doc)
 
-	// 5. Render to HTML.
+	// 6. Render to HTML.
 	var buf bytes.Buffer
 	if err := md.Renderer().Render(&buf, body, doc); err != nil {
 		return nil, fmt.Errorf("rendering markdown: %w", err)

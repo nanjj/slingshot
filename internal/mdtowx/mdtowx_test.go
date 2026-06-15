@@ -160,13 +160,13 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<ul style="`,
 				`padding-left:1.5em`,
-				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">• a</section></li>`,
-				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">• b</section></li>`,
-				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">• c</section></li>`,
+				`<li style="display:block;margin:0 8px"><section style="margin:0;padding:0">• a</section></li>`,
+				`<li style="display:block;margin:0 8px"><section style="margin:0;padding:0">• b</section></li>`,
+				`<li style="display:block;margin:0 8px"><section style="margin:0;padding:0">• c</section></li>`,
 				`</ul>`,
 			},
 			not: []string{
-				`<p style="`, `<ol`, `<span`, `text-indent`, `margin:10px 10px`, `margin-right: 10px`,
+				`<p style="`, `<ol`, `<span`, `text-indent`, `margin-right: 10px`,
 			},
 		},
 		{
@@ -176,12 +176,12 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<ol style="`,
 				`padding-left:1.5em`,
-				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">1. one</section></li>`,
-				`<li style="display:block;margin:0.2em 8px"><section style="margin:0;padding:0">2. two</section></li>`,
+				`<li style="display:block;margin:0 8px"><section style="margin:0;padding:0">1. one</section></li>`,
+				`<li style="display:block;margin:0 8px"><section style="margin:0;padding:0">2. two</section></li>`,
 				`</ol>`,
 			},
 			not: []string{
-				`<p style="`, `<ul`, `<span`, `text-indent`, `margin:10px 10px`, `margin-right: 10px`,
+				`<p style="`, `<ul`, `<span`, `text-indent`, `margin-right: 10px`,
 			},
 		},
 		{
