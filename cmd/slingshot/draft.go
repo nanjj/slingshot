@@ -31,6 +31,7 @@ var draftRemoveUsage = u.Usage{
 var draftShowUsage = u.Usage{
 	u.ID,
 }
+
 // cmdDraft 是 draft 的父命令。
 type cmdDraft struct {
 	global *cmdGlobal
@@ -47,9 +48,9 @@ func (c *cmdDraft) command() *cobra.Command {
 Subcommands:
   list              List all drafts
   add    <file>     Create a new draft from HTML file
-  update <id> <file> Update an existing draft
-  remove <id>       Remove a draft
-  show   <id>       Show a draft's details
+  update <id> <file> Update an existing draft (id can be 1-based index from "list")
+  remove <id>       Remove a draft (id can be 1-based index from "list")
+  show   <id>       Show a draft's details (id can be 1-based index from "list")
   convert <file>    Convert Markdown to WeChat HTML format
 `),
 	)
@@ -99,7 +100,7 @@ func (c *cmdDraft) cmdRemove() *cmdDraftSub {
 		name:   "remove",
 		usage:  draftRemoveUsage,
 		short:  i18n.G("Remove a draft"),
-		long:   i18n.G(`Remove (delete) a WeChat draft by ID.`),
+		long:   i18n.G(`Remove (delete) a WeChat draft by ID or 1-based index from "list".`),
 		action: c.doRemove,
 	}
 }
@@ -110,7 +111,7 @@ func (c *cmdDraft) cmdShow() *cmdDraftSub {
 		name:   "show",
 		usage:  draftShowUsage,
 		short:  i18n.G("Show a draft's details"),
-		long:   i18n.G(`Show detailed information about a WeChat draft by ID.`),
+		long:   i18n.G(`Show detailed information about a WeChat draft by ID or 1-based index from "list".`),
 		action: c.doShow,
 	}
 }

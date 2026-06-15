@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,7 +70,7 @@ func (c *cmdDraft) doRemove(parsed []*u.Parsed, cmd *cobra.Command) error {
 	if len(parsed) < 1 || parsed[0].Skipped {
 		return errors.New(i18n.G("expected an id argument"))
 	}
-	mediaID := parsed[0].String
+	idStr := parsed[0].String
 
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -78,6 +79,11 @@ func (c *cmdDraft) doRemove(parsed []*u.Parsed, cmd *cobra.Command) error {
 	token, err := getaccesstoken.GetToken(cfg)
 	if err != nil {
 		return fmt.Errorf("getting access token: %w", err)
+	}
+
+	mediaID, err := resolveID(token, idStr)
+	if err != nil {
+		return fmt.Errorf("resolving draft ID: %w", err)
 	}
 
 	if err := draft.Remove(token, mediaID); err != nil {
@@ -92,7 +98,7 @@ func (c *cmdDraft) doShow(parsed []*u.Parsed, cmd *cobra.Command) error {
 	if len(parsed) < 1 || parsed[0].Skipped {
 		return errors.New(i18n.G("expected an id argument"))
 	}
-	mediaID := parsed[0].String
+	idStr := parsed[0].String
 
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -101,6 +107,11 @@ func (c *cmdDraft) doShow(parsed []*u.Parsed, cmd *cobra.Command) error {
 	token, err := getaccesstoken.GetToken(cfg)
 	if err != nil {
 		return fmt.Errorf("getting access token: %w", err)
+	}
+
+	mediaID, err := resolveID(token, idStr)
+	if err != nil {
+		return fmt.Errorf("resolving draft ID: %w", err)
 	}
 
 	resp, err := draft.Show(token, mediaID)
@@ -142,3 +153,27 @@ func (c *cmdDraft) doShow(parsed []*u.Parsed, cmd *cobra.Command) error {
 	}
 	return nil
 }
+
+// resolveID resolves a draft identifier to a media_id.
+//
+// If idStr is a positive integer (1-based index as shown in "draft list"),
+// it fetches the draft list and returns the media_id at that index.
+// Otherwise, it returns idStr unchanged (treating it as a direct media_id).
+func resolveID(token, idStr string) (string, error) {
+	idx, err := strconv.Atoi(idStr)
+	if err != nil || idx < 1 {
+		// Not a valid positive integer — pass through as a raw media_id
+		return idStr, nil
+	}
+
+	resp, err := draft.List(token, 0, 20)
+	if err != nil {
+		return "", fmt.Errorf("resolving index %d: listing drafts: %w", idx, err)
+	}
+	if idx > len(resp.Items) {
+		return "", fmt.Errorf("draft index %d out of range: only %d drafts available",
+			idx, len(resp.Items))
+	}
+	return resp.Items[idx-1].MediaID, nil
+}
+

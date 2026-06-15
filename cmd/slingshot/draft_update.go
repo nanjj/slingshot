@@ -35,7 +35,7 @@ func (c *cmdDraftUpdate) command() *cobra.Command {
 	cmd.Short = i18n.G("Update an existing draft")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		i18n.G(`Update an existing WeChat draft by media ID with new HTML content.
+		i18n.G(`Update an existing WeChat draft by media ID (or 1-based index from "draft list") with new HTML content.
 
 The --index flag specifies which article in a multi-article draft to update
 (default 0, the first article). Use --thumb to update the cover image.`),
@@ -59,8 +59,24 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if len(parsed) < 2 || parsed[1].Skipped {
 		return errors.New(i18n.G("expected id and file arguments"))
 	}
-	mediaID := parsed[0].String
+	idStr := parsed[0].String
 	file := parsed[1].String
+
+	// Load config and get token early (needed for ID resolution)
+	cfg, _, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	token, err := getaccesstoken.GetToken(cfg)
+	if err != nil {
+		return fmt.Errorf("getting access token: %w", err)
+	}
+
+	// Resolve index (1) → media_id if needed
+	mediaID, err := resolveID(token, idStr)
+	if err != nil {
+		return fmt.Errorf("resolving draft ID: %w", err)
+	}
 
 	// Read HTML file
 	htmlContent, err := os.ReadFile(file)
@@ -87,15 +103,6 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	thumbMediaID := c.thumb
 	if thumbMediaID == "" {
 		thumbMediaID = extractThumbMediaID(htmlStr)
-	}
-	// Load config and get token
-	cfg, _, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-	token, err := getaccesstoken.GetToken(cfg)
-	if err != nil {
-		return fmt.Errorf("getting access token: %w", err)
 	}
 
 	// Auto-upload thumbnail if the value looks like a local image file path
