@@ -31,11 +31,20 @@ type cmdDraftUpdate struct {
 
 func (c *cmdDraftUpdate) command() *cobra.Command {
 	cmd := &cobra.Command{}
-	cmd.Use = "update " + u.ID.Render() + " " + u.File.Render()
+	cmd.Use = "update " + u.File.Render() + " [" + u.ID.Render() + " " + u.File.Render() + "]"
 	cmd.Short = i18n.G("Update an existing draft")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		i18n.G(`Update an existing WeChat draft by media ID (or 1-based index from "draft list") with new HTML content.
+		i18n.G(`Update an existing WeChat draft with new HTML content.
+
+The draft is identified by (in priority order):
+  1. Sidecar YAML — if <file>.yaml/.yml exists with a "media_id" field
+  2. 1st draft — if no sidecar is found, defaults to the first draft in the list
+  3. Explicit ID — pass <id> to specify any draft by index or media_id
+
+Usage:
+  slingshot draft update <file>               # auto-detect from sidecar YAML or first draft
+  slingshot draft update <id> <file>           # explicit ID (index or media_id)
 
 The --index flag specifies which article in a multi-article draft to update
 (default 0, the first article). Use --thumb to update the cover image.`),
@@ -56,11 +65,9 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(parsed) < 2 || parsed[1].Skipped {
-		return errors.New(i18n.G("expected id and file arguments"))
+	if len(parsed) < 1 || parsed[0].Skipped {
+		return errors.New(i18n.G("expected <file> or <id> <file> arguments"))
 	}
-	idStr := parsed[0].String
-	file := parsed[1].String
 
 	// Load config and get token early (needed for ID resolution)
 	cfg, _, err := config.Load()
@@ -72,12 +79,31 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting access token: %w", err)
 	}
 
-	// Resolve index (1) → media_id if needed
-	mediaID, err := resolveID(token, idStr)
-	if err != nil {
-		return fmt.Errorf("resolving draft ID: %w", err)
+	// Resolve media_id and file path
+	var mediaID string
+	var file string
+	if len(parsed) >= 2 && !parsed[1].Skipped {
+		// 2-arg mode: <id> <file>
+		idStr := parsed[0].String
+		file = parsed[1].String
+		mediaID, err = resolveID(token, idStr)
+		if err != nil {
+			return fmt.Errorf("resolving draft ID: %w", err)
+		}
+	} else {
+		// 1-arg mode: <file>, auto-detect media_id
+		file = parsed[0].String
+		meta, ok := readSidecarYAML(file)
+		if ok && meta.MediaID != "" {
+			mediaID = meta.MediaID
+		} else {
+			// No sidecar — default to the first draft in the list
+			mediaID, err = resolveID(token, "1")
+			if err != nil {
+				return fmt.Errorf("resolving first draft: %w", err)
+			}
+		}
 	}
-
 	// Read HTML file
 	htmlContent, err := os.ReadFile(file)
 	if err != nil {
@@ -205,7 +231,13 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if err := draft.Update(token, mediaID, c.index, article); err != nil {
 		return fmt.Errorf("updating draft: %w", err)
 	}
-
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft updated: %s\n"), color.GreenString(mediaID))
+
+	// Save/update media_id in sidecar YAML for future 1-arg usage
+	meta, _ := readSidecarYAML(file)
+	meta.MediaID = mediaID
+	if err := writeSidecarYAML(file, meta); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
+	}
 	return nil
 }

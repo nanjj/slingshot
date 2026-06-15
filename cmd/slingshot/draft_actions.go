@@ -156,16 +156,23 @@ func (c *cmdDraft) doShow(parsed []*u.Parsed, cmd *cobra.Command) error {
 
 // resolveID resolves a draft identifier to a media_id.
 //
-// If idStr is a positive integer (1-based index as shown in "draft list"),
-// it fetches the draft list and returns the media_id at that index.
-// Otherwise, it returns idStr unchanged (treating it as a direct media_id).
+// Resolution order:
+//  1. Sidecar YAML — if <idStr>.yaml/.yml exists with a media_id field
+//  2. 1-based index — if idStr is a positive integer, fetch draft list
+//     and return the media_id at that index
+//  3. Raw passthrough — treat idStr as a direct media_id
 func resolveID(token, idStr string) (string, error) {
+	// Try sidecar YAML first
+	if meta, ok := readSidecarYAML(idStr); ok && meta.MediaID != "" {
+		return meta.MediaID, nil
+	}
+
+	// Check if idStr is a positive integer → index lookup
 	idx, err := strconv.Atoi(idStr)
 	if err != nil || idx < 1 {
 		// Not a valid positive integer — pass through as a raw media_id
 		return idStr, nil
 	}
-
 	resp, err := draft.List(token, 0, 20)
 	if err != nil {
 		return "", fmt.Errorf("resolving index %d: listing drafts: %w", idx, err)

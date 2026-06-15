@@ -94,6 +94,7 @@ func extractThumbMediaID(htmlContent string) string {
 
 // sidecarMeta defines the YAML fields that can be stored alongside an HTML file.
 type sidecarMeta struct {
+	MediaID            string `yaml:"media_id"`
 	Title              string `yaml:"title"`
 	Author             string `yaml:"author"`
 	ThumbMediaID       string `yaml:"thumb_media_id"`
@@ -121,6 +122,18 @@ func readSidecarYAML(filePath string) (sidecarMeta, bool) {
 		return meta, true
 	}
 	return sidecarMeta{}, false
+}
+
+// writeSidecarYAML writes or updates the sidecar YAML file for the given
+// file path. It always writes <filename>.yaml.
+func writeSidecarYAML(filePath string, meta sidecarMeta) error {
+	base := filePath[:len(filePath)-len(filepath.Ext(filePath))]
+	yamlPath := base + ".yaml"
+	data, err := yaml.Marshal(&meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(yamlPath, data, 0644)
 }
 
 // extractDigest extracts the digest from sidecar YAML first, falling back

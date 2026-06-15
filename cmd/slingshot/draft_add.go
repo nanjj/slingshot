@@ -201,5 +201,12 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft created: %s\n"), color.GreenString(resp.MediaID))
+
+	// Save media_id to sidecar YAML for future updates
+	meta, _ := readSidecarYAML(file)
+	meta.MediaID = resp.MediaID
+	if err := writeSidecarYAML(file, meta); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
+	}
 	return nil
 }

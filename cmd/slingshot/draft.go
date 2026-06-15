@@ -45,12 +45,19 @@ func (c *cmdDraft) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Manage WeChat public account drafts.
 
+The "add" command saves the returned media_id to a sidecar YAML file
+(<file>.yaml) alongside the HTML file. Subsequent "update" commands
+can then use just the HTML file path — the media_id is read from the
+sidecar YAML automatically. If no sidecar exists, the first draft in
+the list is used as a default.
+
 Subcommands:
   list              List all drafts
   add    <file>     Create a new draft from HTML file
-  update <id> <file> Update an existing draft (id can be 1-based index from "list")
-  remove <id>       Remove a draft (id can be 1-based index from "list")
-  show   <id>       Show a draft's details (id can be 1-based index from "list")
+  update <file>     Update a draft (auto-detect from sidecar YAML or first draft)
+  update <id> <file> Update a draft by ID (index or media_id)
+  remove <id>       Remove a draft (id, index, or file with sidecar YAML)
+  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)
   convert <file>    Convert Markdown to WeChat HTML format
 `),
 	)
