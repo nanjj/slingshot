@@ -85,7 +85,7 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 	// Determine cover media_id
 	thumbMediaID := c.thumb
 	if thumbMediaID == "" {
-		thumbMediaID = extractThumbMediaID(htmlStr)
+		thumbMediaID = extractThumbMediaID(htmlStr, file)
 	}
 	if thumbMediaID == "" {
 		return errors.New(i18n.G("cover media_id is required: use --thumb flag or add <meta name=\"thumb_media_id\" content=\"...\"> to HTML"))

@@ -64,30 +64,29 @@ func extractAuthor(htmlContent string) string {
 	return author
 }
 
-// extractThumbMediaID extracts the cover media_id from
-// <meta name="thumb_media_id" content="..."> in HTML.
-func extractThumbMediaID(htmlContent string) string {
+// extractThumbMediaID extracts the cover media_id from sidecar YAML first,
+// falling back to <meta name="thumb_media_id" content="..."> in the HTML content.
+func extractThumbMediaID(htmlContent, filePath string) string {
+	// Prefer sidecar YAML
+	if meta, ok := readSidecarYAML(filePath); ok && meta.ThumbMediaID != "" {
+		return meta.ThumbMediaID
+	}
+	// Fallback: <meta name="thumb_media_id" content="..."> in HTML
 	lower := strings.ToLower(htmlContent)
-	marker := `<meta name="thumb_media_id" content="`
-	start := strings.Index(lower, marker)
-	if start < 0 {
-		// Try with single quotes
-		marker = `<meta name="thumb_media_id" content='`
-		start = strings.Index(lower, marker)
+	for _, quote := range []string{`"`, `'`} {
+		marker := `<meta name="thumb_media_id" content=` + quote
+		start := strings.Index(lower, marker)
 		if start < 0 {
-			return ""
+			continue
 		}
+		start += len(marker)
+		end := strings.Index(htmlContent[start:], quote)
+		if end < 0 {
+			continue
+		}
+		return strings.TrimSpace(htmlContent[start : start+end])
 	}
-	start += len(marker)
-	end := strings.Index(htmlContent[start:], `"`)
-	if end < 0 {
-		end = strings.Index(htmlContent[start:], `'`)
-	}
-	if end < 0 {
-		return ""
-	}
-	thumb := htmlContent[start : start+end]
-	return strings.TrimSpace(thumb)
+	return ""
 }
 
 // --- Sidecar YAML helpers ---

@@ -97,8 +97,7 @@ slingshot draft add article.html
 slingshot draft add article.html --title "我的文章标题"
 
 # 指定封面 media_id（覆盖 HTML 中的 <meta>）
-slingshot draft add article.html --thumb <media_id>
-```
+PM0a ```
 
 ### 4. 管理草稿
 
@@ -106,11 +105,17 @@ slingshot draft add article.html --thumb <media_id>
 # 列出所有草稿
 slingshot draft list
 
-# 查看草稿详情（查看文章内容等）
+# 查看草稿详情
 slingshot draft show <media_id>
 
-# 更新草稿
-slingshot draft update <media_id> article.html
+# 更新草稿（自动检测 media_id：sidecar YAML 优先 → 兜底第一篇草稿）
+slingshot draft update article.html
+
+# 更新草稿（多图文第 N 篇，0-based）
+slingshot draft update article.html --index 1
+
+# 更新草稿并换封面
+slingshot draft update article.html --thumb <media_id>
 
 # 删除草稿
 slingshot draft remove <media_id>
@@ -136,7 +141,6 @@ slingshot meterial show <media_id>
 slingshot meterial show <media_id> --output image.jpg
 
 # 删除素材
-slingshot meterial remove <media_id>
 ```
 
 ## 端到端示例
@@ -160,12 +164,13 @@ slingshot draft list
 # 4. 查看创建结果
 slingshot draft show <media_id>
 
-# 5. 修改后更新
-slingshot draft update <media_id> my-article.html
+# 5. 修改后更新（自动用 sidecar YAML 中的 media_id）
+slingshot draft update my-article.html
 
 # 6. 管理封面图片
 slingshot meterial list --type image
 slingshot meterial add cover.jpg
+```
 
 ## 注意事项
 
