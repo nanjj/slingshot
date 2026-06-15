@@ -351,11 +351,14 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 
 // --- Custom list renderer ---
 //
-// WeChat does not support <ul>/<ol>/<li> tags. Lists must be rendered as
-// <p> with <span> items using bullet or number characters. This renderer
-// replaces the default goldmark list rendering for WeChat compatibility.
+// WeChat does not support nested <ol>/<li>. All list items must be rendered
+// as flat siblings inside a single container, with nesting depth expressed
+// via padding-left on each item.
 
-type listRenderer struct{}
+type listRenderer struct {
+	depth     int // current list nesting depth (0 = outermost)
+	inSection bool
+}
 
 func (r *listRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindList, r.renderList)
@@ -366,18 +369,32 @@ func (r *listRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 func (r *listRenderer) renderList(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	list := n.(*ast.List)
 	if entering {
-		if list.IsOrdered() {
-			_, _ = w.WriteString(`<ol style="`)
+		if r.depth == 0 {
+			// Outermost list — open container.
+			if list.IsOrdered() {
+				_, _ = w.WriteString(`<ol style="`)
+			} else {
+				_, _ = w.WriteString(`<ul style="`)
+			}
+			_, _ = w.WriteString(styleListContainer)
+			_, _ = w.WriteString(`">` + "\n")
 		} else {
-			_, _ = w.WriteString(`<ul style="`)
+			// Nested list — close the parent list item that's still open.
+			if r.inSection {
+				_, _ = w.WriteString(`</section></li>` + "\n")
+				r.inSection = false
+			}
 		}
-		_, _ = w.WriteString(styleListContainer)
-		_, _ = w.WriteString(`">` + "\n")
+		r.depth++
 	} else {
-		if list.IsOrdered() {
-			_, _ = w.WriteString("</ol>\n")
-		} else {
-			_, _ = w.WriteString("</ul>\n")
+		r.depth--
+		if r.depth == 0 {
+			// Outermost list — close container.
+			if list.IsOrdered() {
+				_, _ = w.WriteString("</ol>\n")
+			} else {
+				_, _ = w.WriteString("</ul>\n")
+			}
 		}
 	}
 	return ast.WalkContinue, nil
@@ -385,13 +402,13 @@ func (r *listRenderer) renderList(w util.BufWriter, source []byte, n ast.Node, e
 
 func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
-		_, _ = w.WriteString(`<li style="`)
-		_, _ = w.WriteString(styleListItem)
-		_, _ = w.WriteString(`">`)
-		// Open <section> wrapper — WeChat's standard content container.
-		// This matches how manually crafted WeChat articles structure list items,
-		// providing consistent spacing in WeChat's renderer.
-		_, _ = w.WriteString(`<section style="margin:0;padding:0">`)
+		itemDepth := r.depth - 1 // depth includes current list level
+		// Each nesting level adds 1.5em of padding-left on top of
+		// the container's base 1.5em padding.
+		padding := float64(itemDepth) * 1.5
+		_, _ = fmt.Fprintf(w, `<li style="display:block;margin:0 8px;padding-left:%.1fem"><section style="margin:0;padding:0">`, padding)
+		r.inSection = true
+
 		// Determine bullet character or number
 		parent := n.Parent()
 		if parent != nil && parent.Kind() == ast.KindList {
@@ -411,7 +428,10 @@ func (r *listRenderer) renderListItem(w util.BufWriter, source []byte, n ast.Nod
 			_, _ = w.WriteString("• ")
 		}
 	} else {
-		_, _ = w.WriteString(`</section></li>` + "\n")
+		if r.inSection {
+			_, _ = w.WriteString(`</section></li>` + "\n")
+			r.inSection = false
+		}
 	}
 	return ast.WalkContinue, nil
 }
