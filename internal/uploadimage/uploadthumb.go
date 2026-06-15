@@ -30,15 +30,17 @@ type ThumbUploadResponse struct {
 }
 
 // UploadThumb uploads an image file as permanent material and returns its
-// media_id. The media_id can be used as thumb_media_id in draft/add or draft/update.
+// media_id and URL. The media_id can be used as thumb_media_id in draft/add
+// or draft/update. The URL can be used in article content — saving both
+// avoids a separate content-image upload for the same file.
 //
 // The upload uses cgi-bin/material/add_material?type=image which stores the
 // image permanently in WeChat's material management system.
-func UploadThumb(token, filePath string) (mediaID string, err error) {
+func UploadThumb(token, filePath string) (mediaID, url string, err error) {
 	// Validate file exists and is readable
 	f, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("opening image file %q: %w", filePath, err)
+		return "", "", fmt.Errorf("opening image file %q: %w", filePath, err)
 	}
 	defer f.Close()
 
@@ -48,36 +50,37 @@ func UploadThumb(token, filePath string) (mediaID string, err error) {
 
 	fw, err := w.CreateFormFile("media", filepath.Base(filePath))
 	if err != nil {
-		return "", fmt.Errorf("creating form file: %w", err)
+		return "", "", fmt.Errorf("creating form file: %w", err)
 	}
 
 	if _, err := io.Copy(fw, f); err != nil {
-		return "", fmt.Errorf("copying file content: %w", err)
+		return "", "", fmt.Errorf("copying file content: %w", err)
 	}
 	if err := w.Close(); err != nil {
-		return "", fmt.Errorf("closing multipart writer: %w", err)
+		return "", "", fmt.Errorf("closing multipart writer: %w", err)
 	}
 
 	// Build and send request
-	url := fmt.Sprintf("%s?access_token=%s&type=image", MaterialUploadURL, token)
-	resp, err := http.Post(url, w.FormDataContentType(), &buf) //nolint:gosec // token is from config
+	urlStr := fmt.Sprintf("%s?access_token=%s&type=image", MaterialUploadURL, token)
+	resp, err := http.Post(urlStr, w.FormDataContentType(), &buf) //nolint:gosec // token is from config
 	if err != nil {
-		return "", fmt.Errorf("HTTP request failed: %w", err)
+		return "", "", fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Decode response
 	var tr ThumbUploadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return "", fmt.Errorf("decoding response: %w", err)
+		return "", "", fmt.Errorf("decoding response: %w", err)
 	}
 
 	if tr.ErrCode != 0 {
-		return "", fmt.Errorf("WeChat upload error (code %d): %s", tr.ErrCode, tr.ErrMsg)
+		return "", "", fmt.Errorf("WeChat upload error (code %d): %s", tr.ErrCode, tr.ErrMsg)
 	}
 	if tr.MediaID == "" {
-		return "", fmt.Errorf("empty media_id in upload response")
+		return "", "", fmt.Errorf("empty media_id in upload response")
 	}
 
-	return tr.MediaID, nil
+	return tr.MediaID, tr.URL, nil
 }
+

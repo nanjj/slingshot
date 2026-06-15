@@ -130,23 +130,31 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 		thumbPath = filepath.Clean(thumbPath)
 
 		if _, err := os.Stat(thumbPath); err == nil {
-			// File exists — upload as permanent material
-			cache := uploadcache.Load(baseDir)
+			thumbBaseName := filepath.Base(thumbPath)
+			cache := uploadcache.LoadCache(baseDir)
 			key, err := uploadcache.Key(thumbPath)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
 			} else {
-				// Check cache first
-				if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
+				// Check cache by md5 key, then by filename
+				var cachedMediaID string
+
+				if mid, ok := cache.GetMediaID(key); ok && mid != "" {
+					cachedMediaID = mid
+				} else if entry, ok := cache.GetByFilename(thumbBaseName); ok && entry.MediaID != "" {
+					cachedMediaID = entry.MediaID
+				}
+
+				if cachedMediaID != "" && cachedMediaID != "0" {
 					thumbMediaID = cachedMediaID
 					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
-						filepath.Base(thumbPath), thumbMediaID)
+						thumbBaseName, thumbMediaID)
 				} else {
 					// Convert SVG thumbnail to PNG if needed
 					thumbUploadPath, thumbCleanup := maybeConvertSVG(thumbPath, cmd.ErrOrStderr())
 
 					fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbUploadPath)
-					mediaID, err := uploadimage.UploadThumb(token, thumbUploadPath)
+					mediaID, thumbURL, err := uploadimage.UploadThumb(token, thumbUploadPath)
 					if thumbCleanup {
 						os.Remove(thumbUploadPath)
 					}
@@ -154,14 +162,14 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) error {
 						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
 					} else {
 						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
+						cache.SetEntry(key, thumbBaseName, thumbURL, mediaID)
 						thumbMediaID = mediaID
-						cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
 					}
 				}
-				// Save cache after thumbnail upload
-				if err := cache.Save(); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
-				}
+			}
+			// Save cache after thumbnail upload
+			if err := cache.Save(); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
 			}
 		} else {
 			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail file %q not found, passing value as-is "+

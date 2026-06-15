@@ -45,8 +45,8 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 		return fmt.Errorf("getting WeChat access token: %w", err)
 	}
 
-	// Step 3: Load image upload cache and upload (or skip cached) images
-	cache := uploadcache.Load(baseDir)
+	// Step 3: Load image upload cache (local + global) and upload (or skip cached) images
+	cache := uploadcache.LoadCache(baseDir)
 
 	uploaded := make(map[string]string)     // AbsPath → WeChat URL
 	replacements := make(map[string]string) // original Src → WeChat URL
@@ -64,18 +64,31 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 			continue
 		}
 
-		// Compute cache key: md5 checksum
+		baseName := filepath.Base(ref.AbsPath)
+
+		// Check cache by md5 key first
 		key, err := uploadcache.Key(ref.AbsPath)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for %s: %v\n"), ref.AbsPath, err)
 			continue
 		}
 
-		// Check image upload cache
 		if cachedURL, ok := cache.Get(key); ok && cachedURL != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached %s -> %s\n"), filepath.Base(ref.AbsPath), cachedURL)
+			fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached %s -> %s\n"), baseName, cachedURL)
 			uploaded[ref.AbsPath] = cachedURL
 			replacements[ref.Src] = cachedURL
+			continue
+		}
+
+		// Check cache by filename — if the same filename was already uploaded
+		// (e.g. as a thumbnail permanent material), reuse its URL to avoid
+		// uploading the image again.
+		if entry, ok := cache.GetByFilename(baseName); ok && entry.URL != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached %s (by filename) -> %s\n"), baseName, entry.URL)
+			// Also cache under the new md5 key for future lookups
+			cache.Set(key, baseName, entry.URL)
+			uploaded[ref.AbsPath] = entry.URL
+			replacements[ref.Src] = entry.URL
 			continue
 		}
 
@@ -93,8 +106,8 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 			continue
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded %s -> %s\n"), filepath.Base(ref.AbsPath), resp.URL)
-		cache.Set(key, filepath.Base(ref.AbsPath), resp.URL)
+		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded %s -> %s\n"), baseName, resp.URL)
+		cache.Set(key, baseName, resp.URL)
 		uploaded[ref.AbsPath] = resp.URL
 		replacements[ref.Src] = resp.URL
 	}
@@ -103,7 +116,7 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 		fmt.Fprintln(cmd.ErrOrStderr(), i18n.G("Warning: no images were uploaded, saving original HTML"))
 	}
 
-	// Save image upload cache
+	// Save image upload cache (also syncs to global cache)
 	if err := cache.Save(); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
 	}
@@ -123,22 +136,32 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 			thumbPath = filepath.Clean(thumbPath)
 
 			if _, err := os.Stat(thumbPath); err == nil {
+				thumbBaseName := filepath.Base(thumbPath)
+
 				// File exists — upload as permanent material
 				key, err := uploadcache.Key(thumbPath)
 				if err != nil {
 					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: checksum failed for thumbnail %s: %v\n"), thumbPath, err)
 				} else {
-					// Check cache first
-					if cachedMediaID, ok := cache.GetMediaID(key); ok && cachedMediaID != "" {
+					// Check cache by md5 key, then by filename
+					var cachedMediaID string
+
+					if mid, ok := cache.GetMediaID(key); ok && mid != "" {
+						cachedMediaID = mid
+					} else if entry, ok := cache.GetByFilename(thumbBaseName); ok && entry.MediaID != "" {
+						cachedMediaID = entry.MediaID
+					}
+
+					if cachedMediaID != "" && cachedMediaID != "0" {
 						thumbMediaID = cachedMediaID
 						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail %s -> %s\n"),
-							filepath.Base(thumbPath), thumbMediaID)
+							thumbBaseName, thumbMediaID)
 					} else {
 						// Convert SVG thumbnail to PNG if needed
 						thumbUploadPath, thumbCleanup := maybeConvertSVG(thumbPath, cmd.ErrOrStderr())
 
 						fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploading thumbnail %s...\n"), thumbUploadPath)
-						mediaID, err := uploadimage.UploadThumb(token, thumbUploadPath)
+						mediaID, thumbURL, err := uploadimage.UploadThumb(token, thumbUploadPath)
 						if thumbCleanup {
 							os.Remove(thumbUploadPath)
 						}
@@ -146,18 +169,21 @@ func (c *cmdDraftConvert) runUpload(cmd *cobra.Command, result *mdtowx.Result, h
 							fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: thumbnail upload failed for %s: %v\n"), thumbPath, err)
 						} else {
 							fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Uploaded thumbnail -> media_id: %s\n"), mediaID)
-							cache.SetMediaID(key, filepath.Base(thumbPath), mediaID)
+							// Save both media_id and URL so content images with the same filename
+							// can reuse the URL without a separate upload.
+							cache.SetEntry(key, thumbBaseName, thumbURL, mediaID)
 							thumbMediaID = mediaID
 						}
 					}
-					// Save cache after thumbnail upload (in case of partial updates)
-					if err := cache.Save(); err != nil {
-						fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
-					}
+				}
+				// Save cache after thumbnail upload (in case of partial updates)
+				if err := cache.Save(); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save image cache: %v\n"), err)
 				}
 			} else {
 				// File doesn't exist as a local path — fall through and use original value as-is
 			}
+
 		}
 		// No image extension → treat as an already-valid media_id, keep it as-is
 	}

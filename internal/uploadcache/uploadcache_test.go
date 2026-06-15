@@ -362,3 +362,194 @@ func TestMediaIDRoundTripViaDisk(t *testing.T) {
 		t.Errorf("expected media_abc after reload, got %q, ok=%v", mediaID, ok)
 	}
 }
+
+// --- LoadCache / new functionality tests ---
+
+func TestLoadCacheBypassesGlobal(t *testing.T) {
+	// LoadCache should work even without a global cache (normal case).
+	// Verify it falls back gracefully.
+	dir := t.TempDir()
+	c := LoadCache(dir)
+	if c == nil {
+		t.Fatal("LoadCache() returned nil")
+	}
+	if c.Path() != filepath.Join(dir, "images.yaml") {
+		t.Errorf("unexpected path: %q", c.Path())
+	}
+	c.Set("k1", "a.png", "http://url")
+	url, ok := c.Get("k1")
+	if !ok || url != "http://url" {
+		t.Errorf("expected http://url, got %q, ok=%v", url, ok)
+	}
+}
+
+func TestGetByFilename(t *testing.T) {
+	dir := t.TempDir()
+	c := LoadCache(dir)
+
+	// Set some entries
+	c.Set("key1", "photo.png", "http://url1")
+	c.Set("key2", "logo.jpg", "http://url2")
+
+	// Find by filename
+	entry, ok := c.GetByFilename("photo.png")
+	if !ok {
+		t.Fatal("expected to find photo.png by filename")
+	}
+	if entry.URL != "http://url1" {
+		t.Errorf("expected url1, got %q", entry.URL)
+	}
+
+	// Find second entry
+	entry, ok = c.GetByFilename("logo.jpg")
+	if !ok {
+		t.Fatal("expected to find logo.jpg by filename")
+	}
+	if entry.URL != "http://url2" {
+		t.Errorf("expected url2, got %q", entry.URL)
+	}
+
+	// Missing entry
+	if _, ok := c.GetByFilename("missing.png"); ok {
+		t.Error("expected missing entry to return false")
+	}
+}
+
+func TestHasFilename(t *testing.T) {
+	dir := t.TempDir()
+	c := LoadCache(dir)
+	c.Set("k1", "test.png", "http://url")
+
+	if !c.HasFilename("test.png") {
+		t.Error("expected HasFilename to return true for test.png")
+	}
+	if c.HasFilename("nope.jpg") {
+		t.Error("expected HasFilename to return false for nope.jpg")
+	}
+}
+
+func TestSetEntry(t *testing.T) {
+	dir := t.TempDir()
+	c := LoadCache(dir)
+
+	// Set a full entry with both URL and MediaID
+	c.SetEntry("k1", "cover.png", "http://url", "media_123")
+
+	url, ok := c.Get("k1")
+	if !ok || url != "http://url" {
+		t.Errorf("expected http://url, got %q, ok=%v", url, ok)
+	}
+	mid, ok := c.GetMediaID("k1")
+	if !ok || mid != "media_123" {
+		t.Errorf("expected media_123, got %q, ok=%v", mid, ok)
+	}
+
+	// Also verify it's findable by filename
+	entry, ok := c.GetByFilename("cover.png")
+	if !ok {
+		t.Fatal("expected to find cover.png by filename")
+	}
+	if entry.URL != "http://url" || entry.MediaID != "media_123" {
+		t.Errorf("unexpected entry: %+v", entry)
+	}
+}
+
+func TestSetEntryNoop(t *testing.T) {
+	dir := t.TempDir()
+	c := LoadCache(dir)
+	c.SetEntry("k1", "img.png", "http://url", "mid")
+	c.dirty = false
+	c.SetEntry("k1", "img.png", "http://url", "mid")
+	if c.dirty {
+		t.Error("dirty should be false when setting same entry")
+	}
+}
+
+func TestGetByFilenameAcrossLocal(t *testing.T) {
+	// Test that GetByFilename finds entries that were set via SetEntry
+	dir := t.TempDir()
+	c := LoadCache(dir)
+
+	c.SetEntry("thumb1", "cover.jpg", "http://cover-url", "media_cover")
+	c.Set("img1", "photo.png", "http://photo-url")
+
+	// Should find both by filename
+	entry, ok := c.GetByFilename("cover.jpg")
+	if !ok || entry.URL != "http://cover-url" || entry.MediaID != "media_cover" {
+		t.Errorf("unexpected cover entry: %+v", entry)
+	}
+
+	entry, ok = c.GetByFilename("photo.png")
+	if !ok || entry.URL != "http://photo-url" {
+		t.Errorf("unexpected photo entry: %+v", entry)
+	}
+}
+
+func TestGlobalCacheSync(t *testing.T) {
+	// Save saves to global cache as well. Verify global cache file is created.
+	// We need to override globalCacheDir to point to a temp dir.
+	origGlobalDir := globalCacheDir
+	globalDir := t.TempDir()
+	globalCacheDir = func() string { return globalDir }
+	defer func() { globalCacheDir = origGlobalDir }()
+
+	// Create a local cache and save
+	localDir := t.TempDir()
+	c := LoadCache(localDir)
+	c.Set("k1", "test.png", "http://url1")
+	c.SetMediaID("k2", "cover.jpg", "media_abc")
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Global cache file should exist
+	gp := filepath.Join(globalDir, "images.yaml")
+	if _, err := os.Stat(gp); os.IsNotExist(err) {
+		t.Fatal("global cache file was not created")
+	}
+
+	// Load from a different local dir — should merge global entries
+	localDir2 := t.TempDir()
+	c2 := LoadCache(localDir2)
+
+	// Should find entries from global cache
+	if url, ok := c2.Get("k1"); !ok || url != "http://url1" {
+		t.Errorf("expected http://url1 from global cache, got %q, ok=%v", url, ok)
+	}
+	if mid, ok := c2.GetMediaID("k2"); !ok || mid != "media_abc" {
+		t.Errorf("expected media_abc from global cache, got %q, ok=%v", mid, ok)
+	}
+
+	// Should also be findable by filename
+	if !c2.HasFilename("test.png") {
+		t.Error("expected to find test.png by filename from global cache")
+	}
+	if !c2.HasFilename("cover.jpg") {
+		t.Error("expected to find cover.jpg by filename from global cache")
+	}
+}
+
+func TestLocalOverridesGlobal(t *testing.T) {
+	// Local cache entries should override global entries with the same key
+	origGlobalDir := globalCacheDir
+	globalDir := t.TempDir()
+	globalCacheDir = func() string { return globalDir }
+	defer func() { globalCacheDir = origGlobalDir }()
+
+	// Create and save a global cache entry
+	localDir1 := t.TempDir()
+	c1 := LoadCache(localDir1)
+	c1.Set("k1", "test.png", "http://global-url")
+	c1.Save()
+
+	// Load from a different local dir with a conflicting key
+	localDir2 := t.TempDir()
+	c2 := LoadCache(localDir2)
+	c2.Set("k1", "test.png", "http://local-url")
+
+	// Local should override global
+	url, ok := c2.Get("k1")
+	if !ok || url != "http://local-url" {
+		t.Errorf("expected local url, got %q, ok=%v", url, ok)
+	}
+}

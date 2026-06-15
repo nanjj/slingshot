@@ -26,7 +26,7 @@ func replaceLocalImagePaths(html []byte, file string, stderr io.Writer) []byte {
 		return html
 	}
 
-	cache := uploadcache.Load(baseDir)
+	cache := uploadcache.LoadCache(baseDir)
 	replacements := make(map[string]string)
 
 	for _, ref := range refs {

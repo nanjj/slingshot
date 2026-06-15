@@ -171,12 +171,15 @@ func TestUploadThumb(t *testing.T) {
 		MaterialUploadURL = srv.URL
 		defer func() { MaterialUploadURL = originalURL }()
 
-		mediaID, err := UploadThumb("test_token", imgPath)
+		mediaID, url, err := UploadThumb("test_token", imgPath)
 		if err != nil {
 			t.Fatalf("UploadThumb() error = %v", err)
 		}
 		if mediaID != "abc123def456" {
 			t.Errorf("expected media_id 'abc123def456', got %q", mediaID)
+		}
+		if url != "http://mmbiz.qpic.cn/cover123" {
+			t.Errorf("expected url 'http://mmbiz.qpic.cn/cover123', got %q", url)
 		}
 	})
 
@@ -199,7 +202,7 @@ func TestUploadThumb(t *testing.T) {
 		MaterialUploadURL = srv.URL
 		defer func() { MaterialUploadURL = originalURL }()
 
-		_, err := UploadThumb("token", imgPath)
+		_, _, err := UploadThumb("token", imgPath)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -209,7 +212,7 @@ func TestUploadThumb(t *testing.T) {
 	})
 
 	t.Run("file_not_found", func(t *testing.T) {
-		_, err := UploadThumb("token", "/nonexistent/cover.jpg")
+		_, _, err := UploadThumb("token", "/nonexistent/cover.jpg")
 		if err == nil {
 			t.Fatal("expected error for missing file, got nil")
 		}
@@ -236,9 +239,10 @@ func TestUploadThumb(t *testing.T) {
 		MaterialUploadURL = srv.URL
 		defer func() { MaterialUploadURL = originalURL }()
 
-		_, err := UploadThumb("token", imgPath)
+		_, _, err := UploadThumb("token", imgPath)
 		if err == nil {
 			t.Fatal("expected error for empty media_id, got nil")
 		}
 	})
 }
+
