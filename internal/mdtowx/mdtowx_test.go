@@ -51,7 +51,8 @@ func TestConvertMarkdown(t *testing.T) {
 				`<strong>bold</strong>`,
 				`<em>italic</em>`,
 				// codespan - check partial style match
-				`<code style="text-align:left;color:#ff3502;line-height:1.5;font-size:90%`,
+				`<code style="text-align:left;line-height:1.5;font-size:90%`,
+				`font-weight:bold`,
 				`>code</code>`,
 				`<del style="text-decoration:line-through">strike</del>`,
 			},

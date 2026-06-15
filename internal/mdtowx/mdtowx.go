@@ -164,8 +164,9 @@ const (
 	styleParagraph  = "text-align:left;line-height:1.6;font-size:16px;margin:10px 10px"
 	styleBlockquote = "text-align:left;color:rgb(91,91,91);line-height:1.5;font-size:16px" +
 		";margin:20px 10px;padding:1px 0 1px 10px;background:rgba(158,158,158,0.1);border-left:3px solid rgb(158,158,158)"
-	styleCodeSpan = "text-align:left;color:#ff3502;line-height:1.5;font-size:90%;" +
-		"font-family:Operator Mono, Consolas, Monaco, Menlo, monospace;background:#f8f5ec;padding:3px 5px;border-radius:2px"
+	styleCodeSpan = "text-align:left;line-height:1.5;font-size:90%;" +
+		"font-family:Operator Mono, Consolas, Monaco, Menlo, monospace;" +
+		"background:rgba(0,0,0,0.06);padding:2px 5px;border-radius:2px;font-weight:bold"
 	styleLink      = "color:rgb(13,117,252);text-decoration:none"
 	styleImage     = "max-width:100%;height:auto;display:block;margin:0.8em 0"
 	styleTable     = "text-align:left;line-height:1.5;font-size:16px;border-collapse:collapse;margin:20px 0"
