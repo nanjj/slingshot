@@ -508,31 +508,6 @@ func newGoldmark() goldmark.Markdown {
 	)
 }
 
-// replaceMathSymbols replaces >= with ≥ and <= with ≤ in Markdown text,
-// skipping fenced code blocks. This avoids relying on HTML named entities
-// (&ge;, &le;) which WeChat's XML-based pipeline may not decode correctly.
-func replaceMathSymbols(source []byte) []byte {
-	lines := bytes.Split(source, []byte("\n"))
-	var result [][]byte
-	inFence := false
-	for _, line := range lines {
-		trimmed := bytes.TrimSpace(line)
-		if bytes.HasPrefix(trimmed, []byte("```")) {
-			inFence = !inFence
-			result = append(result, line)
-			continue
-		}
-		if inFence {
-			result = append(result, line)
-			continue
-		}
-		// Outside fenced code: replace >= and <=
-		line = bytes.ReplaceAll(line, []byte(">="), []byte("≥"))
-		line = bytes.ReplaceAll(line, []byte("<="), []byte("≤"))
-		result = append(result, line)
-	}
-	return bytes.Join(result, []byte("\n"))
-}
 
 // --- Public API ---
 // ConvertMarkdown converts Markdown source bytes to WeChat-friendly HTML.
@@ -550,11 +525,6 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 		return nil, err
 	}
 	author := SanitizeAuthor(fm.Author)
-
-	// 3. Pre-process: replace >= with ≥ and <= with ≤ outside code blocks.
-	//    WeChat's XML pipeline may not decode named HTML entities correctly,
-	//    so we use Unicode characters directly.
-	body = replaceMathSymbols(body)
 
 	md := newGoldmark()
 
