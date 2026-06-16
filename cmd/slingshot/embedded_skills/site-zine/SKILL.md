@@ -125,10 +125,6 @@ Multilingual {
 ## 快速参考
 
 ```bash
-# 安装（Linux x86_64 示意）
-curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
-tar xf x86_64-linux-musl.tar.xz && install zine ~/bin/
-
 # 本地开发
 zine serve                    # 热重载开发服务器 :8080
 
