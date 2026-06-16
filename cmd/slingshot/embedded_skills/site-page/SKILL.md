@@ -360,5 +360,5 @@ slingshot site rsync docs
 - **图片复制**：仅在添加/更新页面时执行，不会跟踪后续的图片更改
 - **Emacs 依赖**：`.org` → `.html` 转换需要 GNU Emacs（≥ 26.1）。如果未安装，先用 Emacs GUI 导出 `.html`，再执行 `page add <site> <file.html>`
 - **索引覆盖**：`regenerateSiteIndex` 会覆盖站点根目录的 `index.html`，自定义首页会被覆盖
-- **zine 构建**：`zine release --force` 需要系统安装 [Zine](https://zine.tools/)（`go install zine.tools/go@latest`）
+- **zine 构建**：`zine release --force` 需要系统安装 [Zine](https://zine-ssg.io/)（从 [GitHub Releases](https://github.com/kristoff-it/zine/releases) 下载静态二进制）
 - **本地预览**：在 zine 站点目录运行 `zine serve` 启动开发服务器，默认端口 8080

@@ -1,6 +1,6 @@
 ---
 name: site-zine
-description: Zine 静态站点全流程 — git 管理/rsync 联动/浏览器测试/参考
+description: Zine 静态站点 — 安装/git管理/rsync联动/CLI注意
 author: JUN JIE NAN <nanjunjie@gmail.com>
 keywords:
   - zine
@@ -17,19 +17,36 @@ keywords:
   - smd
   - ziggy
   - multilingual
+  - kristoff-it
 ---
 
 # site-zine — Zine 站点实战经验
 
-## 1. 🗂️ Zine 站点目录本身就是一个 git 仓库
+## 0. 📦 安装
 
 ```bash
-cd ~/my-zine-site
-git init
-git add .
+# Linux x86_64
+curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
+tar xf x86_64-linux-musl.tar.xz
+sudo install zine /usr/local/bin/
+
+# macOS x86_64
+curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-macos.zip
+unzip x86_64-macos.zip
+sudo install zine /usr/local/bin/
+
+# macOS ARM
+curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/aarch64-macos.zip
+unzip aarch64-macos.zip
+sudo install zine /usr/local/bin/
 ```
 
-### public/ 必须在 .gitignore 中
+- 官方文档：<https://zine-ssg.io/>
+- 源码/发布：<https://github.com/kristoff-it/zine/releases>
+
+---
+
+## 1. 🗂️ public/ 必须在 .gitignore 中
 
 ```gitignore
 public/
@@ -77,10 +94,7 @@ slingshot site rsync mysite
 ## 3. 🌐 浏览器测试清单
 
 ```bash
-# 启动开发服务器
 cd /path/to/site && zine serve
-
-# 用浏览器访问 localhost:8080 检查：
 ```
 
 - [ ] 首页加载正常
@@ -92,14 +106,15 @@ cd /path/to/site && zine serve
 
 ---
 
-## 4. Zine CLI 局限
+## 4. ⚠️ CLI 注意事项
 
-- 不支持 `--explain` 或 `--dry-run`（AI 无法安全地探索命令）
-- 错误信息有时不够明确
-- i18n 需要手动维护键值对
-- 无内置页面管理（用 slingshot `page add/update/remove` 替代）
+- **不支持 `--explain`/`--dry-run`** → AI 无法安全地探索命令。对策：用 `slingshot site rsync` 部署（自动构建），本地用 `zine release --force` 后检查 `public/`
+- **`zine serve` 不适合 AI** → 热重载服务器是给人用的。AI 直接用 `zine release --force` 构建，打开 `public/index.html` 检查
+- **错误信息不明确** → 报错时先检查 `zine.ziggy`（Multilingual、pages 配置），然后检查 `.smd` 文件格式
+- **i18n 手动维护** → 修改 `i18n/` 下的翻译键值对后重新构建
+- **无内置页面管理** → 用 slingshot `page add/update/remove` 替代
 
-zine.ziggy 中的 Multilingual 配置是站点结构的关键入口：
+### zine.ziggy 参考
 
 ```ziggy
 Multilingual {
@@ -121,6 +136,10 @@ Multilingual {
 ## 快速参考
 
 ```bash
+# 安装（Linux x86_64）
+curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
+tar xf x86_64-linux-musl.tar.xz && sudo install zine /usr/local/bin/
+
 # 本地开发
 zine serve                    # 热重载开发服务器 :8080
 
@@ -134,3 +153,4 @@ slingshot site rsync mysite   # 自动构建 + 从 public/ rsync
 
 # 检查站点配置
 slingshot site list
+```
