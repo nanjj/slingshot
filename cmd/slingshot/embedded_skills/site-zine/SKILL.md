@@ -137,8 +137,7 @@ zine release --force          # 构建到 public/
 
 # 通过 slingshot 部署
 slingshot site add mysite dir ~/mysite type zine \
-  rsync 'rsync -avz --delete ./ user@host:/path'
-slingshot site rsync mysite   # 自动构建 + 从 public/ rsync
+  rsync 'rsync -avz --delete ./public user@host:/path'
 
 # 检查站点配置
 slingshot site list
