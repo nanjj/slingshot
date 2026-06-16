@@ -15,21 +15,29 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 )
 
 var (
 	// 缓存已加载的翻译表: lang -> { msgid -> msgstr }
+	// 通过 init() 预先加载所有嵌入的 .po 文件。
 	translations map[string]map[string]string
 
 	// 检测到的语言 (从环境变量)
 	detectedLang string
 
-	once sync.Once
+	// 记录所有已加载的语言列表 (包括空表), 用于判断 .po 文件是否存在
+	loadedLocales map[string]bool
 )
 
 // poLineRE 匹配 .po 文件中的 msgid/msgstr 行
 var poLineRE = regexp.MustCompile(`^(msgid|msgstr)\s+"(.*)"\s*$`)
+
+func init() {
+	translations = make(map[string]map[string]string)
+	loadedLocales = make(map[string]bool)
+	loadAllTranslations()
+	detectedLang = detectLang()
+}
 
 // detectLang 从环境变量检测用户语言。
 // 优先级: LANGUAGE > LC_ALL > LANG
@@ -57,11 +65,8 @@ func detectLang() string {
 	return "en_US"
 }
 
-// loadTranslations 从嵌入的 locales/ 目录加载所有 .po 文件。
-func loadTranslations() {
-	translations = make(map[string]map[string]string)
-	detectedLang = detectLang()
-
+// loadAllTranslations 从嵌入的 locales/ 目录加载所有 .po 文件。
+func loadAllTranslations() {
 	entries, err := localesFS.ReadDir("locales")
 	if err != nil {
 		// 没有嵌入翻译数据 (编译时未找到匹配文件)
@@ -80,8 +85,10 @@ func loadTranslations() {
 		}
 
 		table := parsePO(string(data))
-		if len(table) > 0 {
-			translations[lang] = table
+		translations[lang] = table
+		loadedLocales[lang] = true
+		if len(table) == 0 {
+			// 空表也记录, 表示 .po 文件存在但无条目
 		}
 	}
 }
@@ -171,8 +178,6 @@ func unescapePO(s string) string {
 // 如果当前语言没有翻译, 返回 msgid 本身 (回退到英文)。
 // 如果当前语言的 .po 文件存在但缺少该 msgid, 则 panic — 提醒开发者添加翻译条目。
 func G(msgid string) string {
-	once.Do(loadTranslations)
-
 	if table, ok := translations[detectedLang]; ok {
 		if translated, ok := table[msgid]; ok {
 			if translated != "" {
@@ -183,6 +188,9 @@ func G(msgid string) string {
 			// key not in table → 开发者忘记添加 .po 条目
 			panic(fmt.Sprintf("i18n: missing translation for %q in locale %s", msgid, detectedLang))
 		}
+	} else if loadedLocales[detectedLang] {
+		// .po 文件存在但解析后为空表, 且缺少该 msgid → 忘记添加条目
+		panic(fmt.Sprintf("i18n: missing translation for %q in locale %s (empty table)", msgid, detectedLang))
 	}
 
 	// 尝试仅语言代码 (如 "zh" 从 "zh_CN")
@@ -202,16 +210,19 @@ func G(msgid string) string {
 	return msgid
 }
 
-
 // SetLocale 强制设置语言 (用于测试)。
+// 翻译表在 init() 中已全部加载, 切换 locale 无需重新加载。
 func SetLocale(lang string) {
-	once.Do(loadTranslations)
 	detectedLang = lang
+}
+
+// CurrentLocale 返回当前语言设置。
+func CurrentLocale() string {
+	return detectedLang
 }
 
 // DumpTranslations 返回当前加载的翻译统计 (用于诊断)。
 func DumpTranslations() string {
-	once.Do(loadTranslations)
 	var b strings.Builder
 	fmt.Fprintf(&b, "detected lang: %s\n", detectedLang)
 	for lang, table := range translations {
