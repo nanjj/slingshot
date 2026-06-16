@@ -119,9 +119,7 @@ func parsePO(data string) map[string]string {
 			val := matches[2]
 
 			// 处理 C 风格转义 (简化)
-			val = strings.ReplaceAll(val, `\\`, `\`)
-			val = strings.ReplaceAll(val, `\"`, `"`)
-			val = strings.ReplaceAll(val, `\n`, "\n")
+			val = unescapePO(val)
 
 			switch key {
 			case "msgid":
@@ -142,11 +140,13 @@ func parsePO(data string) map[string]string {
 			// 多行 msgid (通常不常见, 但支持)
 			cont := strings.TrimSpace(line)
 			cont = strings.Trim(cont, `"`)
+			cont = unescapePO(cont)
 			currentID += cont
 		} else if inStr {
 			// 多行 msgstr
 			cont := strings.TrimSpace(line)
 			cont = strings.Trim(cont, `"`)
+			cont = unescapePO(cont)
 			currentStr += cont
 		}
 	}
@@ -157,6 +157,14 @@ func parsePO(data string) map[string]string {
 	}
 
 	return table
+}
+
+// unescapePO 处理 PO 文件中的 C 风格转义。
+func unescapePO(s string) string {
+	s = strings.ReplaceAll(s, `\\`, `\`)
+	s = strings.ReplaceAll(s, `\"`, `"`)
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	return s
 }
 
 // G 返回 msgid 的翻译。

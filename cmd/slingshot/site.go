@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -51,10 +52,13 @@ func (c *cmdSite) command() *cobra.Command {
 	cmd.Use = "site"
 	cmd.Short = i18n.G("Manage deployment sites")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
-		i18n.G(`Manage static site deployment targets.
+		color.CyanString(i18n.G("Description:")),
+		i18n.G(`Manage static site deployment targets with type-specific workflows.
 
 Each site has a local directory and optional configuration keys (dir, rsync, etc.).
+Site types:
+  page (default)  — Ongoing page additions, rsync from site dir directly.
+  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.
 
 Subcommands:
   list                  List all configured sites
@@ -62,7 +66,7 @@ Subcommands:
   update <name> <k> <v> Update a site's configuration key
   remove <name>         Remove a site
   optimize <name>       Optimize site CSS for responsive display
-  rsync  <name>         Deploy site via rsync (auto-optimizes CSS)
+  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -104,7 +108,7 @@ func (s *cmdSiteSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		s.long,
 	)
 	cmd.RunE = s.run
@@ -185,7 +189,7 @@ func (c *cmdSiteAdd) command() *cobra.Command {
 	cmd.Use = "add " + u.Name.Render() + " [" + u.Key.Render() + " " + u.Value.Render() + "...]"
 	cmd.Short = i18n.G("Add a new site")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Add a new deployment site with key-value configuration pairs.
 
 The first positional argument is the site name. Subsequent arguments are
@@ -196,9 +200,10 @@ Required keys:
 
 Optional keys:
   rsync Rsync deployment command
+  type  Site type: page (default) or zine (auto-build before rsync, public/ output)
 
 Example:
-  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path'`),
+  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path' type zine`),
 	)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
@@ -274,7 +279,7 @@ func (c *cmdSiteUpdate) command() *cobra.Command {
 	cmd.Use = "update " + u.Name.Render() + " " + u.Key.Render() + " " + u.Value.Render()
 	cmd.Short = i18n.G("Update a site setting")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Update a single configuration field on an existing site.
 
 Arguments:
@@ -344,10 +349,10 @@ func (c *cmdSiteUpdate) run(cmd *cobra.Command, args []string) error {
 // the original working directory.
 func doRsync(dir, rsyncCmd string) error {
 	if rsyncCmd == "" {
-		return fmt.Errorf(i18n.G("no rsync command configured"))
+		return errors.New(i18n.G("no rsync command configured"))
 	}
 	if dir == "" {
-		return fmt.Errorf(i18n.G("no directory configured"))
+		return errors.New(i18n.G("no directory configured"))
 	}
 
 	origDir, err := os.Getwd()
@@ -368,7 +373,38 @@ func doRsync(dir, rsyncCmd string) error {
 	return nil
 }
 
-// --- cmdSiteRsync ---
+// doBuild runs 'zine build' in the given directory.
+func doBuild(dir string) error {
+	origDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting current directory: %w", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		return fmt.Errorf("changing to zine site directory: %w", err)
+	}
+	defer os.Chdir(origDir)
+
+	// zine release is the production build command; default output is public/
+	// --force allows overwriting non-empty output directory (normal on re-deploy)
+	cmd := exec.Command("zine", "release", "--force")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	fmt.Printf("  %s %s\n", color.CyanString(i18n.G("Running:")), "zine release --force")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("zine release failed: %w", err)
+	}
+	return nil
+}
+
+// siteTypeLabel returns a human-readable label for a site type.
+func siteTypeLabel(typ string) string {
+	switch typ {
+	case "zine":
+		return "zine"
+	default:
+		return "page"
+	}
+}
 
 type cmdSiteRsync struct {
 	global *cmdGlobal
@@ -379,10 +415,12 @@ func (c *cmdSiteRsync) command() *cobra.Command {
 	cmd.Use = "rsync " + u.Name.Render()
 	cmd.Short = i18n.G("Deploy site via rsync")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Run the configured rsync command to deploy site content to remote.
 
-The command is executed in the site's local directory.`),
+For zine-type sites, automatically runs 'zine build' before rsync
+and executes rsync from the 'public/' output directory.
+For page-type sites, rsync runs directly from the site directory.`),
 	)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
@@ -413,20 +451,36 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(i18n.G("site %q has no rsync command configured"), name)
 	}
 
-	// Auto-optimize CSS before deploying
-	upgraded, err := site.UpgradeCSS(siteConfig.Dir, false)
-	if err != nil {
-		return fmt.Errorf("optimizing site CSS: %w", err)
-	}
-	if upgraded {
-		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("CSS upgraded to responsive version."))
-	}
-
 	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Running rsync for site:"), color.GreenString(name))
 	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Dir:")), siteConfig.Dir)
+	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Type:")), siteTypeLabel(siteConfig.Type))
 	fmt.Fprintf(color.Output, "  %s %s\n", color.CyanString(i18n.G("Command:")), siteConfig.Rsync)
 
-	if err := doRsync(siteConfig.Dir, siteConfig.Rsync); err != nil {
+	// Determine working directory and whether to build
+	isZine := siteConfig.Type == "zine"
+	rsyncDir := siteConfig.Dir
+
+	if isZine {
+		// Zine: build first, then rsync from public/
+		publicDir := filepath.Join(siteConfig.Dir, "public")
+		fmt.Fprintf(color.Output, "  %s %s -> %s\n", color.CyanString(i18n.G("Build:")), i18n.G("zine build"), publicDir)
+
+		if err := doBuild(siteConfig.Dir); err != nil {
+			return err
+		}
+		rsyncDir = publicDir
+	} else {
+		// Page: auto-optimize CSS before deploying
+		upgraded, err := site.UpgradeCSS(siteConfig.Dir, false)
+		if err != nil {
+			return fmt.Errorf("optimizing site CSS: %w", err)
+		}
+		if upgraded {
+			fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("CSS upgraded to responsive version."))
+		}
+	}
+
+	if err := doRsync(rsyncDir, siteConfig.Rsync); err != nil {
 		return err
 	}
 
@@ -458,6 +512,7 @@ func (c *cmdSite) doList(cfg *config.Config, parsed []*u.Parsed) error {
 		if site.Dir != "" {
 			fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Dir:")), site.Dir)
 		}
+		fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Type:")), siteTypeLabel(site.Type))
 		if site.Rsync != "" {
 			fmt.Fprintf(color.Output, "    %s %s\n", color.CyanString(i18n.G("Rsync:")), site.Rsync)
 		}

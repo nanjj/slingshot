@@ -306,3 +306,198 @@ XGe4 msgid "either --touser or --towxname is required for preview"
 
 7ULw msgid "Preview sent for %s\n"
 BpwV msgstr "预览已发送: %s\n"
+
+# Site command translations
+msgid "Manage deployment sites"
+msgstr "管理部署站点"
+
+msgid "List all sites"
+msgstr "列出所有站点"
+
+msgid "List all configured deployment sites."
+msgstr "列出所有已配置的部署站点。"
+
+msgid "Add a new site"
+msgstr "添加新站点"
+
+msgid "Remove a site"
+msgstr "删除站点"
+
+msgid "Remove a deployment site from configuration."
+msgstr "从配置中删除部署站点。"
+
+msgid "Update a site setting"
+msgstr "更新站点设置"
+
+msgid "Deploy site via rsync"
+msgstr "通过 rsync 部署站点"
+
+msgid "'dir' is required"
+msgstr "必须指定 'dir'"
+
+msgid "expected a site name argument"
+msgstr "需要站点名称参数"
+
+msgid "site %q not found"
+msgstr "站点 %q 未找到"
+
+msgid "site %q has no rsync command configured"
+msgstr "站点 %q 未配置 rsync 命令"
+
+msgid "no rsync command configured"
+msgstr "未配置 rsync 命令"
+
+msgid "no directory configured"
+msgstr "未配置目录"
+
+msgid "No sites configured."
+msgstr "没有已配置的站点。"
+
+msgid "Sites (%d total):"
+msgstr "站点（共 %d 个）:"
+
+msgid "Site added:"
+msgstr "站点已添加:"
+
+msgid "Site updated:"
+msgstr "站点已更新:"
+
+msgid "Site removed:"
+msgstr "站点已删除:"
+
+msgid "Running rsync for site:"
+msgstr "正在运行 rsync 部署站点:"
+
+msgid "Dir:"
+msgstr "目录:"
+
+msgid "Type:"
+msgstr "类型:"
+
+msgid "Running:"
+msgstr "运行:"
+
+msgid "Build:"
+msgstr "构建:"
+
+msgid "Command:"
+msgstr "命令:"
+
+msgid "Rsync:"
+msgstr "Rsync:"
+
+msgid "Rsync completed successfully."
+msgstr "Rsync 部署成功。"
+
+msgid "CSS upgraded to responsive version."
+msgstr "CSS 已升级为响应式版本。"
+
+msgid "zine build"
+msgstr "zine 构建"
+
+# Site command long description
+msgid ""
+"Manage static site deployment targets with type-specific workflows.\n"
+"\n"
+"Each site has a local directory and optional configuration keys (dir, rsync, etc.).\n"
+"Site types:\n"
+"  page (default)  — Ongoing page additions, rsync from site dir directly.\n"
+"  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n"
+"\n"
+"Subcommands:\n"
+"  list                  List all configured sites\n"
+"  add    <name> ...     Add a new site with key=value pairs\n"
+"  update <name> <k> <v> Update a site's configuration key\n"
+"  remove <name>         Remove a site\n"
+"  optimize <name>       Optimize site CSS for responsive display\n"
+"  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)\n"
+msgstr ""
+"管理具有类型特定工作流的静态站点部署目标。\n"
+"\n"
+"每个站点有一个本地目录和可选配置键（dir、rsync 等）。\n"
+"站点类型：\n"
+"  page（默认）— 持续添加页面，直接从站点目录 rsync。\n"
+"  zine        — Zine 生成的站点，rsync 前自动构建，从 public/ 目录 rsync。\n"
+"\n"
+"子命令：\n"
+"  list                  列出所有已配置的站点\n"
+"  add    <name> ...     添加新站点，键=值对\n"
+"  update <name> <k> <v> 更新站点的配置键\n"
+"  remove <name>         删除站点\n"
+"  optimize <name>       优化站点 CSS 以适应响应式显示\n"
+"  rsync  <name>         通过 rsync 部署站点（自动构建 zine、优化 CSS）\n"
+
+# Description heading
+msgid "Description:"
+msgstr "说明:"
+
+# site add long description
+msgid ""
+"Add a new deployment site with key-value configuration pairs.\n"
+"\n"
+"The first positional argument is the site name. Subsequent arguments are\n"
+"key-value pairs for site configuration.\n"
+"\n"
+"Required keys:\n"
+"  dir   Local site directory\n"
+"\n"
+"Optional keys:\n"
+"  rsync Rsync deployment command\n"
+"  type  Site type: page (default) or zine (auto-build before rsync, public/ output)\n"
+"\n"
+"Example:\n"
+"  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path' type zine"
+msgstr ""
+"添加新的部署站点，使用键值对配置。\n"
+"\n"
+"第一个位置参数是站点名称，后续参数是站点的键值对配置。\n"
+"\n"
+"必填键：\n"
+"  dir   本地站点目录\n"
+"\n"
+"可选键：\n"
+"  rsync Rsync 部署命令\n"
+"  type  站点类型：page（默认）或 zine（rsync 前自动构建，输出 public/）\n"
+"\n"
+"示例：\n"
+"  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path' type zine"
+
+# site update long description
+msgid ""
+"Update a single configuration field on an existing site.\n"
+"\n"
+"Arguments:\n"
+"  <name>  Site name\n"
+"  <key>   Configuration key (e.g. dir, rsync)\n"
+"  <value> New value\n"
+"\n"
+"Example:\n"
+"  slingshot site update mysite rsync 'rsync -avz --delete ./ user@host:/path'"
+msgstr ""
+"更新现有站点的单个配置字段。\n"
+"\n"
+"参数：\n"
+"  <name>  站点名称\n"
+"  <key>   配置键（如 dir、rsync）\n"
+"  <value> 新值\n"
+"\n"
+"示例：\n"
+"  slingshot site update mysite rsync 'rsync -avz --delete ./ user@host:/path'"
+
+# site rsync long description
+msgid ""
+"Run the configured rsync command to deploy site content to remote.\n"
+"\n"
+"For zine-type sites, automatically runs 'zine build' before rsync\n"
+"and executes rsync from the 'public/' output directory.\n"
+"For page-type sites, rsync runs directly from the site directory."
+msgstr ""
+"运行已配置的 rsync 命令将站点内容部署到远程。\n"
+"\n"
+"对于 zine 类型站点，自动在 rsync 前运行 'zine build'\n"
+"并从 'public/' 输出目录执行 rsync。\n"
+"对于 page 类型站点，直接从站点目录 rsync。"
+
+# --explain flag
+msgid "If the command is valid, explain its parsed arguments instead of running it"
+msgstr "如果命令有效，解释其解析的参数而非实际执行"
