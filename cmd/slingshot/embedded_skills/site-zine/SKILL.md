@@ -125,16 +125,7 @@ Multilingual {
 ## 快速参考
 
 ```bash
+# 新建站点
+zine init mysite                # 创建新 zine 项目
+
 # 本地开发
-zine serve                    # 热重载开发服务器 :8080
-
-# 生产构建
-zine release --force          # 构建到 public/
-
-# 通过 slingshot 部署
-slingshot site add mysite dir ~/mysite type zine \
-  rsync 'rsync -avz --delete ./public user@host:/path'
-
-# 检查站点配置
-slingshot site list
-```
