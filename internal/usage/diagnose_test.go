@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 func TestDiagnose(t *testing.T) {
+	// Force English locale so test output is predictable
+	i18n.SetLocale("en_US")
+
 	u := Usage{Verbatim("add"), Placeholder("name")}
 	parsed, err := u.Parse([]string{"add", "hello"})
 	if err != nil {
@@ -26,6 +31,7 @@ func TestDiagnose(t *testing.T) {
 }
 
 func TestDiagnoseEmpty(t *testing.T) {
+	i18n.SetLocale("en_US")
 	u := Usage{Verbatim("x")}
 	u.diagnose(&bytes.Buffer{}, nil) // should not panic
 }

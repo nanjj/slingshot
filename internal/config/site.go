@@ -14,6 +14,7 @@ type Site struct {
 	Dir   string `yaml:"dir"`
 	Rsync string `yaml:"rsync"`
 	Title string `yaml:"title"`
+	Type  string `yaml:"type"`
 }
 
 // GetSites returns all configured sites.
@@ -48,6 +49,9 @@ func GetSites(cfg *Config) map[string]Site {
 		if title, ok := siteMap["title"].(string); ok {
 			site.Title = title
 		}
+		if typ, ok := siteMap["type"].(string); ok {
+			site.Type = typ
+		}
 		sites[name] = site
 	}
 	return sites
@@ -73,8 +77,15 @@ func AddSite(cfg *Config, name string, site Site) error {
 	if err := Set(cfg, "sites."+escaped+".dir", site.Dir); err != nil {
 		return fmt.Errorf("setting site dir: %w", err)
 	}
-	if err := Set(cfg, "sites."+escaped+".rsync", site.Rsync); err != nil {
-		return fmt.Errorf("setting site rsync: %w", err)
+	if site.Rsync != "" {
+		if err := Set(cfg, "sites."+escaped+".rsync", site.Rsync); err != nil {
+			return fmt.Errorf("setting site rsync: %w", err)
+		}
+	}
+	if site.Type != "" {
+		if err := Set(cfg, "sites."+escaped+".type", site.Type); err != nil {
+			return fmt.Errorf("setting site type: %w", err)
+		}
 	}
 	return nil
 }

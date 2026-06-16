@@ -169,12 +169,19 @@ func unescapePO(s string) string {
 
 // G 返回 msgid 的翻译。
 // 如果当前语言没有翻译, 返回 msgid 本身 (回退到英文)。
+// 如果当前语言的 .po 文件存在但缺少该 msgid, 则 panic — 提醒开发者添加翻译条目。
 func G(msgid string) string {
 	once.Do(loadTranslations)
 
 	if table, ok := translations[detectedLang]; ok {
-		if translated, ok := table[msgid]; ok && translated != "" {
-			return translated
+		if translated, ok := table[msgid]; ok {
+			if translated != "" {
+				return translated
+			}
+			// found but empty string → 未翻译状态, 可容忍, 回退到 msgid
+		} else {
+			// key not in table → 开发者忘记添加 .po 条目
+			panic(fmt.Sprintf("i18n: missing translation for %q in locale %s", msgid, detectedLang))
 		}
 	}
 
@@ -182,14 +189,19 @@ func G(msgid string) string {
 	if idx := strings.IndexByte(detectedLang, '_'); idx >= 0 {
 		shortLang := detectedLang[:idx]
 		if table, ok := translations[shortLang]; ok {
-			if translated, ok := table[msgid]; ok && translated != "" {
-				return translated
+			if translated, ok := table[msgid]; ok {
+				if translated != "" {
+					return translated
+				}
+				// found but empty → 容忍, 继续回退
 			}
+			// 不 panic — 短代码表可能只是备选, 非主表
 		}
 	}
 
 	return msgid
 }
+
 
 // SetLocale 强制设置语言 (用于测试)。
 func SetLocale(lang string) {
