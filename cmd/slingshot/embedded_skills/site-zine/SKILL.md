@@ -24,13 +24,13 @@ keywords:
 
 ## 0. 📦 安装
 
-<https://github.com/kristoff-it/zine/releases> 下载二进制，放到 `~/.local/bin/` 即可。AI 可以：
+下载二进制，放到 `~/bin/` 即可
 
 ```bash
 # 示意：Linux x86_64，其他架构从 releases 选
 curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
 tar xf x86_64-linux-musl.tar.xz
-install zine ~/.local/bin/
+install zine ~/bin/
 ```
 
 - 官方文档：<https://zine-ssg.io/>
@@ -127,7 +127,7 @@ Multilingual {
 ```bash
 # 安装（Linux x86_64 示意）
 curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
-tar xf x86_64-linux-musl.tar.xz && install zine ~/.local/bin/
+tar xf x86_64-linux-musl.tar.xz && install zine ~/bin/
 
 # 本地开发
 zine serve                    # 热重载开发服务器 :8080
