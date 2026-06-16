@@ -24,26 +24,16 @@ keywords:
 
 ## 0. 📦 安装
 
+<https://github.com/kristoff-it/zine/releases> 下载二进制，放到 `~/.local/bin/` 即可。AI 可以：
+
 ```bash
-# Linux x86_64
+# 示意：Linux x86_64，其他架构从 releases 选
 curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
 tar xf x86_64-linux-musl.tar.xz
-sudo install zine /usr/local/bin/
-
-# macOS x86_64
-curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-macos.zip
-unzip x86_64-macos.zip
-sudo install zine /usr/local/bin/
-
-# macOS ARM
-curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/aarch64-macos.zip
-unzip aarch64-macos.zip
-sudo install zine /usr/local/bin/
+install zine ~/.local/bin/
 ```
 
 - 官方文档：<https://zine-ssg.io/>
-- 源码/发布：<https://github.com/kristoff-it/zine/releases>
-
 ---
 
 ## 1. 🗂️ public/ 必须在 .gitignore 中
@@ -132,13 +122,12 @@ Multilingual {
 - `static_assets` 列出随站点发布的文件
 
 ---
-
 ## 快速参考
 
 ```bash
-# 安装（Linux x86_64）
+# 安装（Linux x86_64 示意）
 curl -LO https://github.com/kristoff-it/zine/releases/download/v0.11.2/x86_64-linux-musl.tar.xz
-tar xf x86_64-linux-musl.tar.xz && sudo install zine /usr/local/bin/
+tar xf x86_64-linux-musl.tar.xz && install zine ~/.local/bin/
 
 # 本地开发
 zine serve                    # 热重载开发服务器 :8080
