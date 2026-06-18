@@ -37,6 +37,8 @@ Subcommands:
   operations  <service> List operations for a service
   search      <service> Search traces for a service
   trace       <traceID> Get full trace details
+  trace       topology      <traceID> Show trace service dependency graph
+  trace       critical-path <traceID> Show trace critical (slowest) path
   deps                  Get service dependency graph
 
 Environment:
