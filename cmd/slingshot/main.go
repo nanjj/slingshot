@@ -96,6 +96,7 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdSkill{global: global}).command(),
 		(&cmdSite{global: global}).command(),
 		(&cmdPage{global: global}).command(),
+		(&cmdJaeger{global: global}).command(),
 	)
 
 
