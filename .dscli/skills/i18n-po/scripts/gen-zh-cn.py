@@ -113,6 +113,17 @@ TRANSLATIONS = {
     "Filter tags as JSON, e.g. '{\"error\":\"true\"}'": "标签过滤 JSON，例如 '{\"error\":\"true\"}'",
     "Lookback duration (e.g. 1h, 24h, 3600s)": "回溯时长（例如 1h、24h、3600s）",
     "invalid lookback duration %q: %v": "无效的回溯时长 %q: %v",
+    "Analyse a trace's spans to extract the service dependency graph:\nwhich services communicated with which, their operations, span counts,\nerror counts, and average durations.": "分析追踪的 span 以提取服务依赖关系图：\n哪些服务与哪些服务通信、它们的操作、span 数量、\n错误数量和平均耗时。",
+    "Identify the critical path (longest chain) through the trace spans.\n\nWalks from the root span down to the leaf, at each level picking the\nchild with the longest duration. The result is the chain of spans most\nresponsible for end-to-end latency — the first thing to optimise.": "识别追踪 span 中的关键路径（最长链）。\n\n从根 span 向下遍历到叶子节点，每层选择持续时间最长的\n子 span。结果是最影响端到端延迟的 span 链——\n这是需要优先优化的对象。",
+    "No root spans found in trace": "追踪中未找到根 span",
+    "No spans in trace": "追踪中没有 span",
+    "Output as JSON": "以 JSON 格式输出",
+    "Retrieve the full trace details including all spans, process info, tags, and logs.\n\nSubcommands provide progressive-disclosure views:\n  topology      Show the service-dependency graph extracted from the trace\n  critical-path Identify the span chain most responsible for latency": "检索完整追踪详情，包括所有 span、进程信息、标签和日志。\n\n子命令提供渐进式披露视图：\n  topology      展示从追踪中提取的服务依赖关系图\n  critical-path 识别最影响延迟的 span 链",
+    "Show trace critical path": "显示追踪关键路径",
+    "Show trace service topology": "显示追踪服务拓扑",
+    "parsing trace response: %w": "解析追踪响应失败: %w",
+    "trace %s not found": "追踪 %s 未找到",
+
 
     # Draft
     "Create a new draft from .org/.md/.html file": "从 .org/.md/.html 文件创建新草稿",
