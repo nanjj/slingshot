@@ -18,16 +18,6 @@ author: Curie <curie@dscli.io>
 替代 Jaeger MCP Server（不可靠），直接调用 Jaeger Query HTTP API。
 使用 `slingshot jaeger` 命令（内嵌在 slingshot CLI 中，无需 curl/jq/python3）。
 
-## 为什么用 Skill 而不是 MCP
-
-| 项目 | MCP Server (`:16687`) | Query API (`:16686/api`) |
-|------|----------------------|--------------------------|
-| 稳定性 | `get_trace_topology` 最多返回 20 spans | 返回完整 trace |
-| 超时 | `list_spans` 偶发超时 | 无额外超时层 |
-| 依赖 | 需要单独运行 MCP daemon + SSE | 内嵌在 Jaeger all-in-one 中 |
-| 数据完整性 | 截断、采样、分页问题 | 返回数据库原始数据 |
-| 维护成本 | 需要维护 Go 集成代码 | `slingshot jaeger` 由 slingshot 内置维护 |
-
 ## 命令
 
 | 命令 | 功能 |

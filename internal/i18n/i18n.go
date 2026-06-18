@@ -176,7 +176,7 @@ func unescapePO(s string) string {
 
 // G 返回 msgid 的翻译。
 // 如果当前语言没有翻译, 返回 msgid 本身 (回退到英文)。
-// 如果当前语言的 .po 文件存在但缺少该 msgid, 输出警告并回退到 msgid。
+// 如果当前语言的 .po 文件存在但缺少该 msgid, 则 panic — 提醒开发者添加翻译条目。
 func G(msgid string) string {
 	if table, ok := translations[detectedLang]; ok {
 		if translated, ok := table[msgid]; ok {
@@ -186,11 +186,11 @@ func G(msgid string) string {
 			// found but empty string → 未翻译状态, 可容忍, 回退到 msgid
 		} else {
 			// key not in table → 开发者忘记添加 .po 条目
-			fmt.Fprintf(os.Stderr, "i18n: missing translation for %q in locale %s\n", msgid, detectedLang)
+			panic(fmt.Sprintf("i18n: missing translation for %q in locale %s", msgid, detectedLang))
 		}
 	} else if loadedLocales[detectedLang] {
 		// .po 文件存在但解析后为空表, 且缺少该 msgid → 忘记添加条目
-		fmt.Fprintf(os.Stderr, "i18n: missing translation for %q in locale %s (empty table)\n", msgid, detectedLang)
+		panic(fmt.Sprintf("i18n: missing translation for %q in locale %s (empty table)", msgid, detectedLang))
 	}
 
 	// 尝试仅语言代码 (如 "zh" 从 "zh_CN")
@@ -201,11 +201,12 @@ func G(msgid string) string {
 				if translated != "" {
 					return translated
 				}
+				// found but empty → 容忍, 继续回退
 			}
+			// 不 panic — 短代码表可能只是备选, 非主表
 		}
 	}
 
-	// 最终回退到 msgid
 	return msgid
 }
 
