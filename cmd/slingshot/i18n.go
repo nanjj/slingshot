@@ -26,8 +26,11 @@ func (c *cmdI18n) command() *cobra.Command {
 
 Subcommands:
   check     Check locale consistency (missing/untranlated/orphaned entries)
-  stats     Show translation statistics per locale`,
+  stats     Show translation statistics per locale
+  sync      Synchronize .po files with i18n.G() calls in Go source code
+  add       Initialize a new locale from en_US template`,
 	)
+
 	cmd.PersistentFlags().StringVarP(&c.dir, "dir", "d", "",
 		"Locales directory path (default: internal/i18n/locales)")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -37,6 +40,8 @@ Subcommands:
 	cmd.AddCommand(
 		c.cmdCheck().command(),
 		c.cmdStats().command(),
+		c.cmdSync().command(),
+		c.cmdAdd().command(),
 	)
 
 	return cmd
@@ -61,6 +66,20 @@ func (c *cmdI18n) cmdCheck() *cmdI18nCheck {
 
 func (c *cmdI18n) cmdStats() *cmdI18nStats {
 	return &cmdI18nStats{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdSync() *cmdI18nSync {
+	return &cmdI18nSync{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdAdd() *cmdI18nAdd {
+	return &cmdI18nAdd{
 		global:  c.global,
 		i18nCmd: c,
 	}
