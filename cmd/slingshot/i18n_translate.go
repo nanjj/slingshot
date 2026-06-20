@@ -49,6 +49,7 @@ Workflow:
   2. slingshot i18n show <locale> <id>   — inspect a specific entry
   3. slingshot i18n translate <locale> \
       --msgid "<exact msgid>" --msgstr "<translation>"`)
+	
 	cmd.Flags().StringVar(&c.msgid, "msgid", "",
 		"Exact msgid to translate (required, .po-escaped form)")
 	cmd.Flags().StringVar(&c.msgstr, "msgstr", "",

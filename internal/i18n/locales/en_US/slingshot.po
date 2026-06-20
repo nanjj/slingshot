@@ -765,21 +765,6 @@ msgstr "Warning: thumbnail file %q not found, passing value as-is (make sure it'
 msgid "    ... and %d more\n"
 msgstr "    ... and %d more\n"
 
-msgid "  1. Run:  go mod tidy\n"
-msgstr "  1. Run:  go mod tidy\n"
-
-msgid "  2. Wrap user-facing strings with i18n.G(\"message\")\n"
-msgstr "  2. Wrap user-facing strings with i18n.G(\"message\")\n"
-
-msgid "  3. Run:  slingshot i18n sync\n"
-msgstr "  3. Run:  slingshot i18n sync\n"
-
-msgid "  4. After future code changes:  go generate ./internal/i18n/\n"
-msgstr "  4. After future code changes:  go generate ./internal/i18n/\n"
-
-msgid "  All entries are untranslated. Use a .po editor to add translations.\n"
-msgstr "  All entries are untranslated. Use a .po editor to add translations.\n"
-
 msgid "  created: %s\n"
 msgstr "  created: %s\n"
 
@@ -837,9 +822,6 @@ msgstr "Missing"
 msgid "Missing entries:"
 msgstr "Missing entries:"
 
-msgid "Next steps:\n"
-msgstr "Next steps:\n"
-
 msgid "No locales to check."
 msgstr "No locales to check."
 
@@ -854,9 +836,6 @@ msgstr "Scaffold i18n package for a new project"
 
 msgid "Scanning source code for i18n.G() calls..."
 msgstr "Scanning source code for i18n.G() calls..."
-
-msgid "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
-msgstr "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
 
 msgid "Set translation for a single msgid"
 msgstr "Set translation for a single msgid"
@@ -909,9 +888,6 @@ msgstr "chars"
 msgid "entries"
 msgstr "entries"
 
-msgid "i18n scaffold created successfully.\n"
-msgstr "i18n scaffold created successfully.\n"
-
 msgid "is up to date"
 msgstr "is up to date"
 
@@ -929,3 +905,27 @@ msgstr "removed"
 
 msgid "was:"
 msgstr "was:"
+
+msgid "  1. Run:  go mod tidy"
+msgstr "  1. Run:  go mod tidy"
+
+msgid "  2. Wrap user-facing strings with i18n.G(\"message\")"
+msgstr "  2. Wrap user-facing strings with i18n.G(\"message\")"
+
+msgid "  3. Run:  slingshot i18n sync"
+msgstr "  3. Run:  slingshot i18n sync"
+
+msgid "  4. After future code changes:  go generate ./internal/i18n/"
+msgstr "  4. After future code changes:  go generate ./internal/i18n/"
+
+msgid "  All entries are untranslated. Use a .po editor to add translations."
+msgstr "  All entries are untranslated. Use a .po editor to add translations."
+
+msgid "Next steps:"
+msgstr "Next steps:"
+
+msgid "i18n scaffold created successfully."
+msgstr "i18n scaffold created successfully."
+
+msgid "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
+msgstr "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
