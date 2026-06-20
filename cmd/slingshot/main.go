@@ -52,10 +52,14 @@ func main() {
 	// PersistentPreRunE / PersistentPostRunE: trace every command invocation.
 	// StartSpanFromContext automatically extracts the parent trace from
 	// CLOG_TRACEPARENT (pre-seeded by dscli) and creates a child span.
+	// The span is injected into the returned ctx; we discard the span value
+	// and retrieve it later in PersistentPostRunE via SpanFromContext.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		clog.StartSpanFromContext(cmd.Context(), cmd.CommandPath())
+		_, ctx := clog.StartSpanFromContext(cmd.Context(), cmd.CommandPath())
+		cmd.SetContext(ctx) // propagate so PersistentPostRunE can find the span
 		return nil
 	}
+
 	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
 		if span := clog.SpanFromContext(cmd.Context()); span != nil {
 			span.Finish()
