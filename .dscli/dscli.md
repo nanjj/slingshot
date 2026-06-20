@@ -19,19 +19,28 @@ slingshot i18n
     --dir                 自定义 locales 目录
   add       <locale>      从 en_US 模板初始化新 locale
     --dir                 自定义 locales 目录
+  show      <locale> [id] 显示条目（全部/编号/搜索），格式化输出
+                          id 格式：数字(1-36)、搜索词、show
+  translate <locale>      逐条翻译（一次一条）
+    --msgid               PO-转义形式的 msgid
+    --msgstr              翻译文本（PO-转义；空字符串清除翻译）
 ```
 
 ## 设计要点
 - **sync 不覆盖已翻译 msgstr**：新条目在非 en_US locale 中以空 msgstr 添加
 - **en_US msgstr = msgid**：英文条目的 msgstr 与 msgid 相同
 - **--delete 安全删除**：只删除源码中已不存在的条目，保留 header
-- **Go 转义归一化**：从源码提取的 `\"`、`\n` 等 Go 转义序列，经由 `normalizeMsgid` (即 unescapePO) 转成实际字符后再与 .po 条目比较，避免因转义方式不同而产生重复条目
+- **AST 提取器**：用 `go/parser` + `go/ast` + `strconv.Unquote` 替代正则，正确处理 Go 转义和字符串拼接。提取结果已原生转义，无需额外归一化
 - **自动去重**：`dedupEntries` 在同步前去除同一 msgid 的重复条目（保留最后一条），消除因 `\\n` vs `\n` 等不同 .po 转义写法造成的重复
+- **translate 逐条翻译**：使用 parsePOFull/writePO 基础设施，精确匹配完整 msgid，显示新旧对比，支持 PO 转义 round-trip
+
+## 实施状态
 
 | Phase | 文件 | 内容 | 状态 |
 |-------|------|------|------|
 | **Phase 1** | `i18n.go`, `i18n_po.go`, `i18n_check.go`, `i18n_stats.go` | 根命令 + check + stats | ✅ Done |
 | **Phase 2** | `i18n_po.go`(扩展), `i18n_extract.go`, `i18n_sync.go`, `i18n_add.go` | sync(--delete) / add | ✅ Done |
-| **Phase 3** | `i18n_extract.go` (AST版) | AST 提取器，替代 gen-en-us.sh | ⬜ |
+| **Phase 3** | `i18n_extract.go` (AST版), `i18n_extract_test.go` | AST 提取器，替代 regex | ✅ Done |
 | **Phase 4** | — | 通用化参数（--pattern, --sentinel, --name） | ⬜ |
 | **Phase 5** | `internal/i18n/locales.go` | go generate 集成 | ⬜ |
+| **Phase 6** | `i18n_translate.go`, `i18n.go` | 逐条翻译子命令（translate） | ✅ Done |

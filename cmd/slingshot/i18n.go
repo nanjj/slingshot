@@ -30,7 +30,8 @@ Subcommands:
   sync      Synchronize .po files with i18n.G() calls in Go source code
   show      Show full details of an untranslated entry by ID
   translate Set translation for a single msgid (precise, one-at-a-time)
-  add       Initialize a new locale from en_US template`,
+  add       Initialize a new locale from en_US template
+  init      Scaffold the i18n package for a new project`,
 	)
 
 	cmd.PersistentFlags().StringVarP(&c.dir, "dir", "d", "",
@@ -46,6 +47,7 @@ Subcommands:
 		c.cmdShow().command(),
 		c.cmdTranslate().command(),
 		c.cmdAdd().command(),
+		c.cmdInit().command(),
 	)
 
 	return cmd
@@ -98,6 +100,13 @@ func (c *cmdI18n) cmdTranslate() *cmdI18nTranslate {
 
 func (c *cmdI18n) cmdAdd() *cmdI18nAdd {
 	return &cmdI18nAdd{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdInit() *cmdI18nInit {
+	return &cmdI18nInit{
 		global:  c.global,
 		i18nCmd: c,
 	}
