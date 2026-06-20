@@ -755,3 +755,12 @@ msgstr "trace %s not found"
 
 msgid "..."
 msgstr "..."
+
+msgid "Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. Install it or use an .html file instead."
+msgstr "Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. Install it or use an .html file instead."
+
+msgid "Warning: thumb_media_id %q looks like a local file.\n  Use --upload to auto-upload the thumbnail image, or upload it manually and \n  replace the value with a real media_id from WeChat material management.\n"
+msgstr "Warning: thumb_media_id %q looks like a local file.\n  Use --upload to auto-upload the thumbnail image, or upload it manually and \n  replace the value with a real media_id from WeChat material management.\n"
+
+msgid "Warning: thumbnail file %q not found, passing value as-is (make sure it's a valid media_id)\n"
+msgstr "Warning: thumbnail file %q not found, passing value as-is (make sure it's a valid media_id)\n"

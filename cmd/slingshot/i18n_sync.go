@@ -49,12 +49,6 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no i18n.G() calls found in source code")
 	}
 
-	// Normalize extracted msgids: convert Go escape sequences (e.g. \")
-	// to actual characters before comparing with .po entries.
-	normalized := make(map[string]bool, len(sourceMsgids))
-	for mid := range sourceMsgids {
-		normalized[normalizeMsgid(mid)] = true
-	}
 
 	// 2. Load en_US.po as entries
 	enUSEntries, err := loadPOFull(dir, "en_US")
@@ -68,7 +62,7 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 	beforeCount := syncedEntryCount(enUSEntries)
 
 	// 4. Sync en_US: add new entries, optionally delete orphans
-	enUSChanged := syncEnUS(&enUSEntries, normalized, c.delete)
+	enUSChanged := syncEnUS(&enUSEntries, sourceMsgids, c.delete)
 	afterCount := syncedEntryCount(enUSEntries)
 
 	// 5. Write en_US if changed
@@ -130,12 +124,6 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// normalizeMsgid converts a msgid extracted from Go source (which may contain
-// Go escape sequences like \", \\, \n) to its actual string value,
-// matching what parsePO produces from a .po file.
-func normalizeMsgid(s string) string {
-	return unescapePO(s)
-}
 
 // dedupEntries removes duplicate entries, keeping only the last occurrence
 // of each msgid. The header entry (msgid "") is always preserved.
@@ -160,7 +148,7 @@ func dedupEntries(entries []poEntry) []poEntry {
 }
 
 // syncEnUS updates en_US entries to match sourceMsgids.
-// sourceMsgids should already be normalized (Go escapes resolved).
+// sourceMsgids are already unescaped by the AST extractor.
 // Returns true if any changes were made.
 func syncEnUS(entries *[]poEntry, sourceMsgids map[string]bool, delete bool) bool {
 	changed := false
