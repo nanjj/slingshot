@@ -14,8 +14,8 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/nanjj/clog v0.1.4 h1:9a0rqQW6bnoOiM0+gkcnTzhlGQQcwEIRBL4BnUWIjD4=
 github.com/nanjj/clog v0.1.4/go.mod h1:NJ8TabwP8398XUE5FQQK8nC0odx4A47QAjQkCRX2Aqw=
-github.com/nanjj/i18n v0.0.0-20260620080149-d7fd7af545b3 h1:/yZPJrBhUY9s0s/EDnK5l58hhuoPxpXg+agbjQVJA2A=
-github.com/nanjj/i18n v0.0.0-20260620080149-d7fd7af545b3/go.mod h1:IGxk3rSPggOqjCKkHP42KtuPtx72F8a7FcxG82hL/b8=
+github.com/nanjj/i18n v0.1.0 h1:YGVQB4Mw4JclsqV8nni82JwMeciVzq7Oh9XfIVYR7R4=
+github.com/nanjj/i18n v0.1.0/go.mod h1:IGxk3rSPggOqjCKkHP42KtuPtx72F8a7FcxG82hL/b8=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

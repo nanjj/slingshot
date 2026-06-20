@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/fatih/color v1.18.0
 	github.com/nanjj/clog v0.1.4
-	github.com/nanjj/i18n v0.0.0-20260620080149-d7fd7af545b3
+	github.com/nanjj/i18n v0.1.0
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.6
 	github.com/yuin/goldmark v1.8.2
