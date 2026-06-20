@@ -127,7 +127,9 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdSite{global: global}).command(),
 		(&cmdPage{global: global}).command(),
 		(&cmdJaeger{global: global}).command(),
+		(&cmdI18n{global: global}).command(),
 	)
+
 
 
 	// 处理 version 标志
