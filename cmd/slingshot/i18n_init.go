@@ -103,7 +103,9 @@ func (c *cmdI18nInit) run(cmd *cobra.Command, args []string) error {
 
 	// Generate locales.go.
 	localesGo := filepath.Join(i18nDir, "locales.go")
-	localesContent := fmt.Sprintf(`// Package i18n provides embedded .po translation files.
+	localesContent := `//go:generate slingshot i18n sync
+
+// Package i18n provides embedded .po translation files.
 //
 // This file lives alongside the locales/ directory so that
 // //go:embed paths (relative to the source file) can reach it directly.
@@ -116,7 +118,7 @@ import "embed"
 //
 //go:embed locales/*/*.po
 var localesFS embed.FS
-`)
+`
 	if err := os.WriteFile(localesGo, []byte(localesContent), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", localesGo, err)
 	}
@@ -180,6 +182,7 @@ func DumpTranslations() string { return _locales.Dump() }
 	fmt.Fprintf(os.Stderr, "  1. Run:  go mod tidy\n")
 	fmt.Fprintf(os.Stderr, "  2. Wrap user-facing strings with i18n.G(\"message\")\n")
 	fmt.Fprintf(os.Stderr, "  3. Run:  slingshot i18n sync\n")
+	fmt.Fprintf(os.Stderr, "  4. After future code changes:  go generate ./internal/i18n/\n")
 
 	return nil
 }

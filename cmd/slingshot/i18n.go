@@ -1,6 +1,8 @@
 package main
 
 import (
+	"path/filepath"
+
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
@@ -54,11 +56,28 @@ Subcommands:
 }
 
 // resolveDir returns the locales directory path.
+// The default "internal/i18n/locales" is resolved relative to the project root
+// (found by walking up for go.mod), so it works from any subdirectory.
+// If --dir is explicitly given, it's returned as-is (unchanged behavior).
 func (c *cmdI18n) resolveDir() string {
 	if c.dir != "" {
 		return c.dir
 	}
-	return "internal/i18n/locales"
+	root, err := findGoModRoot()
+	if err != nil {
+		return "internal/i18n/locales" // fallback to CWD-relative
+	}
+	return filepath.Join(root, "internal/i18n/locales")
+}
+
+// resolveRoot returns the Go module root directory (containing go.mod).
+// Falls back to "." when go.mod cannot be found.
+func (c *cmdI18n) resolveRoot() string {
+	root, err := findGoModRoot()
+	if err != nil {
+		return "."
+	}
+	return root
 }
 
 // --- Factory methods ---

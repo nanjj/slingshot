@@ -1,3 +1,5 @@
+//go:generate slingshot i18n sync
+
 // Package i18n provides embedded .po translation files.
 //
 // This file lives in internal/i18n alongside the locales/ directory so that

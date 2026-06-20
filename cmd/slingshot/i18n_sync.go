@@ -41,7 +41,8 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 
 	// 1. Extract msgids from source code
 	color.New(color.Faint).Fprintf(os.Stderr, "Scanning source code for i18n.G() calls...\n")
-	sourceMsgids, err := extractMsgids(".")
+	sourceMsgids, err := extractMsgids(c.i18nCmd.resolveRoot())
+
 	if err != nil {
 		return fmt.Errorf("extracting msgids from source: %w", err)
 	}
