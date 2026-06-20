@@ -28,6 +28,7 @@ Subcommands:
   check     Check locale consistency (missing/untranlated/orphaned entries)
   stats     Show translation statistics per locale
   sync      Synchronize .po files with i18n.G() calls in Go source code
+  show      Show full details of an untranslated entry by ID
   add       Initialize a new locale from en_US template`,
 	)
 
@@ -41,6 +42,7 @@ Subcommands:
 		c.cmdCheck().command(),
 		c.cmdStats().command(),
 		c.cmdSync().command(),
+		c.cmdShow().command(),
 		c.cmdAdd().command(),
 	)
 
@@ -73,6 +75,13 @@ func (c *cmdI18n) cmdStats() *cmdI18nStats {
 
 func (c *cmdI18n) cmdSync() *cmdI18nSync {
 	return &cmdI18nSync{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdShow() *cmdI18nShow {
+	return &cmdI18nShow{
 		global:  c.global,
 		i18nCmd: c,
 	}
