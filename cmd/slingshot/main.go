@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/nanjj/clog"
 	"github.com/nanjj/slingshot/internal/i18n"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
@@ -25,6 +27,17 @@ func (c *cmdGlobal) Parse(usage u.Usage, cmd *cobra.Command, args []string) ([]*
 }
 
 func main() {
+	// Initialize Jaeger tracer.
+	// dscli pre-seeds CLOG_TRACEPARENT in the environment, so
+	// StartSpanFromContext will automatically pick it up as a parent.
+	tracer, err := clog.NewTracer("slingshot")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: tracing disabled: %v\n", err)
+	} else {
+		clog.SetGlobalTracer(tracer)
+		defer clog.CloseTracer(tracer)
+	}
+
 	rootCmd := &cobra.Command{
 		Use:           "slingshot",
 		Short:         i18n.G("A slingshot for AI agents"),
@@ -36,6 +49,19 @@ func main() {
 		},
 	}
 
+	// PersistentPreRunE / PersistentPostRunE: trace every command invocation.
+	// StartSpanFromContext automatically extracts the parent trace from
+	// CLOG_TRACEPARENT (pre-seeded by dscli) and creates a child span.
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		clog.StartSpanFromContext(cmd.Context(), cmd.CommandPath())
+		return nil
+	}
+	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+		if span := clog.SpanFromContext(cmd.Context()); span != nil {
+			span.Finish()
+		}
+		return nil
+	}
 	// 隐藏 completion 和 help 子命令（运行时仍可用）
 	rootCmd.CompletionOptions = cobra.CompletionOptions{
 		HiddenDefaultCmd: true,
@@ -105,7 +131,7 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 	rootCmd.Version = "0.1.1"
 
 	// 执行
-	err := rootCmd.Execute()
+	err = rootCmd.ExecuteContext(context.Background())
 	if err == u.ErrExplainOnly {
 		// --explain 成功完成, 不显示错误信息
 		os.Exit(0)
