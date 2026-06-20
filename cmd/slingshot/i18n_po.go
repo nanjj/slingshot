@@ -312,12 +312,13 @@ func syncedEntryCount(entries []poEntry) int {
 
 // poAnalysis holds the comparison results for a single locale against en_US.
 type poAnalysis struct {
-	Locale       string
-	Total        int
-	Translated   int
-	Untranslated int
-	Missing      []string // in en_US but not in this locale
-	Orphaned     []string // in this locale but not in en_US
+	Locale           string
+	Total            int
+	Translated       int
+	Untranslated     int
+	UntranslatedList []string // untranslated msgids (msgstr == "")
+	Missing          []string // in en_US but not in this locale
+	Orphaned         []string // in this locale but not in en_US
 }
 
 // hasIssues returns true if there are missing or orphaned entries.
@@ -328,13 +329,13 @@ func (a *poAnalysis) hasIssues() bool {
 // analyseLocale compares a locale's table against the en_US sentinel.
 func analyseLocale(locale string, table, enUS map[string]string) *poAnalysis {
 	a := &poAnalysis{Locale: locale}
-
 	for msgid, msgstr := range table {
 		a.Total++
 		if msgstr != "" {
 			a.Translated++
 		} else {
 			a.Untranslated++
+			a.UntranslatedList = append(a.UntranslatedList, msgid)
 		}
 		// Check orphaned: in locale but not in en_US
 		if _, ok := enUS[msgid]; !ok {

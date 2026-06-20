@@ -142,9 +142,14 @@ func (c *cmdI18nCheck) run(cmd *cobra.Command, args []string) error {
 
 		// Untranslated entries
 		if a.Untranslated > 0 {
+			sort.Strings(a.UntranslatedList)
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.CyanString("Untranslated:"),
+				color.CyanString("Untranslated entries:"),
 				color.CyanString("%d", a.Untranslated))
+			for _, u := range a.UntranslatedList {
+				display := truncateMsgid(u, 72)
+				fmt.Fprintf(color.Output, "    - %q\n", display)
+			}
 		}
 
 		// Summary line
