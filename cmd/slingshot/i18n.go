@@ -29,6 +29,7 @@ Subcommands:
   stats     Show translation statistics per locale
   sync      Synchronize .po files with i18n.G() calls in Go source code
   show      Show full details of an untranslated entry by ID
+  translate Set translation for a single msgid (precise, one-at-a-time)
   add       Initialize a new locale from en_US template`,
 	)
 
@@ -43,6 +44,7 @@ Subcommands:
 		c.cmdStats().command(),
 		c.cmdSync().command(),
 		c.cmdShow().command(),
+		c.cmdTranslate().command(),
 		c.cmdAdd().command(),
 	)
 
@@ -82,6 +84,13 @@ func (c *cmdI18n) cmdSync() *cmdI18nSync {
 
 func (c *cmdI18n) cmdShow() *cmdI18nShow {
 	return &cmdI18nShow{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdTranslate() *cmdI18nTranslate {
+	return &cmdI18nTranslate{
 		global:  c.global,
 		i18nCmd: c,
 	}

@@ -305,10 +305,10 @@ msgid "Author:"
 msgstr "作者："
 
 msgid "Auto-converting %s to WeChat HTML...\n"
-msgstr ""
+msgstr "正在自动将 %s 转换为微信公众号 HTML...\n"
 
 msgid "Binary content, %d bytes. Use --output to save to file.\n"
-msgstr ""
+msgstr "二进制内容，%d 字节。使用 --output 保存到文件。\n"
 
 msgid "Built-in skills:"
 msgstr "内置技能："
@@ -323,10 +323,10 @@ msgid "Convert Markdown or Org to WeChat public account HTML"
 msgstr "将 Markdown 或 Org 转换为微信公众号 HTML"
 
 msgid "Convert a Markdown (.md) or Org (.org) file to HTML format suitable for WeChat public accounts.\n\nThe conversion process:\n  1. If the input is a .org file, convert to Markdown using Emacs batch mode\n  2. Parse the Markdown using goldmark (supports GFM tables, strikethrough)\n  3. Inject inline CSS styles on every element (required by WeChat)\n  4. Save the result as <filename>.html\n\nWith --upload:\n  5. Parse local image references from the HTML\n  6. Upload images to WeChat material management (with caching via images.yaml)\n  7. Update image URLs in the HTML\n  8. If the YAML front matter or sidecar YAML contains 'thumb_media_id: <path>', upload the\n     thumbnail image as permanent material and replace with the real media_id\n\nWeChat only supports inline styles and a limited set of HTML elements.\nThis command handles all common syntax:\n  - Headings (h1-h4), paragraphs, blockquotes\n  - Bold, italic, inline code, strikethrough\n  - Fenced code blocks with syntax highlighting\n  - Links and images\n  - Ordered and unordered lists\n  - Tables (GFM-style)\n  - Thematic breaks (hr)\n  - Raw HTML passthrough (footnotes, etc.)"
-msgstr ""
+msgstr "将 Markdown（.md）或 Org（.org）文件转换为适合微信公众号的 HTML 格式。\n\n转换过程：\n  1. 如果输入是 .org 文件，使用 Emacs 批量模式转换为 Markdown\n  2. 使用 goldmark 解析 Markdown（支持 GFM 表格、删除线）\n  3. 为每个元素注入内联 CSS 样式（微信要求）\n  4. 将结果保存为 <filename>.html\n\n使用 --upload：\n  5. 从 HTML 中解析本地图片引用\n  6. 上传图片到微信素材库（通过 images.yaml 缓存）\n  7. 更新 HTML 中的图片 URL\n  8. 如果 YAML front matter 或 sidecar YAML 包含 'thumb_media_id: <path>'，\n     将缩略图作为永久素材上传并替换为真实 media_id\n\n微信仅支持内联样式和有限的 HTML 元素。\n本命令支持所有常见语法：\n  - 标题（h1-h4）、段落、块引用\n  - 粗体、斜体、内联代码、删除线\n  - 围栏代码块（带语法高亮）\n  - 链接和图片\n  - 有序和无序列表\n  - 表格（GFM 风格）\n  - 分隔线（hr）\n  - 原始 HTML 透传（脚注等）"
 
 msgid "Converted SVG to PNG: %s -> %s\n"
-msgstr ""
+msgstr "已将 SVG 转换为 PNG: %s -> %s\n"
 
 msgid "Cover image media_id (required; local image file paths are auto-uploaded to WeChat material)"
 msgstr "封面图 media_id（必填；本地图片路径会自动上传到微信素材库）"
@@ -356,16 +356,16 @@ msgid "Download URL:"
 msgstr "下载 URL："
 
 msgid "Draft created: %s\n"
-msgstr ""
+msgstr "草稿已创建：%s\n"
 
 msgid "Draft has no articles."
 msgstr "草稿没有文章。"
 
 msgid "Draft removed: %s\n"
-msgstr ""
+msgstr "草稿已删除：%s\n"
 
 msgid "Draft updated: %s\n"
-msgstr ""
+msgstr "草稿已更新：%s\n"
 
 msgid "Drafts (%d total):"
 msgstr "草稿（共 %d 个）："
@@ -398,7 +398,7 @@ msgid "Installation path (default: <project root>/.dscli/skills)"
 msgstr "安装路径（默认: <project root>/.dscli/skills）"
 
 msgid "Installed skill %s to %s\n"
-msgstr ""
+msgstr "技能 %s 已安装到 %s\n"
 
 msgid "Introduction (optional, for video material)"
 msgstr "简介（可选，用于视频素材）"
@@ -437,7 +437,7 @@ msgid "List permanent materials"
 msgstr "列出永久素材"
 
 msgid "List permanent materials from WeChat material management.\n\nBy default lists image materials. Use --type to list video, voice, or news materials.\n\nExamples:\n  slingshot meterial list\n  slingshot meterial list --type image\n  slingshot meterial list --type video --offset 10 --count 5\n"
-msgstr ""
+msgstr "从微信素材库列出永久素材。\n\n默认列出图片素材。使用 --type 列出视频、语音或图文素材。\n\n示例：\n  slingshot meterial list\n  slingshot meterial list --type image\n  slingshot meterial list --type video --offset 10 --count 5\n"
 
 msgid "Lookback duration (e.g. 1h, 24h, 3600s)"
 msgstr "回溯时长（例如 1h、24h、3600s）"
@@ -446,25 +446,25 @@ msgid "Manage WeChat permanent materials"
 msgstr "管理微信永久素材"
 
 msgid "Manage WeChat public account permanent materials.\n\nSubcommands:\n  add    <file>     Upload a permanent material\n  list              List permanent materials\n  remove <id>       Remove a permanent material\n  show   <id>       Show a permanent material's details\n"
-msgstr ""
+msgstr "管理微信公众号永久素材。\n\n子命令：\n  add    <file>     上传永久素材\n  list              列出永久素材\n  remove <id>       删除永久素材\n  show   <id>       查看永久素材详情\n"
 
 msgid "Manage built-in skills"
 msgstr "管理内置技能"
 
 msgid "Manage built-in skills for AI agents.\n\nSubcommands:\n  list              List all built-in skills\n  install   <name>  Install a built-in skill"
-msgstr ""
+msgstr "管理 AI 智能体的内置技能。\n\n子命令：\n  list              列出所有内置技能\n  install   <name>  安装内置技能"
 
 msgid "Manage site pages"
 msgstr "管理站点页面"
 
 msgid "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\nSubcommands:\n  list                  List all config keys and values\n  show                  Show full configuration\n  get    <key>          Get a config value\n  set    <key> <value>  Set a config value\n  unset <key>           Unset (delete) a config key\n"
-msgstr ""
+msgstr "管理 slingshot 配置文件（~/.config/slingshot/config.yml）。\n\n子命令：\n  list                 列出所有配置键和值\n  show                 显示完整配置\n  get    <key>         获取配置值\n  set    <key> <value> 设置配置值\n  unset <key>          删除配置键\n"
 
 msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add new pages from HTML/Org files\n  update  <site> <file>...  Update existing pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
-msgstr ""
+msgstr "管理静态站点页面。\n\n每个页面是站点目录下的一个子目录，包含 index.html\n及其资源文件（图片等）。\n\n子命令：\n  list    <site>            列出站点中的所有页面\n  add     <site> <file>...  从 HTML/Org 文件添加新页面\n  update  <site> <file>...  从 HTML/Org 文件更新已有页面\n  remove  <site> <page>     删除页面\n"
 
 msgid "Material removed: %s\n"
-msgstr ""
+msgstr "素材已删除：%s\n"
 
 msgid "Material type: image, video, voice"
 msgstr "素材类型：image、video、voice"
@@ -521,7 +521,7 @@ msgid "Remove (delete) a WeChat draft by ID or 1-based index from \"list\"."
 msgstr "通过 ID 或列表中索引（从 1 开始）删除微信公众号草稿。"
 
 msgid "Remove (delete) a permanent material by its media ID.\n\nExample:\n  slingshot meterial remove <media_id>\n"
-msgstr ""
+msgstr "通过 media ID 删除永久素材。\n\n示例：\n  slingshot meterial remove <media_id>\n"
 
 msgid "Remove a page"
 msgstr "删除页面"
@@ -539,7 +539,7 @@ msgid "Save to file (for image/voice material)"
 msgstr "保存到文件（用于图片/语音素材）"
 
 msgid "Saved to %s (%d bytes)\n"
-msgstr ""
+msgstr "已保存到 %s（%d 字节）\n"
 
 msgid "Search recent traces for a service, with optional limit and tag filtering.\n\nExamples:\n  slingshot jaeger search Dscli\n  slingshot jaeger search Dscli --limit 5\n  slingshot jaeger search Dscli --tags '{\"error\":\"true\"}'"
 msgstr "搜索服务的最新追踪记录，支持可选的限制和标签过滤。\n\n示例：\n  slingshot jaeger search Dscli\n  slingshot jaeger search Dscli --limit 5\n  slingshot jaeger search Dscli --tags '{\"error\":\"true\"}'"
@@ -557,7 +557,7 @@ msgid "Show detailed information about a WeChat draft by ID or 1-based index fro
 msgstr "通过 ID 或列表中索引（从 1 开始）显示微信公众号草稿的详细信息。"
 
 msgid "Show detailed information about a permanent material by media ID.\n\nFor image and voice materials, the raw content can be saved to a file with --output.\nFor news and video materials, the metadata is displayed as text.\n\nExamples:\n  slingshot meterial show <media_id>\n  slingshot meterial show <media_id> --output image.jpg\n"
-msgstr ""
+msgstr "通过 media ID 显示永久素材的详细信息。\n\n对于图片和语音素材，可以使用 --output 将原始内容保存到文件。\n对于图文和视频素材，将以文本形式显示元数据。\n\n示例：\n  slingshot meterial show <media_id>\n  slingshot meterial show <media_id> --output image.jpg\n"
 
 msgid "Show full configuration"
 msgstr "显示完整配置"
@@ -605,46 +605,46 @@ msgid "Upgrade the site's style.css to the latest responsive version.\n\nChecks 
 msgstr "将站点的 style.css 升级到最新的响应式版本。\n\n检查现有 CSS 中的响应式哨兵标记。如果 CSS 已优化，除非指定 --force，\n否则不做更改。\n\n此命令可随时运行——rsync 之前、添加页面之后、或作为独立的优化步骤。"
 
 msgid "Upload a file as a permanent material to WeChat material management.\n\nThe --type flag specifies the material type (default: image). For video\ntype, --title is required and --introduction is optional.\n\nExamples:\n  slingshot meterial add image.png\n  slingshot meterial add video.mp4 --type video --title \"My Video\"\n  slingshot meterial add voice.amr --type voice\n"
-msgstr ""
+msgstr "上传文件为微信素材库的永久素材。\n\n--type 标志指定素材类型（默认：image）。对于 video 类型，\n--title 为必填，--introduction 可选。\n\n示例：\n  slingshot meterial add image.png\n  slingshot meterial add video.mp4 --type video --title \"My Video\"\n  slingshot meterial add voice.amr --type voice\n"
 
 msgid "Upload a permanent material"
 msgstr "上传永久素材"
 
 msgid "Uploaded %s -> media_id: %s\n"
-msgstr ""
+msgstr "已上传 %s -> media_id: %s\n"
 
 msgid "Uploaded thumbnail -> media_id: %s\n"
-msgstr ""
+msgstr "已上传缩略图 -> media_id: %s\n"
 
 msgid "Uploading %s as %s...\n"
-msgstr ""
+msgstr "正在将 %s 上传为 %s...\n"
 
 msgid "Uploading thumbnail %s...\n"
-msgstr ""
+msgstr "正在上传缩略图 %s...\n"
 
 msgid "Using cached %s (by filename) -> %s\n"
-msgstr ""
+msgstr "使用缓存 %s（按文件名）-> %s\n"
 
 msgid "Using cached thumbnail %s -> %s\n"
-msgstr ""
+msgstr "使用缓存缩略图 %s -> %s\n"
 
 msgid "Using existing %s\n"
-msgstr ""
+msgstr "使用已有的 %s\n"
 
 msgid "Warning: SVG->PNG conversion failed for %s: %v; uploading original\n"
-msgstr ""
+msgstr "警告: %s 的 SVG->PNG 转换失败: %v; 正在上传原始文件\n"
 
 msgid "Warning: checksum failed for thumbnail %s: %v\n"
-msgstr ""
+msgstr "警告: 缩略图 %s 校验失败: %v\n"
 
 msgid "Warning: failed to save media_id to sidecar YAML: %v\n"
-msgstr ""
+msgstr "警告: 无法将 media_id 保存到 sidecar YAML: %v\n"
 
 msgid "Warning: no cached CDN URL for %s; run 'convert --upload' first\n"
-msgstr ""
+msgstr "警告: 没有 %s 的缓存 CDN URL; 请先运行 'convert --upload'\n"
 
 msgid "Warning: thumbnail upload failed for %s: %v\n"
-msgstr ""
+msgstr "警告: 缩略图 %s 上传失败: %v\n"
 
 msgid "cover media_id is required: use --thumb flag or add <meta name=\"thumb_media_id\" content=\"...\"> to HTML"
 msgstr "封面 media_id 是必填的：使用 --thumb 标志或在 HTML 中添加 <meta name=\"thumb_media_id\" content=\"...\">"
@@ -665,7 +665,7 @@ msgid "expected <file> argument"
 msgstr "需要 <file> 参数"
 
 msgid "expected a media_id argument"
-msgstr ""
+msgstr "需要一个 media_id 参数"
 
 msgid "expected a skill name argument"
 msgstr "需要技能名称参数"
@@ -725,7 +725,7 @@ msgid "skill %q not found"
 msgstr "技能 %q 未找到"
 
 msgid "unset %s\n"
-msgstr ""
+msgstr "已删除 %s\n"
 
 msgid "Analyse a trace's spans to extract the service dependency graph:\nwhich services communicated with which, their operations, span counts,\nerror counts, and average durations."
 msgstr "分析追踪的 span 以提取服务依赖关系图：\n哪些服务与哪些服务通信、它们的操作、span 数量、\n错误数量和平均耗时。"
@@ -760,14 +760,11 @@ msgstr "解析追踪响应失败: %w"
 msgid "trace %s not found"
 msgstr "追踪 %s 未找到"
 
-msgid "..."
-msgstr ""
-
 msgid "Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. Install it or use an .html file instead."
-msgstr ""
+msgstr "Org 转 HTML 需要 GNU Emacs（>= 26.1）且安装 Org mode。请安装 Emacs 或改用 .html 文件。"
 
 msgid "Warning: thumb_media_id %q looks like a local file.\n  Use --upload to auto-upload the thumbnail image, or upload it manually and \n  replace the value with a real media_id from WeChat material management.\n"
-msgstr ""
+msgstr "警告: thumb_media_id %q 看起来是本地文件。\n  使用 --upload 自动上传播缩略图，或手动上传后\n  替换为微信素材库中的真实 media_id。\n"
 
 msgid "Warning: thumbnail file %q not found, passing value as-is (make sure it's a valid media_id)\n"
-msgstr ""
+msgstr "警告: 缩略图文件 %q 未找到，按原样传递值（请确保是有效的 media_id）\n"

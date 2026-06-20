@@ -753,9 +753,6 @@ msgstr "parsing trace response: %w"
 msgid "trace %s not found"
 msgstr "trace %s not found"
 
-msgid "..."
-msgstr "..."
-
 msgid "Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. Install it or use an .html file instead."
 msgstr "Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. Install it or use an .html file instead."
 
