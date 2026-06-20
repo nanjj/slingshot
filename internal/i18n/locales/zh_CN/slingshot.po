@@ -768,3 +768,171 @@ msgstr "警告: thumb_media_id %q 看起来是本地文件。\n  使用 --upload
 
 msgid "Warning: thumbnail file %q not found, passing value as-is (make sure it's a valid media_id)\n"
 msgstr "警告: 缩略图文件 %q 未找到，按原样传递值（请确保是有效的 media_id）\n"
+
+msgid "    ... and %d more\n"
+msgstr "    ... 还有 %d 条\n"
+
+msgid "  1. Run:  go mod tidy\n"
+msgstr "  1. 运行：go mod tidy\n"
+
+msgid "  2. Wrap user-facing strings with i18n.G(\"message\")\n"
+msgstr "  2. 用 i18n.G(\"message\") 包裹用户可见字符串\n"
+
+msgid "  3. Run:  slingshot i18n sync\n"
+msgstr "  3. 运行：slingshot i18n sync\n"
+
+msgid "  4. After future code changes:  go generate ./internal/i18n/\n"
+msgstr "  4. 以后代码变更后：go generate ./internal/i18n/\n"
+
+msgid "  All entries are untranslated. Use a .po editor to add translations.\n"
+msgstr "  所有条目都未翻译。用 .po 编辑器添加翻译。\n"
+
+msgid "  created: %s\n"
+msgstr "  已创建：%s\n"
+
+msgid "(empty — translation cleared)"
+msgstr "（空 — 翻译已清除）"
+
+msgid "(empty)"
+msgstr "（空）"
+
+msgid "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (would panic at runtime)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
+msgstr "检查各语言环境 .po 文件的一致性。\n\n将每个语言环境与 en_US 哨兵进行比较，报告：\n  - 缺失条目：在 en_US 中存在但不在该语言环境中（运行时会 panic）\n  - 未翻译条目：msgstr 为空（运行时容忍）\n  - 孤立条目：在该语言环境中但不在 en_US 中（过时）\n\n不带参数时检查除 en_US 外的所有语言环境。\n指定语言环境参数时只检查指定的环境。\n\n退出码：\n  无 --exit-code：始终 0\n  有 --exit-code：如果任何语言环境有缺失或孤立条目则返回 1"
+
+msgid "Check locale consistency for missing, untranslated, and orphaned entries"
+msgstr "检查语言环境的缺失、未翻译和孤立条目一致性"
+
+msgid "Comments"
+msgstr "注释"
+
+msgid "Coverage"
+msgstr "覆盖率"
+
+msgid "Created"
+msgstr "已创建"
+
+msgid "Current translation"
+msgstr "当前翻译"
+
+msgid "Entry #%d\n"
+msgstr "条目 #%d\n"
+
+msgid "Full msgid"
+msgstr "完整 msgid"
+
+msgid "Initialize a new locale from en_US template"
+msgstr "从 en_US 模板初始化新语言环境"
+
+msgid "Initialize a new locale from the en_US template.\n\nCreates a new locale directory and .po file with all msgids from en_US,\nall with empty msgstr (untranslated).\n\nExample:\n  slingshot i18n add ja        # Create ja locale from en_US\n  slingshot i18n add zh_TW -d path/to/locales"
+msgstr "从 en_US 模板初始化新语言环境。\n\n创建新的语言环境目录和 .po 文件，包含 en_US 中所有 msgid，\n所有 msgstr 均为空（未翻译）。\n\n示例：\n  slingshot i18n add ja        # 从 en_US 创建 ja 语言环境\n  slingshot i18n add zh_TW -d path/to/locales"
+
+msgid "Initialize the i18n translation system in the current project.\n\nCreates the following structure:\n\n  internal/i18n/\n    i18n.go               Thin wrapper around github.com/nanjj/i18n\n    locales.go            //go:embed locales/*/*.po\n    locales/\n      en_US/<name>.po     Sentinel .po file (msgstr = msgid)\n      zh_CN/<name>.po     Starting translation file\n\nAfter running, add 'go mod tidy' to pull in the i18n dependency,\nthen use i18n.G(\"message\") in your code and run 'slingshot i18n sync'."
+msgstr "在当前项目中初始化 i18n 翻译系统。\n\n创建以下结构：\n\n  internal/i18n/\n    i18n.go               github.com/nanjj/i18n 的轻量封装\n    locales.go            //go:embed locales/*/*.po\n    locales/\n      en_US/<name>.po     哨兵 .po 文件（msgstr = msgid）\n      zh_CN/<name>.po     起始翻译文件\n\n运行后，执行 go mod tidy 拉取 i18n 依赖，\n然后在代码中使用 i18n.G(\"message\") 并运行 slingshot i18n sync。"
+
+msgid "Locale"
+msgstr "语言环境"
+
+msgid "Manage translation (.po) files"
+msgstr "管理翻译（.po）文件"
+
+msgid "Manage translation (.po) files for the slingshot i18n system.\n\nSubcommands:\n  check     Check locale consistency (missing/untranlated/orphaned entries)\n  stats     Show translation statistics per locale\n  sync      Synchronize .po files with i18n.G() calls in Go source code\n  show      Show full details of an untranslated entry by ID\n  translate Set translation for a single msgid (precise, one-at-a-time)\n  add       Initialize a new locale from en_US template\n  init      Scaffold the i18n package for a new project"
+msgstr "管理 slingshot i18n 系统的翻译（.po）文件。\n\n子命令：\n  check     检查语言环境一致性（缺失/未翻译/孤立条目）\n  stats     显示各语言环境的翻译统计\n  sync      将 .po 文件与 Go 源码中的 i18n.G() 调用同步\n  show      按 ID 显示未翻译条目的完整详情\n  translate 为单个 msgid 设置翻译（精确，一对一）\n  add       从 en_US 模板初始化新语言环境\n  init      为新项目搭建 i18n 包"
+
+msgid "Missing"
+msgstr "缺失"
+
+msgid "Missing entries:"
+msgstr "缺失的条目："
+
+msgid "Next steps:\n"
+msgstr "后续步骤：\n"
+
+msgid "No locales to check."
+msgstr "没有要检查的语言环境。"
+
+msgid "Note: en_US is the sentinel — all msgids must be registered there first."
+msgstr "注意：en_US 是哨兵——所有 msgid 必须首先在其中注册。"
+
+msgid "Orphaned entries:"
+msgstr "孤立条目："
+
+msgid "Scaffold i18n package for a new project"
+msgstr "为新项目搭建 i18n 包"
+
+msgid "Scanning source code for i18n.G() calls..."
+msgstr "正在扫描源码中的 i18n.G() 调用..."
+
+msgid "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\nLine2\" --msgstr \"行1\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
+msgstr "为单个 msgid 在语言环境的 .po 文件中设置翻译（msgstr）。\n\n这是精确的一对一翻译命令。它正确处理所有边界情况下的\n.po 转义——多行条目、嵌入引号、反斜杠和换行符都能\n忠实地往返。\n\n--msgid 和 --msgstr 值必须以 .po 转义形式给出：\n  \\\\   →  字面反斜杠\n  \\\"   →  字面双引号\n  \n   →  换行符\n\n要从 .po 文件中复制精确的 msgid，取 msgid 行引号之间的\n字符串内容（包括任何 \n、\\\\、\\\" 转义）。\n\n示例：\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\nLine2\" --msgstr \"行1\n行2\"\n\n工作流：\n  1. slingshot i18n check <locale>       — 列出未翻译条目\n  2. slingshot i18n show <locale> <id>   — 查看特定条目\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<翻译>\""
+
+msgid "Set translation for a single msgid"
+msgstr "为单个 msgid 设置翻译"
+
+msgid "Show full details of an untranslated entry by ID"
+msgstr "按 ID 显示未翻译条目的完整详情"
+
+msgid "Show the full msgid and metadata for an untranslated entry.\n\nThe ID corresponds to the number shown by \"slingshot i18n check <locale>\".\nID numbering is stable — entries are sorted alphabetically.\n\nExample:\n  slingshot i18n show zh_CN 3"
+msgstr "显示未翻译条目的完整 msgid 和元数据。\n\nID 对应于 \"slingshot i18n check <locale>\" 显示的数字。\nID 编号是稳定的——条目按字母顺序排序。\n\n示例：\n  slingshot i18n show zh_CN 3"
+
+msgid "Show translation statistics for each locale.\n\nDisplays total entries, translated count, untranslated count,\nmissing entries (vs en_US), and coverage percentage."
+msgstr "显示各语言环境的翻译统计。\n\n显示总条目数、已翻译数、未翻译数、\n缺失条目（相对于 en_US）和覆盖率百分比。"
+
+msgid "Show translation statistics per locale"
+msgstr "显示各语言环境的翻译统计"
+
+msgid "Synchronize .po files with source code"
+msgstr "将 .po 文件与源码同步"
+
+msgid "Synchronize translation (.po) files with i18n.G() calls in Go source code.\n\nScans all .go files (excluding vendor/ and hidden directories) for i18n.G()\ncalls, adds new msgids to en_US, and propagates new entries to all other\nlocales with empty msgstr (untranslated).\n\nExisting translations are never overwritten.\n\nWith --delete, removes orphaned entries (msgids that exist in .po files\nbut no longer appear in source code)."
+msgstr "将翻译（.po）文件与 Go 源码中的 i18n.G() 调用同步。\n\n扫描所有 .go 文件（排除 vendor/ 和隐藏目录）中的 i18n.G()\n调用，将新 msgid 添加到 en_US，并将新条目传播到所有其他\n语言环境（msgstr 为空，未翻译）。\n\n现有翻译永远不会被覆盖。\n\n使用 --delete 可删除孤立条目（存在于 .po 文件中但不再出现在源码中的 msgid）。"
+
+msgid "Tip:"
+msgstr "提示："
+
+msgid "Total"
+msgstr "总数"
+
+msgid "Translated"
+msgstr "已翻译"
+
+msgid "Translation updated for %s"
+msgstr "翻译已更新：%s"
+
+msgid "Untranslated"
+msgstr "未翻译"
+
+msgid "Untranslated entries in %s (%d total):"
+msgstr "%s 中未翻译的条目（共 %d 条）："
+
+msgid "Untranslated entries:"
+msgstr "未翻译的条目："
+
+msgid "Updated en_US"
+msgstr "已更新 en_US"
+
+msgid "chars"
+msgstr "字符"
+
+msgid "entries"
+msgstr "条目"
+
+msgid "i18n scaffold created successfully.\n"
+msgstr "i18n 脚手架已成功创建。\n"
+
+msgid "is up to date"
+msgstr "已是最新"
+
+msgid "msgid %q not found in %s .po file"
+msgstr "msgid %q 未在 %s .po 文件中找到"
+
+msgid "new"
+msgstr "新增"
+
+msgid "now:"
+msgstr "现在："
+
+msgid "removed"
+msgstr "移除"
+
+msgid "was:"
+msgstr "之前："

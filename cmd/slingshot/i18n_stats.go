@@ -6,10 +6,11 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nStats implements "slingshot i18n stats".
-// Uses plain English — not i18n.G() — to avoid circular dependency.
 type cmdI18nStats struct {
 	global  *cmdGlobal
 	i18nCmd *cmdI18n
@@ -18,11 +19,11 @@ type cmdI18nStats struct {
 func (c *cmdI18nStats) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "stats"
-	cmd.Short = "Show translation statistics per locale"
-	cmd.Long = `Show translation statistics for each locale.
+	cmd.Short = i18n.G("Show translation statistics per locale")
+	cmd.Long = i18n.G(`Show translation statistics for each locale.
 
 Displays total entries, translated count, untranslated count,
-missing entries (vs en_US), and coverage percentage.`
+missing entries (vs en_US), and coverage percentage.`)
 	cmd.RunE = c.run
 	return cmd
 }
@@ -88,12 +89,12 @@ func (c *cmdI18nStats) run(cmd *cobra.Command, args []string) error {
 
 	// Print header
 	header := fmt.Sprintf("%-*s  %5s  %10s  %12s  %7s  %8s",
-		maxName, "Locale",
-		"Total",
-		"Translated",
-		"Untranslated",
-		"Missing",
-		"Coverage")
+		maxName, i18n.G("Locale"),
+		i18n.G("Total"),
+		i18n.G("Translated"),
+		i18n.G("Untranslated"),
+		i18n.G("Missing"),
+		i18n.G("Coverage"))
 
 	fmt.Fprintln(color.Output, color.CyanString(header))
 
@@ -125,7 +126,7 @@ func (c *cmdI18nStats) run(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintln(color.Output)
 	fmt.Fprintln(color.Output,
-		"Note: en_US is the sentinel — all msgids must be registered there first.")
+		i18n.G("Note: en_US is the sentinel — all msgids must be registered there first."))
 
 	return nil
 }

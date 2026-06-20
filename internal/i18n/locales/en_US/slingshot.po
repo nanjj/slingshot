@@ -761,3 +761,171 @@ msgstr "Warning: thumb_media_id %q looks like a local file.\n  Use --upload to a
 
 msgid "Warning: thumbnail file %q not found, passing value as-is (make sure it's a valid media_id)\n"
 msgstr "Warning: thumbnail file %q not found, passing value as-is (make sure it's a valid media_id)\n"
+
+msgid "    ... and %d more\n"
+msgstr "    ... and %d more\n"
+
+msgid "  1. Run:  go mod tidy\n"
+msgstr "  1. Run:  go mod tidy\n"
+
+msgid "  2. Wrap user-facing strings with i18n.G(\"message\")\n"
+msgstr "  2. Wrap user-facing strings with i18n.G(\"message\")\n"
+
+msgid "  3. Run:  slingshot i18n sync\n"
+msgstr "  3. Run:  slingshot i18n sync\n"
+
+msgid "  4. After future code changes:  go generate ./internal/i18n/\n"
+msgstr "  4. After future code changes:  go generate ./internal/i18n/\n"
+
+msgid "  All entries are untranslated. Use a .po editor to add translations.\n"
+msgstr "  All entries are untranslated. Use a .po editor to add translations.\n"
+
+msgid "  created: %s\n"
+msgstr "  created: %s\n"
+
+msgid "(empty — translation cleared)"
+msgstr "(empty — translation cleared)"
+
+msgid "(empty)"
+msgstr "(empty)"
+
+msgid "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (would panic at runtime)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
+msgstr "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (would panic at runtime)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
+
+msgid "Check locale consistency for missing, untranslated, and orphaned entries"
+msgstr "Check locale consistency for missing, untranslated, and orphaned entries"
+
+msgid "Comments"
+msgstr "Comments"
+
+msgid "Coverage"
+msgstr "Coverage"
+
+msgid "Created"
+msgstr "Created"
+
+msgid "Current translation"
+msgstr "Current translation"
+
+msgid "Entry #%d\n"
+msgstr "Entry #%d\n"
+
+msgid "Full msgid"
+msgstr "Full msgid"
+
+msgid "Initialize a new locale from en_US template"
+msgstr "Initialize a new locale from en_US template"
+
+msgid "Initialize a new locale from the en_US template.\n\nCreates a new locale directory and .po file with all msgids from en_US,\nall with empty msgstr (untranslated).\n\nExample:\n  slingshot i18n add ja        # Create ja locale from en_US\n  slingshot i18n add zh_TW -d path/to/locales"
+msgstr "Initialize a new locale from the en_US template.\n\nCreates a new locale directory and .po file with all msgids from en_US,\nall with empty msgstr (untranslated).\n\nExample:\n  slingshot i18n add ja        # Create ja locale from en_US\n  slingshot i18n add zh_TW -d path/to/locales"
+
+msgid "Initialize the i18n translation system in the current project.\n\nCreates the following structure:\n\n  internal/i18n/\n    i18n.go               Thin wrapper around github.com/nanjj/i18n\n    locales.go            //go:embed locales/*/*.po\n    locales/\n      en_US/<name>.po     Sentinel .po file (msgstr = msgid)\n      zh_CN/<name>.po     Starting translation file\n\nAfter running, add 'go mod tidy' to pull in the i18n dependency,\nthen use i18n.G(\"message\") in your code and run 'slingshot i18n sync'."
+msgstr "Initialize the i18n translation system in the current project.\n\nCreates the following structure:\n\n  internal/i18n/\n    i18n.go               Thin wrapper around github.com/nanjj/i18n\n    locales.go            //go:embed locales/*/*.po\n    locales/\n      en_US/<name>.po     Sentinel .po file (msgstr = msgid)\n      zh_CN/<name>.po     Starting translation file\n\nAfter running, add 'go mod tidy' to pull in the i18n dependency,\nthen use i18n.G(\"message\") in your code and run 'slingshot i18n sync'."
+
+msgid "Locale"
+msgstr "Locale"
+
+msgid "Manage translation (.po) files"
+msgstr "Manage translation (.po) files"
+
+msgid "Manage translation (.po) files for the slingshot i18n system.\n\nSubcommands:\n  check     Check locale consistency (missing/untranlated/orphaned entries)\n  stats     Show translation statistics per locale\n  sync      Synchronize .po files with i18n.G() calls in Go source code\n  show      Show full details of an untranslated entry by ID\n  translate Set translation for a single msgid (precise, one-at-a-time)\n  add       Initialize a new locale from en_US template\n  init      Scaffold the i18n package for a new project"
+msgstr "Manage translation (.po) files for the slingshot i18n system.\n\nSubcommands:\n  check     Check locale consistency (missing/untranlated/orphaned entries)\n  stats     Show translation statistics per locale\n  sync      Synchronize .po files with i18n.G() calls in Go source code\n  show      Show full details of an untranslated entry by ID\n  translate Set translation for a single msgid (precise, one-at-a-time)\n  add       Initialize a new locale from en_US template\n  init      Scaffold the i18n package for a new project"
+
+msgid "Missing"
+msgstr "Missing"
+
+msgid "Missing entries:"
+msgstr "Missing entries:"
+
+msgid "Next steps:\n"
+msgstr "Next steps:\n"
+
+msgid "No locales to check."
+msgstr "No locales to check."
+
+msgid "Note: en_US is the sentinel — all msgids must be registered there first."
+msgstr "Note: en_US is the sentinel — all msgids must be registered there first."
+
+msgid "Orphaned entries:"
+msgstr "Orphaned entries:"
+
+msgid "Scaffold i18n package for a new project"
+msgstr "Scaffold i18n package for a new project"
+
+msgid "Scanning source code for i18n.G() calls..."
+msgstr "Scanning source code for i18n.G() calls..."
+
+msgid "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
+msgstr "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
+
+msgid "Set translation for a single msgid"
+msgstr "Set translation for a single msgid"
+
+msgid "Show full details of an untranslated entry by ID"
+msgstr "Show full details of an untranslated entry by ID"
+
+msgid "Show the full msgid and metadata for an untranslated entry.\n\nThe ID corresponds to the number shown by \"slingshot i18n check <locale>\".\nID numbering is stable — entries are sorted alphabetically.\n\nExample:\n  slingshot i18n show zh_CN 3"
+msgstr "Show the full msgid and metadata for an untranslated entry.\n\nThe ID corresponds to the number shown by \"slingshot i18n check <locale>\".\nID numbering is stable — entries are sorted alphabetically.\n\nExample:\n  slingshot i18n show zh_CN 3"
+
+msgid "Show translation statistics for each locale.\n\nDisplays total entries, translated count, untranslated count,\nmissing entries (vs en_US), and coverage percentage."
+msgstr "Show translation statistics for each locale.\n\nDisplays total entries, translated count, untranslated count,\nmissing entries (vs en_US), and coverage percentage."
+
+msgid "Show translation statistics per locale"
+msgstr "Show translation statistics per locale"
+
+msgid "Synchronize .po files with source code"
+msgstr "Synchronize .po files with source code"
+
+msgid "Synchronize translation (.po) files with i18n.G() calls in Go source code.\n\nScans all .go files (excluding vendor/ and hidden directories) for i18n.G()\ncalls, adds new msgids to en_US, and propagates new entries to all other\nlocales with empty msgstr (untranslated).\n\nExisting translations are never overwritten.\n\nWith --delete, removes orphaned entries (msgids that exist in .po files\nbut no longer appear in source code)."
+msgstr "Synchronize translation (.po) files with i18n.G() calls in Go source code.\n\nScans all .go files (excluding vendor/ and hidden directories) for i18n.G()\ncalls, adds new msgids to en_US, and propagates new entries to all other\nlocales with empty msgstr (untranslated).\n\nExisting translations are never overwritten.\n\nWith --delete, removes orphaned entries (msgids that exist in .po files\nbut no longer appear in source code)."
+
+msgid "Tip:"
+msgstr "Tip:"
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Translated"
+msgstr "Translated"
+
+msgid "Translation updated for %s"
+msgstr "Translation updated for %s"
+
+msgid "Untranslated"
+msgstr "Untranslated"
+
+msgid "Untranslated entries in %s (%d total):"
+msgstr "Untranslated entries in %s (%d total):"
+
+msgid "Untranslated entries:"
+msgstr "Untranslated entries:"
+
+msgid "Updated en_US"
+msgstr "Updated en_US"
+
+msgid "chars"
+msgstr "chars"
+
+msgid "entries"
+msgstr "entries"
+
+msgid "i18n scaffold created successfully.\n"
+msgstr "i18n scaffold created successfully.\n"
+
+msgid "is up to date"
+msgstr "is up to date"
+
+msgid "msgid %q not found in %s .po file"
+msgstr "msgid %q not found in %s .po file"
+
+msgid "new"
+msgstr "new"
+
+msgid "now:"
+msgstr "now:"
+
+msgid "removed"
+msgstr "removed"
+
+msgid "was:"
+msgstr "was:"

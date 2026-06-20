@@ -7,6 +7,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nAdd implements "slingshot i18n add".
@@ -18,15 +20,15 @@ type cmdI18nAdd struct {
 func (c *cmdI18nAdd) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "add <locale>"
-	cmd.Short = "Initialize a new locale from en_US template"
-	cmd.Long = `Initialize a new locale from the en_US template.
+	cmd.Short = i18n.G("Initialize a new locale from en_US template")
+	cmd.Long = i18n.G(`Initialize a new locale from the en_US template.
 
 Creates a new locale directory and .po file with all msgids from en_US,
 all with empty msgstr (untranslated).
 
 Example:
   slingshot i18n add ja        # Create ja locale from en_US
-  slingshot i18n add zh_TW -d path/to/locales`
+  slingshot i18n add zh_TW -d path/to/locales`)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ExactArgs(1)
 	return cmd
@@ -66,7 +68,6 @@ func (c *cmdI18nAdd) run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-
 	if !hasHeader {
 		// Create a minimal header if en_US doesn't have one
 		entries = append(entries, poEntry{
@@ -97,10 +98,14 @@ func (c *cmdI18nAdd) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing %s: %w", locale, err)
 	}
 
-	fmt.Fprintf(color.Output, "%s Created %s (%d entries)\n",
-		color.GreenString("✓"), locale, syncedEntryCount(entries))
+	fmt.Fprintf(color.Output, "%s %s %s (%d %s)\n",
+		color.GreenString("✓"),
+		i18n.G("Created"),
+		locale,
+		syncedEntryCount(entries),
+		i18n.G("entries"))
 
-	fmt.Fprintf(os.Stderr, "  All entries are untranslated. Use a .po editor to add translations.\n")
+	fmt.Fprintln(os.Stderr, i18n.G("  All entries are untranslated. Use a .po editor to add translations."))
 
 	return nil
 }

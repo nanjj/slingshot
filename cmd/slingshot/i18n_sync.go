@@ -7,6 +7,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nSync implements "slingshot i18n sync".
@@ -19,8 +21,8 @@ type cmdI18nSync struct {
 func (c *cmdI18nSync) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "sync"
-	cmd.Short = "Synchronize .po files with source code"
-	cmd.Long = `Synchronize translation (.po) files with i18n.G() calls in Go source code.
+	cmd.Short = i18n.G("Synchronize .po files with source code")
+	cmd.Long = i18n.G(`Synchronize translation (.po) files with i18n.G() calls in Go source code.
 
 Scans all .go files (excluding vendor/ and hidden directories) for i18n.G()
 calls, adds new msgids to en_US, and propagates new entries to all other
@@ -29,7 +31,7 @@ locales with empty msgstr (untranslated).
 Existing translations are never overwritten.
 
 With --delete, removes orphaned entries (msgids that exist in .po files
-but no longer appear in source code).`
+but no longer appear in source code).`)
 	cmd.Flags().BoolVar(&c.delete, "delete", false,
 		"Delete orphaned entries (in .po but not in source code)")
 	cmd.RunE = c.run
@@ -40,7 +42,7 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 	dir := c.i18nCmd.resolveDir()
 
 	// 1. Extract msgids from source code
-	color.New(color.Faint).Fprintf(os.Stderr, "Scanning source code for i18n.G() calls...\n")
+	color.New(color.Faint).Fprintln(os.Stderr, i18n.G("Scanning source code for i18n.G() calls..."))
 	sourceMsgids, err := extractMsgids(c.i18nCmd.resolveRoot())
 
 	if err != nil {
@@ -49,7 +51,6 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 	if len(sourceMsgids) == 0 {
 		return fmt.Errorf("no i18n.G() calls found in source code")
 	}
-
 
 	// 2. Load en_US.po as entries
 	enUSEntries, err := loadPOFull(dir, "en_US")
@@ -73,17 +74,20 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 		}
 		added := afterCount - beforeCount
 		removed := beforeCount - afterCount
-		msg := fmt.Sprintf("Updated en_US (%d entries)", afterCount)
+		msg := i18n.G("Updated en_US") + fmt.Sprintf(" (%d %s)", afterCount, i18n.G("entries"))
 		if added > 0 {
-			msg += fmt.Sprintf(", +%d new", added)
+			msg += fmt.Sprintf(", +%d %s", added, i18n.G("new"))
 		}
 		if removed > 0 {
-			msg += fmt.Sprintf(", -%d removed", removed)
+			msg += fmt.Sprintf(", -%d %s", removed, i18n.G("removed"))
 		}
 		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("\u2713"), msg)
 	} else {
-		fmt.Fprintf(color.Output, "%s en_US is up to date (%d entries)\n",
-			color.GreenString("\u2713"), afterCount)
+		fmt.Fprintf(color.Output, "%s en_US %s (%d %s)\n",
+			color.GreenString("\u2713"),
+			i18n.G("is up to date"),
+			afterCount,
+			i18n.G("entries"))
 	}
 
 	// 6. Build en_US msgid set (excluding header)
@@ -114,17 +118,24 @@ func (c *cmdI18nSync) run(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(os.Stderr, "Warning: writing %s: %v\n", loc, err)
 				continue
 			}
-			fmt.Fprintf(color.Output, "  %s Updated %s (%d entries)\n",
-				color.GreenString("\u2713"), loc, syncedEntryCount(entries))
+			fmt.Fprintf(color.Output, "  %s %s %s (%d %s)\n",
+				color.GreenString("\u2713"),
+				i18n.G("Updated"),
+				loc,
+				syncedEntryCount(entries),
+				i18n.G("entries"))
 		} else {
-			fmt.Fprintf(color.Output, "  %s %s is up to date (%d entries)\n",
-				color.GreenString("\u2713"), loc, syncedEntryCount(entries))
+			fmt.Fprintf(color.Output, "  %s %s %s (%d %s)\n",
+				color.GreenString("\u2713"),
+				loc,
+				i18n.G("is up to date"),
+				syncedEntryCount(entries),
+				i18n.G("entries"))
 		}
 	}
 
 	return nil
 }
-
 
 // dedupEntries removes duplicate entries, keeping only the last occurrence
 // of each msgid. The header entry (msgid "") is always preserved.

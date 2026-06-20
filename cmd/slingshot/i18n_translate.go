@@ -6,6 +6,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nTranslate implements "slingshot i18n translate".
@@ -22,8 +24,8 @@ type cmdI18nTranslate struct {
 func (c *cmdI18nTranslate) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "translate <locale>"
-	cmd.Short = "Set translation for a single msgid"
-	cmd.Long = `Set the translation (msgstr) for a single msgid in a locale's .po file.
+	cmd.Short = i18n.G("Set translation for a single msgid")
+	cmd.Long = i18n.G(`Set the translation (msgstr) for a single msgid in a locale's .po file.
 
 This is the precise, one-at-a-time translation command.  It handles
 .po escaping correctly for all edge cases — multi-line entries,
@@ -46,7 +48,7 @@ Workflow:
   1. slingshot i18n check <locale>       — list untranslated entries
   2. slingshot i18n show <locale> <id>   — inspect a specific entry
   3. slingshot i18n translate <locale> \
-       --msgid "<exact msgid>" --msgstr "<translation>"`
+      --msgid "<exact msgid>" --msgstr "<translation>"`)
 	cmd.Flags().StringVar(&c.msgid, "msgid", "",
 		"Exact msgid to translate (required, .po-escaped form)")
 	cmd.Flags().StringVar(&c.msgstr, "msgstr", "",
@@ -94,20 +96,20 @@ func (c *cmdI18nTranslate) run(cmd *cobra.Command, args []string) error {
 		// --- Rich summary ---
 		fmt.Fprintf(color.Output, "%s  %s\n",
 			color.GreenString("✓"),
-			color.GreenString("Translation updated for %s", locale))
+			color.GreenString(i18n.G("Translation updated for %s"), locale))
 		fmt.Fprintf(color.Output, "\n  %s %s\n",
 			color.YellowString("msgid:"), c.msgid)
 		if oldMsgstr != "" {
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.RedString("was:"), oldMsgstr)
+				color.RedString(i18n.G("was:")), oldMsgstr)
 		}
 		if c.msgstr != "" {
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.GreenString("now:"), c.msgstr)
+				color.GreenString(i18n.G("now:")), c.msgstr)
 		} else {
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.RedString("now:"),
-				color.RedString("(empty — translation cleared)"))
+				color.RedString(i18n.G("now:")),
+				color.RedString(i18n.G("(empty — translation cleared)")))
 		}
 		return nil
 	}
@@ -120,7 +122,7 @@ func (c *cmdI18nTranslate) run(cmd *cobra.Command, args []string) error {
 func (c *cmdI18nTranslate) msgidNotFound(entries []poEntry, locale string, targetMsgid string) error {
 	fmt.Fprintf(color.Output, "%s  %s\n",
 		color.RedString("✗"),
-		color.RedString("msgid %q not found in %s .po file", c.msgid, locale))
+		color.RedString(i18n.G("msgid %q not found in %s .po file"), c.msgid, locale))
 
 	// Gather untranslated entries as a quick reference.
 	var untranslated []string
@@ -131,7 +133,7 @@ func (c *cmdI18nTranslate) msgidNotFound(entries []poEntry, locale string, targe
 	}
 	if len(untranslated) > 0 {
 		fmt.Fprintf(os.Stderr, "\n  %s\n",
-			color.CyanString("Untranslated entries in %s (%d total):",
+			color.CyanString(i18n.G("Untranslated entries in %s (%d total):"),
 				locale, len(untranslated)))
 		show := 10
 		if len(untranslated) < show {
@@ -142,11 +144,11 @@ func (c *cmdI18nTranslate) msgidNotFound(entries []poEntry, locale string, targe
 			fmt.Fprintf(os.Stderr, "    %3d.  %s\n", i+1, display)
 		}
 		if len(untranslated) > show {
-			fmt.Fprintf(os.Stderr, "    ... and %d more\n",
+			fmt.Fprintf(os.Stderr, i18n.G("    ... and %d more\n"),
 				len(untranslated)-show)
 		}
 		fmt.Fprintf(os.Stderr, "\n  %s  slingshot i18n show %s <id>\n",
-			color.YellowString("Tip:"), locale)
+			color.YellowString(i18n.G("Tip:")), locale)
 	}
 	return fmt.Errorf("msgid %q not found in %s .po file", c.msgid, locale)
 }

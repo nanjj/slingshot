@@ -8,10 +8,11 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nCheck implements "slingshot i18n check".
-// Uses plain English — not i18n.G() — to avoid circular dependency.
 type cmdI18nCheck struct {
 	global   *cmdGlobal
 	i18nCmd  *cmdI18n
@@ -21,8 +22,8 @@ type cmdI18nCheck struct {
 func (c *cmdI18nCheck) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "check [locale...]"
-	cmd.Short = "Check locale consistency for missing, untranslated, and orphaned entries"
-	cmd.Long = `Check .po file consistency across locales.
+	cmd.Short = i18n.G("Check locale consistency for missing, untranslated, and orphaned entries")
+	cmd.Long = i18n.G(`Check .po file consistency across locales.
 
 Compares each locale against the en_US sentinel and reports:
   - Missing entries: in en_US but not in the locale (would panic at runtime)
@@ -34,7 +35,7 @@ With locale arguments, checks only the specified locales.
 
 Exit code:
   Without --exit-code: always 0
-  With --exit-code:    1 if any locale has missing or orphaned entries`
+  With --exit-code:    1 if any locale has missing or orphaned entries`)
 	cmd.Flags().BoolVar(&c.exitCode, "exit-code", false,
 		"Exit with non-zero status if any issues are found")
 	cmd.RunE = c.run
@@ -85,7 +86,7 @@ func (c *cmdI18nCheck) run(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(results) == 0 {
-		fmt.Fprintln(os.Stderr, "No locales to check.")
+		fmt.Fprintln(os.Stderr, i18n.G("No locales to check."))
 		return nil
 	}
 
@@ -120,7 +121,7 @@ func (c *cmdI18nCheck) run(cmd *cobra.Command, args []string) error {
 		if len(a.Missing) > 0 {
 			sort.Strings(a.Missing)
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.RedString("Missing entries:"),
+				color.RedString(i18n.G("Missing entries:")),
 				color.RedString("%d", len(a.Missing)))
 			for _, m := range a.Missing {
 				display := truncateMsgid(m, 72)
@@ -132,7 +133,7 @@ func (c *cmdI18nCheck) run(cmd *cobra.Command, args []string) error {
 		if len(a.Orphaned) > 0 {
 			sort.Strings(a.Orphaned)
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.MagentaString("Orphaned entries:"),
+				color.MagentaString(i18n.G("Orphaned entries:")),
 				color.MagentaString("%d", len(a.Orphaned)))
 			for _, o := range a.Orphaned {
 				display := truncateMsgid(o, 72)
@@ -144,7 +145,7 @@ func (c *cmdI18nCheck) run(cmd *cobra.Command, args []string) error {
 		if a.Untranslated > 0 {
 			sort.Strings(a.UntranslatedList)
 			fmt.Fprintf(color.Output, "  %s %s\n",
-				color.CyanString("Untranslated entries:"),
+				color.CyanString(i18n.G("Untranslated entries:")),
 				color.CyanString("%d", a.Untranslated))
 			for i, u := range a.UntranslatedList {
 				display := truncateMsgid(u, 72)

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nInit implements "slingshot i18n init".
@@ -20,8 +22,8 @@ type cmdI18nInit struct {
 func (c *cmdI18nInit) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "init"
-	cmd.Short = "Scaffold i18n package for a new project"
-	cmd.Long = `Initialize the i18n translation system in the current project.
+	cmd.Short = i18n.G("Scaffold i18n package for a new project")
+	cmd.Long = i18n.G(`Initialize the i18n translation system in the current project.
 
 Creates the following structure:
 
@@ -33,7 +35,7 @@ Creates the following structure:
       zh_CN/<name>.po     Starting translation file
 
 After running, add 'go mod tidy' to pull in the i18n dependency,
-then use i18n.G("message") in your code and run 'slingshot i18n sync'.`
+then use i18n.G("message") in your code and run 'slingshot i18n sync'.`)
 
 	cmd.Flags().StringVar(&c.name, "name", "",
 		".po filename (without .po extension, default: derived from go.mod module name)")
@@ -122,7 +124,7 @@ var localesFS embed.FS
 	if err := os.WriteFile(localesGo, []byte(localesContent), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", localesGo, err)
 	}
-	fmt.Fprintf(os.Stderr, "  created: %s\n", rel(localesGo))
+	fmt.Fprint(os.Stderr, fmt.Sprintf(i18n.G("  created: %s\n"), rel(localesGo)))
 
 	// Generate i18n.go (thin wrapper).
 	i18nGo := filepath.Join(i18nDir, "i18n.go")
@@ -154,7 +156,7 @@ func DumpTranslations() string { return _locales.Dump() }
 	if err := os.WriteFile(i18nGo, []byte(i18nContent), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", i18nGo, err)
 	}
-	fmt.Fprintf(os.Stderr, "  created: %s\n", rel(i18nGo))
+	fmt.Fprint(os.Stderr, fmt.Sprintf(i18n.G("  created: %s\n"), rel(i18nGo)))
 
 	// Generate en_US .po file.
 	enUSPath := filepath.Join(localeDir, "en_US", c.name+".po")
@@ -163,7 +165,7 @@ func DumpTranslations() string { return _locales.Dump() }
 	if err := os.WriteFile(enUSPath, []byte(enUSContent), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", enUSPath, err)
 	}
-	fmt.Fprintf(os.Stderr, "  created: %s\n", rel(enUSPath))
+	fmt.Fprint(os.Stderr, fmt.Sprintf(i18n.G("  created: %s\n"), rel(enUSPath)))
 
 	// Generate zh_CN .po file.
 	zhCNPath := filepath.Join(localeDir, "zh_CN", c.name+".po")
@@ -172,17 +174,16 @@ func DumpTranslations() string { return _locales.Dump() }
 	if err := os.WriteFile(zhCNPath, []byte(zhCNContent), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", zhCNPath, err)
 	}
-	fmt.Fprintf(os.Stderr, "  created: %s\n", rel(zhCNPath))
-
+	fmt.Fprint(os.Stderr, fmt.Sprintf(i18n.G("  created: %s\n"), rel(zhCNPath)))
 	// Summary.
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "i18n scaffold created successfully.\n")
-	fmt.Fprintf(os.Stderr, "\n")
-	fmt.Fprintf(os.Stderr, "Next steps:\n")
-	fmt.Fprintf(os.Stderr, "  1. Run:  go mod tidy\n")
-	fmt.Fprintf(os.Stderr, "  2. Wrap user-facing strings with i18n.G(\"message\")\n")
-	fmt.Fprintf(os.Stderr, "  3. Run:  slingshot i18n sync\n")
-	fmt.Fprintf(os.Stderr, "  4. After future code changes:  go generate ./internal/i18n/\n")
+	fmt.Fprintln(os.Stderr, i18n.G("i18n scaffold created successfully."))
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, i18n.G("Next steps:"))
+	fmt.Fprintln(os.Stderr, i18n.G("  1. Run:  go mod tidy"))
+	fmt.Fprintln(os.Stderr, i18n.G("  2. Wrap user-facing strings with i18n.G(\"message\")"))
+	fmt.Fprintln(os.Stderr, i18n.G("  3. Run:  slingshot i18n sync"))
+	fmt.Fprintln(os.Stderr, i18n.G("  4. After future code changes:  go generate ./internal/i18n/"))
 
 	return nil
 }

@@ -8,6 +8,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18nShow implements "slingshot i18n show".
@@ -21,14 +23,14 @@ type cmdI18nShow struct {
 func (c *cmdI18nShow) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "show <locale> <id>"
-	cmd.Short = "Show full details of an untranslated entry by ID"
-	cmd.Long = `Show the full msgid and metadata for an untranslated entry.
+	cmd.Short = i18n.G("Show full details of an untranslated entry by ID")
+	cmd.Long = i18n.G(`Show the full msgid and metadata for an untranslated entry.
 
 The ID corresponds to the number shown by "slingshot i18n check <locale>".
 ID numbering is stable — entries are sorted alphabetically.
 
 Example:
-  slingshot i18n show zh_CN 3`
+  slingshot i18n show zh_CN 3`)
 
 	cmd.RunE = c.run
 	cmd.Args = cobra.ExactArgs(2)
@@ -87,23 +89,23 @@ func (c *cmdI18nShow) run(cmd *cobra.Command, args []string) error {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(color.CyanString("Entry #%d\n", id))
+	b.WriteString(color.CyanString(i18n.G("Entry #%d\n"), id))
 	b.WriteString("─────────────────────────────────────────────────────\n")
-	b.WriteString(color.YellowString("Full msgid"))
-	b.WriteString(fmt.Sprintf(" (%d chars):\n", len(msgid)))
+	b.WriteString(color.YellowString(i18n.G("Full msgid")))
+	b.WriteString(fmt.Sprintf(" (%d %s):\n", len(msgid), i18n.G("chars")))
 	b.WriteString(fmt.Sprintf("  %q\n", msgid))
 
 	if len(entry.Comments) > 0 {
 		b.WriteString("\n")
-		b.WriteString(color.YellowString("Comments") + ":\n")
+		b.WriteString(color.YellowString(i18n.G("Comments")) + ":\n")
 		for _, comment := range entry.Comments {
 			b.WriteString(fmt.Sprintf("  %s\n", comment))
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("\n%s: ", color.YellowString("Current translation")))
+	b.WriteString(fmt.Sprintf("\n%s: ", color.YellowString(i18n.G("Current translation"))))
 	if entry.Msgstr == "" {
-		b.WriteString(color.RedString("(empty)"))
+		b.WriteString(color.RedString(i18n.G("(empty)")))
 	} else {
 		b.WriteString(entry.Msgstr)
 	}

@@ -7,24 +7,26 @@ import (
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdI18n implements the "slingshot i18n" parent command.
-// Note: this command intentionally uses plain English strings instead of
-// i18n.G() because it manages .po files — using i18n would create a
-// circular dependency (the command must work even when .po files are broken).
+// Uses i18n.G() for user-facing strings. The workflow ensures safety:
+//  1. i18n.G() calls are added to source code
+//  2. slingshot i18n sync (old binary) extracts msgids to .po
+//  3. Translations are added to .po files
+//  4. New binary is built — .po has translations, no panic at runtime
 type cmdI18n struct {
 	global *cmdGlobal
 	dir    string // --dir flag: path to locales directory
 }
-
 func (c *cmdI18n) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "i18n"
-	cmd.Short = "Manage translation (.po) files"
+	cmd.Short = i18n.G("Manage translation (.po) files")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-		`Manage translation (.po) files for the slingshot i18n system.
+		i18n.G(`Manage translation (.po) files for the slingshot i18n system.
 
 Subcommands:
   check     Check locale consistency (missing/untranlated/orphaned entries)
@@ -33,7 +35,7 @@ Subcommands:
   show      Show full details of an untranslated entry by ID
   translate Set translation for a single msgid (precise, one-at-a-time)
   add       Initialize a new locale from en_US template
-  init      Scaffold the i18n package for a new project`,
+  init      Scaffold the i18n package for a new project`),
 	)
 
 	cmd.PersistentFlags().StringVarP(&c.dir, "dir", "d", "",
