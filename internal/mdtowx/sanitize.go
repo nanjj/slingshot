@@ -4,6 +4,7 @@ package mdtowx
 import (
 	"bytes"
 	"strings"
+	"unicode"
 
 	"golang.org/x/net/html"
 )
@@ -136,7 +137,7 @@ func (s *sanitizer) handleEnd() {
 		if s.bufDepth == 0 {
 			// <sup> is fully buffered. Decide what to output.
 			if s.supHasIssue {
-				s.out.Write(stripTags(s.buf.Bytes()))
+				s.out.Write(RemoveCJCSpace(stripTags(s.buf.Bytes())))
 			} else {
 				s.out.Write(s.buf.Bytes())
 			}
@@ -159,7 +160,7 @@ func (s *sanitizer) handleText() {
 		s.buf.Write(s.z.Raw())
 		return
 	}
-	s.out.Write(s.z.Raw())
+	s.out.Write(RemoveCJCSpace(s.z.Raw()))
 }
 
 func (s *sanitizer) handleRaw() {
@@ -222,4 +223,39 @@ func stripTags(src []byte) []byte {
 		}
 	}
 	return bytes.TrimSpace(out.Bytes())
+}
+
+// RemoveCJCSpace removes spaces (' ') that appear between two non-ASCII
+// characters. This is commonly needed for CJK text where spaces between
+// Chinese/Japanese/Korean characters are artifacts of markdown or org-mode
+// processing, but works for any non-ASCII script (Cyrillic, Greek, etc.).
+//
+// Examples:
+//
+//	"相 信"             → "相信"
+//	"I am an AI"        → "I am an AI"  (unchanged — all ASCII)
+//	"Hello 世界"        → "Hello 世界"  (unchanged — ASCII on one side)
+//	"我们 相信 你"      → "我们相信你"
+func RemoveCJCSpace(src []byte) []byte {
+	s := string(src)
+	runes := []rune(s)
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == ' ' && i > 0 && i < len(runes)-1 {
+			// Look ahead past consecutive spaces
+			j := i + 1
+			for j < len(runes) && runes[j] == ' ' {
+				j++
+			}
+			// Remove the whole space-run if sandwiched between non-ASCII chars
+			if j < len(runes) && runes[i-1] > unicode.MaxASCII && runes[j] > unicode.MaxASCII {
+				i = j - 1 // loop increment will advance past j
+				continue
+			}
+		}
+		b.WriteRune(runes[i])
+	}
+	return []byte(b.String())
 }

@@ -21,6 +21,10 @@ import (
 func runUploadPipeline(cmd *cobra.Command, result *mdtowx.Result, html []byte, outPath, sourceFile string) error {
 	baseDir := filepath.Dir(sourceFile)
 
+	// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
+	// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
+	html = mdtowx.RemoveCJCSpace(html)
+
 	// Step 2: Extract local image paths from HTML
 	refs := mdtowx.ExtractImagePaths(html, baseDir)
 

@@ -20,6 +20,7 @@ import (
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/mdtowx"
 	"github.com/nanjj/slingshot/internal/site"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
@@ -186,6 +187,10 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		if err := os.MkdirAll(pageDir, 0755); err != nil {
 			return fmt.Errorf("creating page directory: %w", err)
 		}
+
+		// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
+		// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
+		htmlContent = mdtowx.RemoveCJCSpace(htmlContent)
 
 		// Write index.html
 		indexPath := filepath.Join(pageDir, "index.html")

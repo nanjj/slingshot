@@ -4,6 +4,152 @@ import (
 	"testing"
 )
 
+func TestRemoveCJCSpace(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "space between two CJK chars",
+			in:   "相 信",
+			want: "相信",
+		},
+		{
+			name: "space between two CJK chars in sentence",
+			in:   "我们 相信 你",
+			want: "我们相信你",
+		},
+		{
+			name: "multiple consecutive spaces",
+			in:   "相   信",
+			want: "相信",
+		},
+		{
+			name: "ASCII text unchanged",
+			in:   "I am an AI",
+			want: "I am an AI",
+		},
+		{
+			name: "CJK on one side only (left ASCII)",
+			in:   "Hello 世界",
+			want: "Hello 世界",
+		},
+		{
+			name: "CJK on one side only (right ASCII)",
+			in:   "你好 World",
+			want: "你好 World",
+		},
+		{
+			name: "mixed CJK and ASCII",
+			in:   "A 相 信 B",
+			want: "A 相信 B",
+		},
+		{
+			name: "Japanese with spaces",
+			in:   "これ は テスト",
+			want: "これはテスト",
+		},
+		{
+			name: "Greek letters",
+			in:   "α β γ",
+			want: "αβγ",
+		},
+		{
+			name: "Cyrillic",
+			in:   "при вет",
+			want: "привет",
+		},
+		{
+			name: "Korean",
+			in:   "안 녕",
+			want: "안녕",
+		},
+		{
+			name: "empty string",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "only spaces",
+			in:   "   ",
+			want: "   ",
+		},
+		{
+			name: "single CJK no space",
+			in:   "信",
+			want: "信",
+		},
+		{
+			name: "space at boundaries preserved",
+			in:   " 相 信 ",
+			want: " 相信 ",
+		},
+		{
+			name: "CJK with punctuation",
+			in:   "， ，",
+			want: "，，",
+		},
+		{
+			name: "no change single space",
+			in:   " ",
+			want: " ",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(RemoveCJCSpace([]byte(tt.in)))
+			if got != tt.want {
+				t.Errorf("RemoveCJCSpace(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeHTML_removeCJCSpace(t *testing.T) {
+	// Test that SanitizeHTML removes spaces between CJK chars in text nodes
+	// but preserves them in HTML-safe ways.
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "CJK space in paragraph",
+			in:   `<p>相 信</p>`,
+			want: `<p>相信</p>`,
+		},
+		{
+			name: "CJK space in heading",
+			in:   `<h2>标 题</h2>`,
+			want: `<h2>标题</h2>`,
+		},
+		{
+			name: "CJK space around inline element",
+			in:   `<p>前 后<strong>粗体</strong>继 续</p>`,
+			want: `<p>前后<strong>粗体</strong>继续</p>`,
+		},
+		{
+			name: "ASCII text preserved",
+			in:   `<p>Hello World</p>`,
+			want: `<p>Hello World</p>`,
+		},
+		{
+			name: "mixed ASCII and CJK preserved on boundary",
+			in:   `<p>你好 World 2024</p>`,
+			want: `<p>你好 World 2024</p>`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(SanitizeHTML([]byte(tt.in)))
+			if got != tt.want {
+				t.Errorf("SanitizeHTML(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSanitizeHTML_mailto(t *testing.T) {
 	tests := []struct {
 		name string

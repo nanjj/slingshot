@@ -94,8 +94,10 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("conversion failed: %w", err)
 	}
 	html := result.HTML
+	// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
+	// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
+	html = mdtowx.RemoveCJCSpace(html)
 
-	// 输出文件名: <filename>.html (与输入同目录)
 	outPath := replaceExt(file.String, ".html")
 
 	if !c.upload {
