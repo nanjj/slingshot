@@ -15,8 +15,10 @@ import (
 // Editor 是 Treesitter AI Editor 的主入口。
 // 每个项目创建一个 Editor 实例，管理项目下所有文档。
 type Editor struct {
-	documents   sync.Map // uri -> *Document
-	projectRoot string   // 项目根目录，用于解析相对 URI
+	mu            sync.Mutex
+	documents     sync.Map // uri -> *Document
+	projectRoot   string   // 当前项目根目录，用于解析相对 URI
+	projectStack  []string // 项目根目录栈（push/pop）
 }
 
 // NewEditor 创建新的编辑器实例。
@@ -26,6 +28,40 @@ func NewEditor(projectRoot string) *Editor {
 	return &Editor{
 		projectRoot: projectRoot,
 	}
+}
+
+// ─── 项目根目录切换（push/pop） ────────────────────────────────────────────
+
+// PushProjectRoot 保存当前 projectRoot 并设置新的根目录。
+// 之后所有相对 URI 都基于新根目录解析。
+// 与 PopProjectRoot 配对使用，类似于 cwd_push/cwd_pop。
+func (ed *Editor) PushProjectRoot(root string) {
+	ed.mu.Lock()
+	defer ed.mu.Unlock()
+	ed.projectStack = append(ed.projectStack, ed.projectRoot)
+	ed.projectRoot = root
+}
+
+// PopProjectRoot 恢复上一个 projectRoot。
+// 返回被替换掉的根目录（即 push 之前的那个）。
+// 如果栈为空则返回错误。
+func (ed *Editor) PopProjectRoot() (string, error) {
+	ed.mu.Lock()
+	defer ed.mu.Unlock()
+	if len(ed.projectStack) == 0 {
+		return "", fmt.Errorf("project root stack is empty")
+	}
+	prev := ed.projectRoot
+	ed.projectRoot = ed.projectStack[len(ed.projectStack)-1]
+	ed.projectStack = ed.projectStack[:len(ed.projectStack)-1]
+	return prev, nil
+}
+
+// ProjectRoot 返回当前项目根目录。
+func (ed *Editor) ProjectRoot() string {
+	ed.mu.Lock()
+	defer ed.mu.Unlock()
+	return ed.projectRoot
 }
 
 // ─── 文档生命周期 ───
@@ -694,13 +730,14 @@ func (ed *Editor) resolveDocumentPath(uri string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !filepath.IsAbs(path) && ed.projectRoot != "" {
-		path = filepath.Join(ed.projectRoot, path)
+	ed.mu.Lock()
+	root := ed.projectRoot
+	ed.mu.Unlock()
+	if !filepath.IsAbs(path) && root != "" {
+		path = filepath.Join(root, path)
 	}
 	return path, nil
 }
-
-// ─── 包级辅助函数 ───
 
 // checkFileExists 检查文件是否存在并返回文件信息。
 func checkFileExists(path string) (os.FileInfo, bool) {

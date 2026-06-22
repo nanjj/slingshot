@@ -116,6 +116,12 @@ type uriOnlyArgs struct {
 	URI string `json:"uri"`
 }
 
+// ─── Project root stack ─────────────────────────────────────────────────────
+
+type pushProjectRootArgs struct {
+	ProjectRoot string `json:"projectRoot"`
+}
+
 // ─── Response types ──────────────────────────────────────────────────────────
 
 // editResultResponse is the MCP-friendly subset of editor.EditResult.
@@ -372,6 +378,27 @@ func (es *editorServer) listDirty() *mcp.CallToolResult {
 	return jsonResult(map[string][]string{"uris": dirty})
 }
 
+// --- Project root stack ---
+
+func (es *editorServer) pushProjectRoot(args pushProjectRootArgs) *mcp.CallToolResult {
+	es.ed.PushProjectRoot(args.ProjectRoot)
+	return jsonResult(map[string]string{
+		"status":      "ok",
+		"projectRoot": args.ProjectRoot,
+	})
+}
+
+func (es *editorServer) popProjectRoot() *mcp.CallToolResult {
+	prev, err := es.ed.PopProjectRoot()
+	if err != nil {
+		return errorResult(err)
+	}
+	return jsonResult(map[string]string{
+		"status":       "ok",
+		"previousRoot": prev,
+	})
+}
+
 // ─── Helper functions ────────────────────────────────────────────────────────
 
 func editResultToResponse(er *editor.EditResult) any {
@@ -574,12 +601,27 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args uriOnlyArgs) (*mcp.CallToolResult, any, error) {
 		return es.isDirty(args), nil, nil
 	})
-
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_dirty",
 		Description: "List all open documents that have unsaved changes.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
 		return es.listDirty(), nil, nil
+	})
+
+	// --- Project root stack (push/pop) ---
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "push_project_root",
+		Description: "Save the current project root and set a new one. All subsequent relative URI resolution uses the new root. Analogous to cwd_push.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args pushProjectRootArgs) (*mcp.CallToolResult, any, error) {
+		return es.pushProjectRoot(args), nil, nil
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "pop_project_root",
+		Description: "Restore the previous project root from the stack. Returns the previous root that was active before the last push. Analogous to cwd_pop. Errors if the stack is empty.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
+		return es.popProjectRoot(), nil, nil
 	})
 }
 
