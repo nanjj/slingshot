@@ -14,11 +14,11 @@ import (
 
 // Editor 是 Treesitter AI Editor 的主入口。
 // 每个项目创建一个 Editor 实例，管理项目下所有文档。
+// projectRoot 在创建时固定，不可变。
 type Editor struct {
-	mu            sync.Mutex
-	documents     sync.Map // uri -> *Document
-	projectRoot   string   // 当前项目根目录，用于解析相对 URI
-	projectStack  []string // 项目根目录栈（push/pop）
+	mu          sync.Mutex
+	documents   sync.Map // uri -> *Document
+	projectRoot string   // 项目根目录（创建时固定）
 }
 
 // NewEditor 创建新的编辑器实例。
@@ -30,38 +30,63 @@ func NewEditor(projectRoot string) *Editor {
 	}
 }
 
-// ─── 项目根目录切换（push/pop） ────────────────────────────────────────────
-
-// PushProjectRoot 保存当前 projectRoot 并设置新的根目录。
-// 之后所有相对 URI 都基于新根目录解析。
-// 与 PopProjectRoot 配对使用，类似于 cwd_push/cwd_pop。
-func (ed *Editor) PushProjectRoot(root string) {
-	ed.mu.Lock()
-	defer ed.mu.Unlock()
-	ed.projectStack = append(ed.projectStack, ed.projectRoot)
-	ed.projectRoot = root
-}
-
-// PopProjectRoot 恢复上一个 projectRoot。
-// 返回被替换掉的根目录（即 push 之前的那个）。
-// 如果栈为空则返回错误。
-func (ed *Editor) PopProjectRoot() (string, error) {
-	ed.mu.Lock()
-	defer ed.mu.Unlock()
-	if len(ed.projectStack) == 0 {
-		return "", fmt.Errorf("project root stack is empty")
-	}
-	prev := ed.projectRoot
-	ed.projectRoot = ed.projectStack[len(ed.projectStack)-1]
-	ed.projectStack = ed.projectStack[:len(ed.projectStack)-1]
-	return prev, nil
-}
-
-// ProjectRoot 返回当前项目根目录。
+// ProjectRoot 返回项目根目录。
+// projectRoot 在创建时固定，调用安全无需加锁。
 func (ed *Editor) ProjectRoot() string {
-	ed.mu.Lock()
-	defer ed.mu.Unlock()
 	return ed.projectRoot
+}
+
+// ─── EditorManager：多项目 Editor 实例管理 ─────────────────────────────────
+
+// EditorManager 管理多个 Editor 实例，每个项目根目录对应一个独立实例。
+// 切换项目时切换 Editor 实例，各项目的文档状态、脏页等编辑状态完全隔离。
+type EditorManager struct {
+	mu      sync.Mutex
+	editors map[string]*Editor // keyed by resolved absolute path
+	current string             // 当前活跃的 editor key
+}
+
+// NewEditorManager 创建 EditorManager。
+// initialRoot 为初始项目根目录，会自动创建对应的 Editor 实例。
+func NewEditorManager(initialRoot string) (*EditorManager, error) {
+	abs, err := filepath.Abs(initialRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve initial root: %w", err)
+	}
+	em := &EditorManager{
+		editors: make(map[string]*Editor),
+	}
+	em.editors[abs] = NewEditor(abs)
+	em.current = abs
+	return em, nil
+}
+
+// SwitchTo 切换到指定项目根目录的 Editor 实例。
+// 如果该目录尚未创建 Editor，则自动创建新实例。
+// 返回对应的 Editor，同时设为当前活跃实例。
+// 切换后之前项目的编辑状态（已打开的文档、脏页标记、AST 树）保留不变。
+func (em *EditorManager) SwitchTo(root string) (*Editor, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve path: %w", err)
+	}
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	if ed, ok := em.editors[abs]; ok {
+		em.current = abs
+		return ed, nil
+	}
+	ed := NewEditor(abs)
+	em.editors[abs] = ed
+	em.current = abs
+	return ed, nil
+}
+
+// Current 返回当前活跃的 Editor 实例。
+func (em *EditorManager) Current() *Editor {
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	return em.editors[em.current]
 }
 
 // ─── 文档生命周期 ───
@@ -730,11 +755,9 @@ func (ed *Editor) resolveDocumentPath(uri string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ed.mu.Lock()
-	root := ed.projectRoot
-	ed.mu.Unlock()
-	if !filepath.IsAbs(path) && root != "" {
-		path = filepath.Join(root, path)
+	// projectRoot 在创建时固定，无需加锁
+	if !filepath.IsAbs(path) && ed.projectRoot != "" {
+		path = filepath.Join(ed.projectRoot, path)
 	}
 	return path, nil
 }

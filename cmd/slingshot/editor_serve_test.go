@@ -14,7 +14,11 @@ import (
 
 func newTestServer(t *testing.T) *editorServer {
 	t.Helper()
-	return &editorServer{ed: editor.NewEditor(t.TempDir())}
+	mgr, err := editor.NewEditorManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	return &editorServer{mgr: mgr, opts: &serveOptions{}}
 }
 
 // mustOpen is a test helper that opens a scratch document, failing on error.

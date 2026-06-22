@@ -170,12 +170,11 @@ func errorResult(err error) *mcp.CallToolResult {
 	}
 }
 
-// ─── Server + tool handlers ──────────────────────────────────────────────────
-
 // editorServer holds the shared state for all tool handlers.
 type editorServer struct {
-	ed   *editor.Editor
-	opts *serveOptions
+	mgr       *editor.EditorManager
+	rootStack []string // 项目导航栈（push/pop 记录切换历史）
+	opts      *serveOptions
 }
 
 // --- Document lifecycle ---
@@ -185,14 +184,14 @@ func (es *editorServer) openDocument(args openDocumentArgs) *mcp.CallToolResult 
 	if args.Source != "" {
 		source = []byte(args.Source)
 	}
-	if err := es.ed.OpenDocument(args.URI, source, args.Language); err != nil {
+	if err := es.mgr.Current().OpenDocument(args.URI, source, args.Language); err != nil {
 		return errorResult(fmt.Errorf("open document: %w", err))
 	}
 	return jsonResult(map[string]bool{"success": true})
 }
 
 func (es *editorServer) closeDocument(args closeDocumentArgs) *mcp.CallToolResult {
-	if err := es.ed.CloseDocument(args.URI); err != nil {
+	if err := es.mgr.Current().CloseDocument(args.URI); err != nil {
 		return errorResult(fmt.Errorf("close document: %w", err))
 	}
 	return jsonResult(map[string]bool{"success": true})
@@ -210,7 +209,7 @@ func (es *editorServer) getStructure(args getStructureArgs) *mcp.CallToolResult 
 	if maxChildren == 0 {
 		maxChildren = -1
 	}
-	nodeInfo, err := es.ed.GetStructure(args.URI, maxDepth, maxChildren)
+	nodeInfo, err := es.mgr.Current().GetStructure(args.URI, maxDepth, maxChildren)
 	if err != nil {
 		return errorResult(fmt.Errorf("get structure: %w", err))
 	}
@@ -218,7 +217,7 @@ func (es *editorServer) getStructure(args getStructureArgs) *mcp.CallToolResult 
 }
 
 func (es *editorServer) getNode(args byteURIPositionArgs) *mcp.CallToolResult {
-	nodeInfo, err := es.ed.GetNode(args.URI, args.Pos)
+	nodeInfo, err := es.mgr.Current().GetNode(args.URI, args.Pos)
 	if err != nil {
 		return errorResult(fmt.Errorf("get node: %w", err))
 	}
@@ -226,7 +225,7 @@ func (es *editorServer) getNode(args byteURIPositionArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) getNodeAtPoint(args pointArgs) *mcp.CallToolResult {
-	nodeInfo, err := es.ed.GetNodeAtPoint(args.URI, args.Row, args.Col)
+	nodeInfo, err := es.mgr.Current().GetNodeAtPoint(args.URI, args.Row, args.Col)
 	if err != nil {
 		return errorResult(fmt.Errorf("get node at point: %w", err))
 	}
@@ -234,7 +233,7 @@ func (es *editorServer) getNodeAtPoint(args pointArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) getNodeAtRange(args byteRangeArgs) *mcp.CallToolResult {
-	nodeInfo, err := es.ed.GetNodeAtRange(args.URI, args.StartByte, args.EndByte)
+	nodeInfo, err := es.mgr.Current().GetNodeAtRange(args.URI, args.StartByte, args.EndByte)
 	if err != nil {
 		return errorResult(fmt.Errorf("get node at range: %w", err))
 	}
@@ -242,7 +241,7 @@ func (es *editorServer) getNodeAtRange(args byteRangeArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) getDescendantsAt(args byteURIPositionArgs) *mcp.CallToolResult {
-	infos, err := es.ed.GetDescendantsAt(args.URI, args.Pos)
+	infos, err := es.mgr.Current().GetDescendantsAt(args.URI, args.Pos)
 	if err != nil {
 		return errorResult(fmt.Errorf("get descendants at: %w", err))
 	}
@@ -250,7 +249,7 @@ func (es *editorServer) getDescendantsAt(args byteURIPositionArgs) *mcp.CallTool
 }
 
 func (es *editorServer) query(args queryArgs) *mcp.CallToolResult {
-	results, err := es.ed.Query(args.URI, args.Pattern)
+	results, err := es.mgr.Current().Query(args.URI, args.Pattern)
 	if err != nil {
 		return errorResult(fmt.Errorf("query: %w", err))
 	}
@@ -258,7 +257,7 @@ func (es *editorServer) query(args queryArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) getText(args byteRangeArgs) *mcp.CallToolResult {
-	text, err := es.ed.GetText(args.URI, args.StartByte, args.EndByte)
+	text, err := es.mgr.Current().GetText(args.URI, args.StartByte, args.EndByte)
 	if err != nil {
 		return errorResult(fmt.Errorf("get text: %w", err))
 	}
@@ -266,7 +265,7 @@ func (es *editorServer) getText(args byteRangeArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) getLine(args lineArgs) *mcp.CallToolResult {
-	text, err := es.ed.GetLine(args.URI, args.Line)
+	text, err := es.mgr.Current().GetLine(args.URI, args.Line)
 	if err != nil {
 		return errorResult(fmt.Errorf("get line: %w", err))
 	}
@@ -276,7 +275,7 @@ func (es *editorServer) getLine(args lineArgs) *mcp.CallToolResult {
 // --- Edit operations ---
 
 func (es *editorServer) insert(args insertArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.Insert(args.URI, args.Pos, args.Text)
+	editResult, err := es.mgr.Current().Insert(args.URI, args.Pos, args.Text)
 	if err != nil {
 		return errorResult(fmt.Errorf("insert: %w", err))
 	}
@@ -284,7 +283,7 @@ func (es *editorServer) insert(args insertArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) insertAtPoint(args insertAtPointArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.InsertAtPoint(args.URI, args.Row, args.Col, args.Text)
+	editResult, err := es.mgr.Current().InsertAtPoint(args.URI, args.Row, args.Col, args.Text)
 	if err != nil {
 		return errorResult(fmt.Errorf("insert at point: %w", err))
 	}
@@ -292,7 +291,7 @@ func (es *editorServer) insertAtPoint(args insertAtPointArgs) *mcp.CallToolResul
 }
 
 func (es *editorServer) insertBefore(args insertBeforeAfterArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.InsertBefore(args.URI, args.Selector, args.Text)
+	editResult, err := es.mgr.Current().InsertBefore(args.URI, args.Selector, args.Text)
 	if err != nil {
 		return errorResult(fmt.Errorf("insert before: %w", err))
 	}
@@ -300,7 +299,7 @@ func (es *editorServer) insertBefore(args insertBeforeAfterArgs) *mcp.CallToolRe
 }
 
 func (es *editorServer) insertAfter(args insertBeforeAfterArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.InsertAfter(args.URI, args.Selector, args.Text)
+	editResult, err := es.mgr.Current().InsertAfter(args.URI, args.Selector, args.Text)
 	if err != nil {
 		return errorResult(fmt.Errorf("insert after: %w", err))
 	}
@@ -308,7 +307,7 @@ func (es *editorServer) insertAfter(args insertBeforeAfterArgs) *mcp.CallToolRes
 }
 
 func (es *editorServer) replace(args replaceArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.Replace(args.URI, args.StartByte, args.EndByte, args.Text)
+	editResult, err := es.mgr.Current().Replace(args.URI, args.StartByte, args.EndByte, args.Text)
 	if err != nil {
 		return errorResult(fmt.Errorf("replace: %w", err))
 	}
@@ -316,7 +315,7 @@ func (es *editorServer) replace(args replaceArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) replaceNode(args replaceNodeArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.ReplaceNode(args.URI, args.Selector, args.Text)
+	editResult, err := es.mgr.Current().ReplaceNode(args.URI, args.Selector, args.Text)
 	if err != nil {
 		return errorResult(fmt.Errorf("replace node: %w", err))
 	}
@@ -324,7 +323,7 @@ func (es *editorServer) replaceNode(args replaceNodeArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) delete(args deleteRangeArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.Delete(args.URI, args.StartByte, args.EndByte)
+	editResult, err := es.mgr.Current().Delete(args.URI, args.StartByte, args.EndByte)
 	if err != nil {
 		return errorResult(fmt.Errorf("delete: %w", err))
 	}
@@ -332,7 +331,7 @@ func (es *editorServer) delete(args deleteRangeArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) deleteNode(args deleteNodeArgs) *mcp.CallToolResult {
-	editResult, err := es.ed.DeleteNode(args.URI, args.Selector)
+	editResult, err := es.mgr.Current().DeleteNode(args.URI, args.Selector)
 	if err != nil {
 		return errorResult(fmt.Errorf("delete node: %w", err))
 	}
@@ -342,7 +341,7 @@ func (es *editorServer) deleteNode(args deleteNodeArgs) *mcp.CallToolResult {
 // --- Validation & Save ---
 
 func (es *editorServer) validate(args validateArgs) *mcp.CallToolResult {
-	result, err := es.ed.Validate(args.URI)
+	result, err := es.mgr.Current().Validate(args.URI)
 	if err != nil {
 		return errorResult(fmt.Errorf("validate: %w", err))
 	}
@@ -350,7 +349,7 @@ func (es *editorServer) validate(args validateArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) save(args saveArgs) *mcp.CallToolResult {
-	result, err := es.ed.Save(args.URI)
+	result, err := es.mgr.Current().Save(args.URI)
 	if err != nil {
 		return errorResult(fmt.Errorf("save: %w", err))
 	}
@@ -358,7 +357,7 @@ func (es *editorServer) save(args saveArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) forceSave(args saveArgs) *mcp.CallToolResult {
-	result, err := es.ed.ForceSave(args.URI)
+	result, err := es.mgr.Current().ForceSave(args.URI)
 	if err != nil {
 		return errorResult(fmt.Errorf("force save: %w", err))
 	}
@@ -366,7 +365,7 @@ func (es *editorServer) forceSave(args saveArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) isDirty(args uriOnlyArgs) *mcp.CallToolResult {
-	dirty, err := es.ed.IsDirty(args.URI)
+	dirty, err := es.mgr.Current().IsDirty(args.URI)
 	if err != nil {
 		return errorResult(fmt.Errorf("is dirty: %w", err))
 	}
@@ -374,14 +373,19 @@ func (es *editorServer) isDirty(args uriOnlyArgs) *mcp.CallToolResult {
 }
 
 func (es *editorServer) listDirty() *mcp.CallToolResult {
-	dirty := es.ed.DirtyDocuments()
+	dirty := es.mgr.Current().DirtyDocuments()
 	return jsonResult(map[string][]string{"uris": dirty})
 }
 
-// --- Project root stack ---
-
 func (es *editorServer) pushProjectRoot(args pushProjectRootArgs) *mcp.CallToolResult {
-	es.ed.PushProjectRoot(args.ProjectRoot)
+	// 保存当前 project root 到导航栈
+	cur := es.mgr.Current()
+	es.rootStack = append(es.rootStack, cur.ProjectRoot())
+
+	// 切换（或创建）目标项目的 Editor 实例
+	if _, err := es.mgr.SwitchTo(args.ProjectRoot); err != nil {
+		return errorResult(fmt.Errorf("switch project root: %w", err))
+	}
 	return jsonResult(map[string]string{
 		"status":      "ok",
 		"projectRoot": args.ProjectRoot,
@@ -389,15 +393,28 @@ func (es *editorServer) pushProjectRoot(args pushProjectRootArgs) *mcp.CallToolR
 }
 
 func (es *editorServer) popProjectRoot() *mcp.CallToolResult {
-	prev, err := es.ed.PopProjectRoot()
-	if err != nil {
-		return errorResult(err)
+	if len(es.rootStack) == 0 {
+		return errorResult(fmt.Errorf("project root stack is empty"))
+	}
+	prev := es.rootStack[len(es.rootStack)-1]
+	es.rootStack = es.rootStack[:len(es.rootStack)-1]
+
+	if _, err := es.mgr.SwitchTo(prev); err != nil {
+		return errorResult(fmt.Errorf("switch back: %w", err))
 	}
 	return jsonResult(map[string]string{
 		"status":       "ok",
 		"previousRoot": prev,
 	})
 }
+
+// getProjectRoot 返回当前活跃 Editor 的项目根目录。
+func (es *editorServer) getProjectRoot() *mcp.CallToolResult {
+	return jsonResult(map[string]string{
+		"projectRoot": es.mgr.Current().ProjectRoot(),
+	})
+}
+
 
 // ─── Helper functions ────────────────────────────────────────────────────────
 
@@ -612,16 +629,25 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "push_project_root",
-		Description: "Save the current project root and set a new one. All subsequent relative URI resolution uses the new root. Analogous to cwd_push.",
+		Description: "Switch to a different project root, creating an isolated editor instance for that project. All documents, edits, and dirty state for the current project are preserved. Use pop_project_root to return. Analogous to cwd_push.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args pushProjectRootArgs) (*mcp.CallToolResult, any, error) {
 		return es.pushProjectRoot(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "pop_project_root",
-		Description: "Restore the previous project root from the stack. Returns the previous root that was active before the last push. Analogous to cwd_pop. Errors if the stack is empty.",
+		Description: "Return to the previous project root, restoring its editor instance with all documents and state intact. Analogous to cwd_pop. Errors if the stack is empty.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
 		return es.popProjectRoot(), nil, nil
+	})
+
+	// --- Project root query ---
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "get_project_root",
+		Description: "Get the current project root directory. Returns the absolute path of the active editor's project root.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
+		return es.getProjectRoot(), nil, nil
 	})
 }
 
@@ -694,8 +720,11 @@ func (c *cmdEditorServe) run(ctx context.Context) error {
 	}))
 	slog.SetDefault(logger)
 
-	// 2. Create Editor instance
-	ed := editor.NewEditor(opts.projectRoot)
+	// 2. Create EditorManager (manages per-project-root Editor instances)
+	mgr, err := editor.NewEditorManager(opts.projectRoot)
+	if err != nil {
+		return fmt.Errorf("create editor manager: %w", err)
+	}
 
 	// 3. Create MCP Server
 	srv := mcp.NewServer(&mcp.Implementation{
@@ -706,7 +735,7 @@ func (c *cmdEditorServe) run(ctx context.Context) error {
 	})
 
 	// 4. Register all tools
-	es := &editorServer{ed: ed, opts: opts}
+	es := &editorServer{mgr: mgr, opts: opts}
 	registerAllTools(srv, es)
 
 	// 5. Connect stdio transport
