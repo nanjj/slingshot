@@ -193,6 +193,9 @@ func (ed *Editor) GetNode(uri string, pos uint32) (NodeInfo, error) {
 	doc.Lock()
 	defer doc.Unlock()
 
+	if doc.tree == nil {
+		return NodeInfo{}, ErrDocumentNotReady
+	}
 	root := doc.tree.RootNode()
 	node := root.DescendantForByteRange(pos, pos)
 	if node == nil {
@@ -210,6 +213,9 @@ func (ed *Editor) GetNodeAtPoint(uri string, row, col uint32) (NodeInfo, error) 
 	doc.Lock()
 	defer doc.Unlock()
 
+	if doc.tree == nil {
+		return NodeInfo{}, ErrDocumentNotReady
+	}
 	p := gotreesitter.Point{Row: row, Column: col}
 	root := doc.tree.RootNode()
 	node := root.DescendantForPointRange(p, p)
@@ -228,6 +234,9 @@ func (ed *Editor) GetNodeAtRange(uri string, startByte, endByte uint32) (NodeInf
 	doc.Lock()
 	defer doc.Unlock()
 
+	if doc.tree == nil {
+		return NodeInfo{}, ErrDocumentNotReady
+	}
 	root := doc.tree.RootNode()
 	node := root.DescendantForByteRange(startByte, endByte)
 	if node == nil {
@@ -245,6 +254,9 @@ func (ed *Editor) GetDescendantsAt(uri string, pos uint32) ([]NodeInfo, error) {
 	doc.Lock()
 	defer doc.Unlock()
 
+	if doc.tree == nil {
+		return nil, ErrDocumentNotReady
+	}
 	root := doc.tree.RootNode()
 	leaf := root.DescendantForByteRange(pos, pos)
 	if leaf == nil {
@@ -267,6 +279,9 @@ func (ed *Editor) Query(uri string, pattern string) ([]QueryResult, error) {
 	doc.Lock()
 	defer doc.Unlock()
 
+	if doc.tree == nil {
+		return nil, ErrDocumentNotReady
+	}
 	q, err := gotreesitter.NewQuery(pattern, doc.language)
 	if err != nil {
 		return nil, fmt.Errorf("compile query: %w", err)

@@ -4,6 +4,9 @@ import "errors"
 
 // 编辑器错误定义
 var (
+	// ErrDocumentNotReady 文档 tree 未初始化（首次解析失败或未就绪）。
+	ErrDocumentNotReady = errors.New("document not ready")
+
 	// ErrUnsupportedLanguage 语言不受支持。
 	ErrUnsupportedLanguage = errors.New("unsupported language")
 

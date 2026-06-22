@@ -32,6 +32,9 @@ func (d *Document) applyEdit(inputEdit gotreesitter.InputEdit, newSource []byte)
 
 	// 3. 更新状态
 	d.source = newSource
+	if d.bound != nil {
+		d.bound.Release()
+	}
 	d.bound = gotreesitter.Bind(d.tree)
 	d.lineIdx.ApplyEdit(inputEdit, newSource)
 	d.dirty = true
@@ -40,7 +43,6 @@ func (d *Document) applyEdit(inputEdit gotreesitter.InputEdit, newSource []byte)
 
 	return nil
 }
-
 // applyEdits 批量应用多个 InputEdit（来自 Rewriter.Apply）。
 func (d *Document) applyEdits(edits []gotreesitter.InputEdit, newSource []byte) error {
 	// 应用所有 InputEdit 到旧树
@@ -65,6 +67,9 @@ func (d *Document) applyEdits(edits []gotreesitter.InputEdit, newSource []byte) 
 	}
 
 	d.source = newSource
+	if d.bound != nil {
+		d.bound.Release()
+	}
 	d.bound = gotreesitter.Bind(d.tree)
 	d.lineIdx = NewLineIndex(newSource)
 	d.dirty = true

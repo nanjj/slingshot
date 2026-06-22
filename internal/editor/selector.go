@@ -18,7 +18,7 @@ type NodeSelector struct {
 type PathStep struct {
 	Type       string `json:"type"`
 	Field      string `json:"field,omitempty"`
-	ChildIndex int    `json:"childIndex,omitempty"` // 0-based
+	ChildIndex int    `json:"childIndex,omitempty"` // 1-based（AI 友好），>0 才参与比较
 	NamedOnly  bool   `json:"namedOnly,omitempty"`
 }
 
@@ -91,10 +91,9 @@ func (d *Document) resolvePath(path []PathStep) (*gotreesitter.Node, error) {
 					continue
 				}
 			}
-			if step.ChildIndex > 0 && step.ChildIndex != i {
+			if step.ChildIndex > 0 && step.ChildIndex != i+1 {
 				continue
 			}
-
 			node = child
 			found = true
 			break

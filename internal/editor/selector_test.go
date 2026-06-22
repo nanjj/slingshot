@@ -146,11 +146,11 @@ func TestResolvePathWithFieldName(t *testing.T) {
 func TestResolvePathWithChildIndex(t *testing.T) {
 	ed := openScratchDoc(t, "package main\n\nfunc a() {}\nfunc b() {}\nfunc c() {}\n", "go")
 	doc, _ := ed.GetDocument("scratch:///test.go")
-	// ChildIndex counts across ALL named children of source_file:
+	// ChildIndex counts across ALL named children of source_file (1-based):
 	//   NamedChild[0]=package_clause, [1]=function_declaration(a), [2]=function_declaration(b), [3]=function_declaration(c)
-	// ChildIndex=2 → NamedChild[2] → function_declaration "func b"
+	// ChildIndex=3 → third named child (i+1=3 → i=2) → function_declaration "func b"
 	sel := NodeSelector{Path: []PathStep{
-		{Type: "function_declaration", NamedOnly: true, ChildIndex: 2},
+		{Type: "function_declaration", NamedOnly: true, ChildIndex: 3},
 	}}
 	node, err := doc.resolveNode(sel)
 	if err != nil {
