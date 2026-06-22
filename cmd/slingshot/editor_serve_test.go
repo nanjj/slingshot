@@ -927,3 +927,225 @@ func TestListDirtyHandler_afterEdits(t *testing.T) {
 		t.Errorf("expected dirty1.go, got %v", out["uris"][0])
 	}
 }
+
+// ─── 24. pushProjectRoot ──────────────────────────────────────────────────
+
+func TestPushProjectRootHandler(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	args := pushProjectRootArgs{ProjectRoot: dir2}
+	res := es.pushProjectRoot(args)
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", extractText(res))
+	}
+	var out map[string]string
+	unmarshalJSONText(t, res, &out)
+	if out["status"] != "ok" {
+		t.Errorf("expected status=ok, got %q", out["status"])
+	}
+	if out["projectRoot"] != dir2 {
+		t.Errorf("expected projectRoot=%q, got %q", dir2, out["projectRoot"])
+	}
+	// Current editor should now be dir2
+	if es.mgr.Current().ProjectRoot() != dir2 {
+		t.Errorf("Current after push: got %q, want %q",
+			es.mgr.Current().ProjectRoot(), dir2)
+	}
+}
+
+func TestPushProjectRootHandler_MultipleProjects(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	// Open a document in project 1
+	mustOpen(t, es, "scratch:///p1.go", "package p1\n", "go")
+
+	// Push to project 2
+	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
+
+	// Open a different document in project 2
+	mustOpen(t, es, "scratch:///p2.go", "package p2\n", "go")
+
+	// Push back to project 1
+	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir1})
+
+	// Project 1's document should be accessible
+	var getRes *mcp.CallToolResult
+	getRes = es.isDirty(uriOnlyArgs{URI: "scratch:///p1.go"})
+	if getRes.IsError {
+		t.Fatalf("isDirty for p1.go failed: %s", extractText(getRes))
+	}
+	m := extractBoolMap(t, getRes)
+	if _, ok := m["dirty"]; !ok {
+		t.Error("expected dirty field in response")
+	}
+
+	// Project 2's document should NOT be accessible from project 1's editor
+	getRes = es.isDirty(uriOnlyArgs{URI: "scratch:///p2.go"})
+	if !getRes.IsError {
+		t.Error("expected error for p2.go from project 1 editor")
+	}
+}
+
+// ─── 25. popProjectRoot ───────────────────────────────────────────────────
+
+func TestPopProjectRootHandler(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	// Push to dir2
+	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
+
+	// Pop back to dir1
+	res := es.popProjectRoot()
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", extractText(res))
+	}
+	var out map[string]string
+	unmarshalJSONText(t, res, &out)
+	if out["status"] != "ok" {
+		t.Errorf("expected status=ok, got %q", out["status"])
+	}
+	if out["previousRoot"] != dir1 {
+		t.Errorf("expected previousRoot=%q, got %q", dir1, out["previousRoot"])
+	}
+	// Current editor should be back to dir1
+	if es.mgr.Current().ProjectRoot() != dir1 {
+		t.Errorf("Current after pop: got %q, want %q",
+			es.mgr.Current().ProjectRoot(), dir1)
+	}
+}
+
+func TestPopProjectRootHandler_emptyStack(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	// Pop on empty stack should error
+	res := es.popProjectRoot()
+	if !res.IsError {
+		t.Fatal("expected error for pop on empty stack")
+	}
+	if extractText(res) != "project root stack is empty" {
+		t.Errorf("unexpected error message: %q", extractText(res))
+	}
+}
+
+func TestPushThenPop_RestoresProjectState(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	// Open doc and edit in project 1
+	mustOpen(t, es, "scratch:///work.go", "package main\n", "go")
+	es.insert(insertArgs{URI: "scratch:///work.go", Pos: 0, Text: "// edit\n"})
+
+	// Verify dirty
+	dirtyRes := es.isDirty(uriOnlyArgs{URI: "scratch:///work.go"})
+	m := extractBoolMap(t, dirtyRes)
+	if !m["dirty"] {
+		t.Error("expected dirty after edit")
+	}
+
+	// Push to project 2
+	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
+
+	// Open and edit a different doc in project 2
+	mustOpen(t, es, "scratch:///other.go", "package other\n", "go")
+	es.insert(insertArgs{URI: "scratch:///other.go", Pos: 0, Text: "// other edit\n"})
+
+	// Pop back to project 1
+	popRes := es.popProjectRoot()
+	if popRes.IsError {
+		t.Fatalf("pop failed: %s", extractText(popRes))
+	}
+
+	// Project 1's document should still be dirty with the edit
+	dirtyRes = es.isDirty(uriOnlyArgs{URI: "scratch:///work.go"})
+	m = extractBoolMap(t, dirtyRes)
+	if !m["dirty"] {
+		t.Error("project 1 doc should still be dirty after push/pop round trip")
+	}
+
+	// Project 2's document should not be visible from project 1
+	_, err = es.mgr.Current().GetDocument("scratch:///other.go")
+	if err == nil {
+		t.Error("project 1 editor should not see project 2's document after pop")
+	}
+}
+
+// ─── 26. getProjectRoot ───────────────────────────────────────────────────
+
+func TestGetProjectRootHandler(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	res := es.getProjectRoot()
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", extractText(res))
+	}
+	var out map[string]string
+	unmarshalJSONText(t, res, &out)
+	if out["projectRoot"] != dir {
+		t.Errorf("expected projectRoot=%q, got %q", dir, out["projectRoot"])
+	}
+}
+
+func TestGetProjectRootHandler_afterPush(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	mgr, err := editor.NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
+
+	// Push to dir2
+	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
+
+	res := es.getProjectRoot()
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", extractText(res))
+	}
+	var out map[string]string
+	unmarshalJSONText(t, res, &out)
+	if out["projectRoot"] != dir2 {
+		t.Errorf("expected projectRoot=%q after push, got %q", dir2, out["projectRoot"])
+	}
+
+	// Pop back
+	es.popProjectRoot()
+
+	res = es.getProjectRoot()
+	unmarshalJSONText(t, res, &out)
+	if out["projectRoot"] != dir1 {
+		t.Errorf("expected projectRoot=%q after pop, got %q", dir1, out["projectRoot"])
+	}
+}

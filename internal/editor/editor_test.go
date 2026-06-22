@@ -562,3 +562,210 @@ func TestOpenDocumentThenSaveNewFile(t *testing.T) {
 		t.Error("after save, doc should not be dirty")
 	}
 }
+
+// ─── EditorManager ─────────────────────────────────────────────────────────
+
+func TestNewEditorManager(t *testing.T) {
+	dir := t.TempDir()
+	em, err := NewEditorManager(dir)
+	if err != nil {
+		t.Fatalf("NewEditorManager failed: %v", err)
+	}
+	if em == nil {
+		t.Fatal("NewEditorManager returned nil")
+	}
+	if em.current != dir {
+		t.Errorf("current: got %q, want %q", em.current, dir)
+	}
+	ed := em.Current()
+	if ed == nil {
+		t.Fatal("Current() returned nil")
+	}
+	if ed.ProjectRoot() != dir {
+		t.Errorf("ProjectRoot: got %q, want %q", ed.ProjectRoot(), dir)
+	}
+}
+
+func TestNewEditorManager_AbsolutePath(t *testing.T) {
+	// Relative paths should be resolved to absolute.
+	em, err := NewEditorManager(".")
+	if err != nil {
+		t.Fatalf("NewEditorManager('.') failed: %v", err)
+	}
+	ed := em.Current()
+	if ed == nil || ed.ProjectRoot() == "" {
+		t.Fatal("expected non-empty absolute project root")
+	}
+	if ed.ProjectRoot()[0] != '/' {
+		t.Errorf("expected absolute path, got %q", ed.ProjectRoot())
+	}
+}
+
+func TestEditorManagerSwitchTo_NewProject(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	em, err := NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+
+	ed2, err := em.SwitchTo(dir2)
+	if err != nil {
+		t.Fatalf("SwitchTo new project: %v", err)
+	}
+	if ed2 == nil {
+		t.Fatal("SwitchTo returned nil")
+	}
+	if ed2.ProjectRoot() != dir2 {
+		t.Errorf("ProjectRoot: got %q, want %q", ed2.ProjectRoot(), dir2)
+	}
+	// Current should now be dir2
+	if em.Current().ProjectRoot() != dir2 {
+		t.Errorf("Current after switch: got %q, want %q",
+			em.Current().ProjectRoot(), dir2)
+	}
+}
+
+func TestEditorManagerSwitchTo_ExistingProject(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	em, err := NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+
+	// First switch creates a new editor for dir2
+	ed2a, err := em.SwitchTo(dir2)
+	if err != nil {
+		t.Fatalf("first SwitchTo: %v", err)
+	}
+	// Open a document in dir2's editor to verify state preservation
+	mustEditorOpen(t, ed2a, "scratch:///test.go", "package main\n", "go")
+
+	// Switch back to dir1
+	_, err = em.SwitchTo(dir1)
+	if err != nil {
+		t.Fatalf("SwitchTo dir1: %v", err)
+	}
+
+	// Switch to dir2 again — should get the same editor with documents intact
+	ed2b, err := em.SwitchTo(dir2)
+	if err != nil {
+		t.Fatalf("second SwitchTo dir2: %v", err)
+	}
+	if ed2b.ProjectRoot() != dir2 {
+		t.Errorf("ProjectRoot: got %q, want %q", ed2b.ProjectRoot(), dir2)
+	}
+	// The document opened earlier should still be there
+	doc, err := ed2b.GetDocument("scratch:///test.go")
+	if err != nil {
+		t.Fatalf("GetDocument after switching back: %v", err)
+	}
+	if doc == nil {
+		t.Fatal("GetDocument returned nil")
+	}
+}
+
+func TestEditorManagerSwitchTo_SameProject(t *testing.T) {
+	dir := t.TempDir()
+	em, err := NewEditorManager(dir)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+
+	ed1 := em.Current()
+	ed2, err := em.SwitchTo(dir)
+	if err != nil {
+		t.Fatalf("SwitchTo same dir: %v", err)
+	}
+	// Should return the same editor instance
+	if ed1 != ed2 {
+		t.Error("SwitchTo same path should return the same Editor instance")
+	}
+}
+
+func TestEditorManagerSwitchTo_RelativePath(t *testing.T) {
+	em, err := NewEditorManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	// Use current dir as a relative path
+	ed, err := em.SwitchTo(".")
+	if err != nil {
+		t.Fatalf("SwitchTo relative path: %v", err)
+	}
+	if ed == nil {
+		t.Fatal("SwitchTo returned nil")
+	}
+	if !filepath.IsAbs(ed.ProjectRoot()) {
+		t.Errorf("expected absolute project root, got %q", ed.ProjectRoot())
+	}
+}
+
+func TestEditorManager_StateIsolation(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	em, err := NewEditorManager(dir1)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+
+	// Open a doc in project 1
+	ed1 := em.Current()
+	mustEditorOpen(t, ed1, "scratch:///file1.go", "package p1\n", "go")
+
+	// Switch to project 2 and open a different doc
+	ed2, err := em.SwitchTo(dir2)
+	if err != nil {
+		t.Fatalf("SwitchTo dir2: %v", err)
+	}
+	mustEditorOpen(t, ed2, "scratch:///file2.go", "package p2\n", "go")
+
+	// Project 1's editor should not see project 2's doc
+	_, err = ed1.GetDocument("scratch:///file2.go")
+	if err == nil {
+		t.Error("project 1 should not have project 2's document")
+	}
+
+	// Project 2's editor should not see project 1's doc
+	_, err = ed2.GetDocument("scratch:///file1.go")
+	if err == nil {
+		t.Error("project 2 should not have project 1's document")
+	}
+
+	// Switch back to project 1 — its document should still be there
+	ed1again, err := em.SwitchTo(dir1)
+	if err != nil {
+		t.Fatalf("SwitchTo dir1 again: %v", err)
+	}
+	doc, err := ed1again.GetDocument("scratch:///file1.go")
+	if err != nil {
+		t.Fatalf("GetDocument after switching back: %v", err)
+	}
+	if doc == nil {
+		t.Fatal("GetDocument returned nil")
+	}
+}
+
+func TestEditorManager_ConcurrentSafe(t *testing.T) {
+	dir := t.TempDir()
+	em, err := NewEditorManager(dir)
+	if err != nil {
+		t.Fatalf("NewEditorManager: %v", err)
+	}
+	if em.Current() == nil {
+		t.Fatal("Current() returned nil after creation")
+	}
+}
+
+// mustEditorOpen is a test helper for opening documents.
+func mustEditorOpen(t *testing.T, ed *Editor, uri, source, lang string) {
+	t.Helper()
+	var src []byte
+	if source != "" {
+		src = []byte(source)
+	}
+	if err := ed.OpenDocument(uri, src, lang); err != nil {
+		t.Fatalf("OpenDocument(%q): %v", uri, err)
+	}
+}
