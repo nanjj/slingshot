@@ -16,7 +16,7 @@ import (
 	"github.com/nanjj/slingshot/internal/editor"
 )
 
-// ─── Input structs ───────────────────────────────────────────────────────────
+// ─── Consolidated input structs ──────────────────────────────────────────────
 
 type openDocumentArgs struct {
 	URI      string `json:"uri"`
@@ -34,21 +34,22 @@ type getStructureArgs struct {
 	MaxChildren int    `json:"maxChildren,omitempty"`
 }
 
-type byteURIPositionArgs struct {
-	URI string `json:"uri"`
-	Pos uint32 `json:"pos"`
-}
-
-type pointArgs struct {
-	URI string `json:"uri"`
-	Row uint32 `json:"row"`
-	Col uint32 `json:"col"`
-}
-
-type byteRangeArgs struct {
+type editorGetNodeArgs struct {
 	URI       string `json:"uri"`
-	StartByte uint32 `json:"startByte"`
-	EndByte   uint32 `json:"endByte"`
+	Scope     string `json:"scope,omitempty"` // "pos" (default), "point", "range", "descendants"
+	Pos       uint32 `json:"pos,omitempty"`
+	Row       uint32 `json:"row,omitempty"`
+	Col       uint32 `json:"col,omitempty"`
+	StartByte uint32 `json:"startByte,omitempty"`
+	EndByte   uint32 `json:"endByte,omitempty"`
+}
+
+type editorGetTextArgs struct {
+	URI       string `json:"uri"`
+	By        string `json:"by,omitempty"` // "range" (default), "line"
+	Line      uint32 `json:"line,omitempty"`
+	StartByte uint32 `json:"startByte,omitempty"`
+	EndByte   uint32 `json:"endByte,omitempty"`
 }
 
 type queryArgs struct {
@@ -56,73 +57,44 @@ type queryArgs struct {
 	Pattern string `json:"pattern"`
 }
 
-type lineArgs struct {
-	URI  string `json:"uri"`
-	Line uint32 `json:"line"`
-}
-
-type insertArgs struct {
-	URI  string `json:"uri"`
-	Pos  uint32 `json:"pos"`
-	Text string `json:"text"`
-}
-
-type insertAtPointArgs struct {
-	URI  string `json:"uri"`
-	Row  uint32 `json:"row"`
-	Col  uint32 `json:"col"`
-	Text string `json:"text"`
-}
-
-type insertBeforeAfterArgs struct {
+type editorInsertArgs struct {
 	URI      string              `json:"uri"`
-	Selector editor.NodeSelector `json:"selector"`
 	Text     string              `json:"text"`
+	Position string              `json:"position,omitempty"` // "pos" (default), "point", "before", "after"
+	Pos      uint32              `json:"pos,omitempty"`
+	Row      uint32              `json:"row,omitempty"`
+	Col      uint32              `json:"col,omitempty"`
+	Selector editor.NodeSelector `json:"selector,omitempty"`
 }
 
-type replaceArgs struct {
-	URI       string `json:"uri"`
-	StartByte uint32 `json:"startByte"`
-	EndByte   uint32 `json:"endByte"`
-	Text      string `json:"text"`
+type editorReplaceArgs struct {
+	URI       string              `json:"uri"`
+	Text      string              `json:"text"`
+	Target    string              `json:"target,omitempty"` // "range" (default), "node"
+	StartByte uint32              `json:"startByte,omitempty"`
+	EndByte   uint32              `json:"endByte,omitempty"`
+	Selector  editor.NodeSelector `json:"selector,omitempty"`
 }
 
-type replaceNodeArgs struct {
-	URI      string              `json:"uri"`
-	Selector editor.NodeSelector `json:"selector"`
-	Text     string              `json:"text"`
+type editorDeleteArgs struct {
+	URI       string              `json:"uri"`
+	Target    string              `json:"target,omitempty"` // "range" (default), "node"
+	StartByte uint32              `json:"startByte,omitempty"`
+	EndByte   uint32              `json:"endByte,omitempty"`
+	Selector  editor.NodeSelector `json:"selector,omitempty"`
 }
 
-type deleteRangeArgs struct {
-	URI       string `json:"uri"`
-	StartByte uint32 `json:"startByte"`
-	EndByte   uint32 `json:"endByte"`
+type editorSaveArgs struct {
+	URI   string `json:"uri"`
+	Force bool   `json:"force,omitempty"`
 }
 
-type deleteNodeArgs struct {
-	URI      string              `json:"uri"`
-	Selector editor.NodeSelector `json:"selector"`
+type editorValidateArgs struct {
+	URI          string `json:"uri"`
+	IncludeDirty bool   `json:"includeDirty,omitempty"`
 }
 
-type validateArgs struct {
-	URI string `json:"uri"`
-}
-
-type saveArgs struct {
-	URI string `json:"uri"`
-}
-
-type uriOnlyArgs struct {
-	URI string `json:"uri"`
-}
-
-// ─── Project root stack ─────────────────────────────────────────────────────
-
-type pushProjectRootArgs struct {
-	ProjectRoot string `json:"projectRoot"`
-}
-
-// ─── Response types ──────────────────────────────────────────────────────────
+// ─── Response types ─────────────────────────────────────────────────────────
 
 // editResultResponse is the MCP-friendly subset of editor.EditResult.
 type editResultResponse struct {
@@ -141,9 +113,18 @@ type saveResultResponse struct {
 	Message  string `json:"message,omitempty"`
 }
 
-// ─── MCP helper utilities ────────────────────────────────────────────────────
+// validateResponse combines validation result with optional dirty info.
+type validateResponse struct {
+	Valid        bool                 `json:"valid"`
+	SyntaxErrors []editor.SyntaxError `json:"syntaxErrors,omitempty"`
+	LineEnding   string               `json:"lineEnding"`
+	TrailingNL   bool                 `json:"trailingNewline"`
+	Dirty        *bool                `json:"dirty,omitempty"`
+	DirtyURIs    []string             `json:"dirtyURIs,omitempty"`
+}
 
-// jsonResult wraps any value as a successful MCP CallToolResult with JSON text content.
+// ─── MCP helper utilities ───────────────────────────────────────────────────
+
 func jsonResult(v any) *mcp.CallToolResult {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -158,7 +139,6 @@ func jsonResult(v any) *mcp.CallToolResult {
 	}
 }
 
-// errorResult wraps an error as an MCP CallToolResult with IsError set.
 func errorResult(err error) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		IsError: true,
@@ -172,9 +152,8 @@ func errorResult(err error) *mcp.CallToolResult {
 
 // editorServer holds the shared state for all tool handlers.
 type editorServer struct {
-	mgr       *editor.EditorManager
-	rootStack []string // 项目导航栈（push/pop 记录切换历史）
-	opts      *serveOptions
+	mgr  *editor.EditorManager
+	opts *serveOptions
 }
 
 // --- Document lifecycle ---
@@ -200,10 +179,9 @@ func (es *editorServer) closeDocument(args closeDocumentArgs) *mcp.CallToolResul
 // --- Read operations ---
 
 func (es *editorServer) getStructure(args getStructureArgs) *mcp.CallToolResult {
-	// Default: maxDepth=-1 (recursive), maxChildren=-1 (unlimited)
 	maxDepth := args.MaxDepth
 	if maxDepth == 0 {
-		maxDepth = -1 // zero in JSON = not specified, default to -1
+		maxDepth = -1 // zero in JSON = not specified, default to -1 (recursive)
 	}
 	maxChildren := args.MaxChildren
 	if maxChildren == 0 {
@@ -216,36 +194,50 @@ func (es *editorServer) getStructure(args getStructureArgs) *mcp.CallToolResult 
 	return jsonResult(nodeInfo)
 }
 
-func (es *editorServer) getNode(args byteURIPositionArgs) *mcp.CallToolResult {
-	nodeInfo, err := es.mgr.Current().GetNode(args.URI, args.Pos)
-	if err != nil {
-		return errorResult(fmt.Errorf("get node: %w", err))
+func (es *editorServer) getNode(args editorGetNodeArgs) *mcp.CallToolResult {
+	switch args.Scope {
+	case "point":
+		nodeInfo, err := es.mgr.Current().GetNodeAtPoint(args.URI, args.Row, args.Col)
+		if err != nil {
+			return errorResult(fmt.Errorf("get node at point: %w", err))
+		}
+		return jsonResult(nodeInfo)
+	case "range":
+		nodeInfo, err := es.mgr.Current().GetNodeAtRange(args.URI, args.StartByte, args.EndByte)
+		if err != nil {
+			return errorResult(fmt.Errorf("get node at range: %w", err))
+		}
+		return jsonResult(nodeInfo)
+	case "descendants":
+		infos, err := es.mgr.Current().GetDescendantsAt(args.URI, args.Pos)
+		if err != nil {
+			return errorResult(fmt.Errorf("get descendants: %w", err))
+		}
+		return jsonResult(infos)
+	default: // "pos"
+		nodeInfo, err := es.mgr.Current().GetNode(args.URI, args.Pos)
+		if err != nil {
+			return errorResult(fmt.Errorf("get node: %w", err))
+		}
+		return jsonResult(nodeInfo)
 	}
-	return jsonResult(nodeInfo)
 }
 
-func (es *editorServer) getNodeAtPoint(args pointArgs) *mcp.CallToolResult {
-	nodeInfo, err := es.mgr.Current().GetNodeAtPoint(args.URI, args.Row, args.Col)
-	if err != nil {
-		return errorResult(fmt.Errorf("get node at point: %w", err))
+func (es *editorServer) getText(args editorGetTextArgs) *mcp.CallToolResult {
+	switch args.By {
+	case "line":
+		text, err := es.mgr.Current().GetLine(args.URI, args.Line)
+		if err != nil {
+			return errorResult(fmt.Errorf("get line: %w", err))
+		}
+		return jsonResult(map[string]string{"text": text})
+	default: // "range"
+		text, err := es.mgr.Current().GetText(args.URI, args.StartByte, args.EndByte)
+		if err != nil {
+			return errorResult(fmt.Errorf("get text: %w", err))
+		}
+		return jsonResult(map[string]string{"text": text})
 	}
-	return jsonResult(nodeInfo)
-}
-
-func (es *editorServer) getNodeAtRange(args byteRangeArgs) *mcp.CallToolResult {
-	nodeInfo, err := es.mgr.Current().GetNodeAtRange(args.URI, args.StartByte, args.EndByte)
-	if err != nil {
-		return errorResult(fmt.Errorf("get node at range: %w", err))
-	}
-	return jsonResult(nodeInfo)
-}
-
-func (es *editorServer) getDescendantsAt(args byteURIPositionArgs) *mcp.CallToolResult {
-	infos, err := es.mgr.Current().GetDescendantsAt(args.URI, args.Pos)
-	if err != nil {
-		return errorResult(fmt.Errorf("get descendants at: %w", err))
-	}
-	return jsonResult(infos)
 }
 
 func (es *editorServer) query(args queryArgs) *mcp.CallToolResult {
@@ -256,167 +248,127 @@ func (es *editorServer) query(args queryArgs) *mcp.CallToolResult {
 	return jsonResult(results)
 }
 
-func (es *editorServer) getText(args byteRangeArgs) *mcp.CallToolResult {
-	text, err := es.mgr.Current().GetText(args.URI, args.StartByte, args.EndByte)
-	if err != nil {
-		return errorResult(fmt.Errorf("get text: %w", err))
-	}
-	return jsonResult(map[string]string{"text": text})
-}
-
-func (es *editorServer) getLine(args lineArgs) *mcp.CallToolResult {
-	text, err := es.mgr.Current().GetLine(args.URI, args.Line)
-	if err != nil {
-		return errorResult(fmt.Errorf("get line: %w", err))
-	}
-	return jsonResult(map[string]string{"text": text})
-}
-
 // --- Edit operations ---
 
-func (es *editorServer) insert(args insertArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().Insert(args.URI, args.Pos, args.Text)
-	if err != nil {
-		return errorResult(fmt.Errorf("insert: %w", err))
+func (es *editorServer) insert(args editorInsertArgs) *mcp.CallToolResult {
+	var editResult *editor.EditResult
+	var err error
+
+	switch args.Position {
+	case "point":
+		editResult, err = es.mgr.Current().InsertAtPoint(args.URI, args.Row, args.Col, args.Text)
+		if err != nil {
+			return errorResult(fmt.Errorf("insert at point: %w", err))
+		}
+	case "before":
+		editResult, err = es.mgr.Current().InsertBefore(args.URI, args.Selector, args.Text)
+		if err != nil {
+			return errorResult(fmt.Errorf("insert before: %w", err))
+		}
+	case "after":
+		editResult, err = es.mgr.Current().InsertAfter(args.URI, args.Selector, args.Text)
+		if err != nil {
+			return errorResult(fmt.Errorf("insert after: %w", err))
+		}
+	default: // "pos"
+		editResult, err = es.mgr.Current().Insert(args.URI, args.Pos, args.Text)
+		if err != nil {
+			return errorResult(fmt.Errorf("insert: %w", err))
+		}
 	}
 	return jsonResult(editResultToResponse(editResult))
 }
 
-func (es *editorServer) insertAtPoint(args insertAtPointArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().InsertAtPoint(args.URI, args.Row, args.Col, args.Text)
-	if err != nil {
-		return errorResult(fmt.Errorf("insert at point: %w", err))
+func (es *editorServer) replace(args editorReplaceArgs) *mcp.CallToolResult {
+	var editResult *editor.EditResult
+	var err error
+
+	switch args.Target {
+	case "node":
+		editResult, err = es.mgr.Current().ReplaceNode(args.URI, args.Selector, args.Text)
+		if err != nil {
+			return errorResult(fmt.Errorf("replace node: %w", err))
+		}
+	default: // "range"
+		editResult, err = es.mgr.Current().Replace(args.URI, args.StartByte, args.EndByte, args.Text)
+		if err != nil {
+			return errorResult(fmt.Errorf("replace: %w", err))
+		}
 	}
 	return jsonResult(editResultToResponse(editResult))
 }
 
-func (es *editorServer) insertBefore(args insertBeforeAfterArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().InsertBefore(args.URI, args.Selector, args.Text)
-	if err != nil {
-		return errorResult(fmt.Errorf("insert before: %w", err))
+func (es *editorServer) delete(args editorDeleteArgs) *mcp.CallToolResult {
+	var editResult *editor.EditResult
+	var err error
+
+	switch args.Target {
+	case "node":
+		editResult, err = es.mgr.Current().DeleteNode(args.URI, args.Selector)
+		if err != nil {
+			return errorResult(fmt.Errorf("delete node: %w", err))
+		}
+	default: // "range"
+		editResult, err = es.mgr.Current().Delete(args.URI, args.StartByte, args.EndByte)
+		if err != nil {
+			return errorResult(fmt.Errorf("delete: %w", err))
+		}
 	}
 	return jsonResult(editResultToResponse(editResult))
 }
 
-func (es *editorServer) insertAfter(args insertBeforeAfterArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().InsertAfter(args.URI, args.Selector, args.Text)
-	if err != nil {
-		return errorResult(fmt.Errorf("insert after: %w", err))
+// --- Save & Validate ---
+
+func (es *editorServer) save(args editorSaveArgs) *mcp.CallToolResult {
+	var result *editor.SaveResult
+	var err error
+
+	if args.Force {
+		result, err = es.mgr.Current().ForceSave(args.URI)
+		if err != nil {
+			return errorResult(fmt.Errorf("force save: %w", err))
+		}
+	} else {
+		result, err = es.mgr.Current().Save(args.URI)
+		if err != nil {
+			return errorResult(fmt.Errorf("save: %w", err))
+		}
 	}
-	return jsonResult(editResultToResponse(editResult))
+	return jsonResult(saveResultToResponse(result))
 }
 
-func (es *editorServer) replace(args replaceArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().Replace(args.URI, args.StartByte, args.EndByte, args.Text)
-	if err != nil {
-		return errorResult(fmt.Errorf("replace: %w", err))
-	}
-	return jsonResult(editResultToResponse(editResult))
-}
-
-func (es *editorServer) replaceNode(args replaceNodeArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().ReplaceNode(args.URI, args.Selector, args.Text)
-	if err != nil {
-		return errorResult(fmt.Errorf("replace node: %w", err))
-	}
-	return jsonResult(editResultToResponse(editResult))
-}
-
-func (es *editorServer) delete(args deleteRangeArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().Delete(args.URI, args.StartByte, args.EndByte)
-	if err != nil {
-		return errorResult(fmt.Errorf("delete: %w", err))
-	}
-	return jsonResult(editResultToResponse(editResult))
-}
-
-func (es *editorServer) deleteNode(args deleteNodeArgs) *mcp.CallToolResult {
-	editResult, err := es.mgr.Current().DeleteNode(args.URI, args.Selector)
-	if err != nil {
-		return errorResult(fmt.Errorf("delete node: %w", err))
-	}
-	return jsonResult(editResultToResponse(editResult))
-}
-
-// --- Validation & Save ---
-
-func (es *editorServer) validate(args validateArgs) *mcp.CallToolResult {
-	result, err := es.mgr.Current().Validate(args.URI)
+func (es *editorServer) validate(args editorValidateArgs) *mcp.CallToolResult {
+	valResult, err := es.mgr.Current().Validate(args.URI)
 	if err != nil {
 		return errorResult(fmt.Errorf("validate: %w", err))
 	}
-	return jsonResult(result)
-}
 
-func (es *editorServer) save(args saveArgs) *mcp.CallToolResult {
-	result, err := es.mgr.Current().Save(args.URI)
-	if err != nil {
-		return errorResult(fmt.Errorf("save: %w", err))
+	resp := validateResponse{
+		Valid:        valResult.Valid,
+		SyntaxErrors: valResult.SyntaxErrors,
+		LineEnding:   valResult.LineEnding,
+		TrailingNL:   valResult.TrailingNewline,
 	}
-	return jsonResult(saveResultToResponse(result))
-}
 
-func (es *editorServer) forceSave(args saveArgs) *mcp.CallToolResult {
-	result, err := es.mgr.Current().ForceSave(args.URI)
-	if err != nil {
-		return errorResult(fmt.Errorf("force save: %w", err))
+	if args.IncludeDirty {
+		dirty, err := es.mgr.Current().IsDirty(args.URI)
+		if err == nil {
+			resp.Dirty = &dirty
+		}
+		dirtyURIs := es.mgr.Current().DirtyDocuments()
+		resp.DirtyURIs = dirtyURIs
 	}
-	return jsonResult(saveResultToResponse(result))
+
+	return jsonResult(resp)
 }
 
-func (es *editorServer) isDirty(args uriOnlyArgs) *mcp.CallToolResult {
-	dirty, err := es.mgr.Current().IsDirty(args.URI)
-	if err != nil {
-		return errorResult(fmt.Errorf("is dirty: %w", err))
-	}
-	return jsonResult(map[string]bool{"dirty": dirty})
-}
-
-func (es *editorServer) listDirty() *mcp.CallToolResult {
-	dirty := es.mgr.Current().DirtyDocuments()
-	return jsonResult(map[string][]string{"uris": dirty})
-}
-
-func (es *editorServer) pushProjectRoot(args pushProjectRootArgs) *mcp.CallToolResult {
-	// 保存当前 project root 到导航栈
-	cur := es.mgr.Current()
-	es.rootStack = append(es.rootStack, cur.ProjectRoot())
-
-	// 切换（或创建）目标项目的 Editor 实例
-	if _, err := es.mgr.SwitchTo(args.ProjectRoot); err != nil {
-		return errorResult(fmt.Errorf("switch project root: %w", err))
-	}
-	return jsonResult(map[string]string{
-		"status":      "ok",
-		"projectRoot": args.ProjectRoot,
-	})
-}
-
-func (es *editorServer) popProjectRoot() *mcp.CallToolResult {
-	if len(es.rootStack) == 0 {
-		return errorResult(fmt.Errorf("project root stack is empty"))
-	}
-	prev := es.rootStack[len(es.rootStack)-1]
-	es.rootStack = es.rootStack[:len(es.rootStack)-1]
-
-	if _, err := es.mgr.SwitchTo(prev); err != nil {
-		return errorResult(fmt.Errorf("switch back: %w", err))
-	}
-	return jsonResult(map[string]string{
-		"status":       "ok",
-		"previousRoot": prev,
-	})
-}
-
-// getProjectRoot 返回当前活跃 Editor 的项目根目录。
 func (es *editorServer) getProjectRoot() *mcp.CallToolResult {
 	return jsonResult(map[string]string{
 		"projectRoot": es.mgr.Current().ProjectRoot(),
 	})
 }
 
-
-// ─── Helper functions ────────────────────────────────────────────────────────
+// --- Helper functions ---
 
 func editResultToResponse(er *editor.EditResult) any {
 	if er == nil {
@@ -458,19 +410,19 @@ func parseLogLevel(level string) slog.Level {
 	}
 }
 
-// ─── Tool Registration ───────────────────────────────────────────────────────
+// --- Tool Registration ---
 
 func registerAllTools(srv *mcp.Server, es *editorServer) {
 	// --- Document lifecycle ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "open_document",
+		Name:        "editor_open_document",
 		Description: "Open a document for editing. If a document with the same URI is already open, it is closed first. Supports file:// URIs and scratch:// URIs for ephemeral snippets.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args openDocumentArgs) (*mcp.CallToolResult, any, error) {
 		return es.openDocument(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "close_document",
+		Name:        "editor_close_document",
 		Description: "Close a document and release its tree-sitter resources. Unsaved changes are discarded.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args closeDocumentArgs) (*mcp.CallToolResult, any, error) {
 		return es.closeDocument(args), nil, nil
@@ -478,180 +430,96 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 
 	// --- Read operations ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_structure",
+		Name:        "editor_get_structure",
 		Description: "Get the hierarchical code structure (syntax tree) of an open document. Returns nested NodeInfo with type, byte range, and child nodes. Use maxDepth and maxChildren to limit output size. Default: recursive, unlimited children.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getStructureArgs) (*mcp.CallToolResult, any, error) {
 		return es.getStructure(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_node",
-		Description: "Get the smallest AST node at a given byte offset. Returns the node's type, position, and source text.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args byteURIPositionArgs) (*mcp.CallToolResult, any, error) {
+		Name:        "editor_get_node",
+		Description: "Get AST nodes from a document. The 'scope' parameter selects the mode:\n" +
+			"  - 'pos' (default): Get the smallest AST node at a byte offset.\n" +
+			"  - 'point': Get the smallest AST node at a row/col position.\n" +
+			"  - 'range': Get the smallest AST node covering [startByte, endByte).\n" +
+			"  - 'descendants': Get all ancestor nodes at a byte position, innermost to root.\n" +
+			"Returns node type, position, source text, and children.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorGetNodeArgs) (*mcp.CallToolResult, any, error) {
 		return es.getNode(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_node_at_point",
-		Description: "Get the smallest AST node at a given row and column position.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args pointArgs) (*mcp.CallToolResult, any, error) {
-		return es.getNodeAtPoint(args), nil, nil
+		Name:        "editor_get_text",
+		Description: "Get source text from a document. Use 'by' to select mode:\n" +
+			"  - 'range' (default): Get text in byte range [startByte, endByte).\n" +
+			"  - 'line': Get the content of a specific line (0-indexed, trailing newline stripped).",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorGetTextArgs) (*mcp.CallToolResult, any, error) {
+		return es.getText(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_node_at_range",
-		Description: "Get the smallest AST node that covers the specified byte range [startByte, endByte).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args byteRangeArgs) (*mcp.CallToolResult, any, error) {
-		return es.getNodeAtRange(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_descendants_at",
-		Description: "Get all ancestor nodes covering a byte position, ordered from innermost to outermost (root). Useful for understanding context around a position.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args byteURIPositionArgs) (*mcp.CallToolResult, any, error) {
-		return es.getDescendantsAt(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "query",
+		Name:        "editor_query",
 		Description: "Execute a tree-sitter S-expression query (.scm pattern) against the document's syntax tree. Returns matching captures grouped by capture name.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args queryArgs) (*mcp.CallToolResult, any, error) {
 		return es.query(args), nil, nil
 	})
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_text",
-		Description: "Get the source text in the specified byte range [startByte, endByte).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args byteRangeArgs) (*mcp.CallToolResult, any, error) {
-		return es.getText(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_line",
-		Description: "Get the text content of a specific line (0-indexed). The trailing newline is stripped.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args lineArgs) (*mcp.CallToolResult, any, error) {
-		return es.getLine(args), nil, nil
-	})
-
 	// --- Edit operations ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "insert",
-		Description: "Insert text at a byte offset position. The existing text after the position is shifted right.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args insertArgs) (*mcp.CallToolResult, any, error) {
+		Name:        "editor_insert",
+		Description: "Insert text into a document. Use 'position' to select mode:\n" +
+			"  - 'pos' (default): Insert at a byte offset.\n" +
+			"  - 'point': Insert at a row/col position.\n" +
+			"  - 'before': Insert before an AST node (identified by NodeSelector).\n" +
+			"  - 'after': Insert after an AST node (identified by NodeSelector).\n" +
+			"Indentation is auto-adjusted for 'before'/'after' modes.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorInsertArgs) (*mcp.CallToolResult, any, error) {
 		return es.insert(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "insert_at_point",
-		Description: "Insert text at a specific row and column position.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args insertAtPointArgs) (*mcp.CallToolResult, any, error) {
-		return es.insertAtPoint(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "insert_before",
-		Description: "Insert text before an AST node identified by a NodeSelector. The indentation is automatically adjusted to match the surrounding context.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args insertBeforeAfterArgs) (*mcp.CallToolResult, any, error) {
-		return es.insertBefore(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "insert_after",
-		Description: "Insert text after an AST node identified by a NodeSelector. The indentation is automatically adjusted to match the surrounding context.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args insertBeforeAfterArgs) (*mcp.CallToolResult, any, error) {
-		return es.insertAfter(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "replace",
-		Description: "Replace the text in the specified byte range [startByte, endByte) with new text.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args replaceArgs) (*mcp.CallToolResult, any, error) {
+		Name:        "editor_replace",
+		Description: "Replace text in a document. Use 'target' to select mode:\n" +
+			"  - 'range' (default): Replace text in byte range [startByte, endByte).\n" +
+			"  - 'node': Replace the content of an AST node (identified by NodeSelector).",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorReplaceArgs) (*mcp.CallToolResult, any, error) {
 		return es.replace(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "replace_node",
-		Description: "Replace the content of an AST node identified by a NodeSelector with new text.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args replaceNodeArgs) (*mcp.CallToolResult, any, error) {
-		return es.replaceNode(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "delete",
-		Description: "Delete the text in the specified byte range [startByte, endByte).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args deleteRangeArgs) (*mcp.CallToolResult, any, error) {
+		Name:        "editor_delete",
+		Description: "Delete text from a document. Use 'target' to select mode:\n" +
+			"  - 'range' (default): Delete text in byte range [startByte, endByte).\n" +
+			"  - 'node': Delete an AST node (identified by NodeSelector).",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorDeleteArgs) (*mcp.CallToolResult, any, error) {
 		return es.delete(args), nil, nil
 	})
 
+	// --- Save & Validate ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "delete_node",
-		Description: "Delete an AST node identified by a NodeSelector.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args deleteNodeArgs) (*mcp.CallToolResult, any, error) {
-		return es.deleteNode(args), nil, nil
-	})
-
-	// --- Validation & Save ---
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "validate",
-		Description: "Validate an open document's syntax. Returns syntax errors, line ending style, and trailing newline status. Does not modify the document.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args validateArgs) (*mcp.CallToolResult, any, error) {
-		return es.validate(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "save",
-		Description: "Save an open document to disk. Detects external file modification conflicts and returns a conflict result instead of overwriting. Use force_save to override.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args saveArgs) (*mcp.CallToolResult, any, error) {
+		Name:        "editor_save",
+		Description: "Save an open document to disk. By default detects external file modification conflicts. Set 'force' to true to skip conflict detection and overwrite.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorSaveArgs) (*mcp.CallToolResult, any, error) {
 		return es.save(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "force_save",
-		Description: "Force-save an open document to disk, skipping external modification conflict detection.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args saveArgs) (*mcp.CallToolResult, any, error) {
-		return es.forceSave(args), nil, nil
+		Name:        "editor_validate",
+		Description: "Validate an open document's syntax. Returns syntax errors, line ending style, and trailing newline status. Set 'includeDirty' to true to also return dirty status and list of all dirty document URIs.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorValidateArgs) (*mcp.CallToolResult, any, error) {
+		return es.validate(args), nil, nil
 	})
 
+	// --- Project root ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "is_dirty",
-		Description: "Check if an open document has unsaved changes.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args uriOnlyArgs) (*mcp.CallToolResult, any, error) {
-		return es.isDirty(args), nil, nil
-	})
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "list_dirty",
-		Description: "List all open documents that have unsaved changes.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
-		return es.listDirty(), nil, nil
-	})
-
-	// --- Project root stack (push/pop) ---
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "push_project_root",
-		Description: "Switch to a different project root, creating an isolated editor instance for that project. All documents, edits, and dirty state for the current project are preserved. Use pop_project_root to return. Analogous to cwd_push.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args pushProjectRootArgs) (*mcp.CallToolResult, any, error) {
-		return es.pushProjectRoot(args), nil, nil
-	})
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "pop_project_root",
-		Description: "Return to the previous project root, restoring its editor instance with all documents and state intact. Analogous to cwd_pop. Errors if the stack is empty.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
-		return es.popProjectRoot(), nil, nil
-	})
-
-	// --- Project root query ---
-
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_project_root",
+		Name:        "editor_get_project_root",
 		Description: "Get the current project root directory. Returns the absolute path of the active editor's project root.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
 		return es.getProjectRoot(), nil, nil
 	})
 }
 
-// ─── Command ─────────────────────────────────────────────────────────────────
+// --- Command ---
 
 type serveOptions struct {
 	projectRoot        string
@@ -729,7 +597,7 @@ func (c *cmdEditorServe) run(ctx context.Context) error {
 	// 3. Create MCP Server
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "slingshot-editor",
-		Version: "0.1.0",
+		Version: "0.2.0",
 	}, &mcp.ServerOptions{
 		Logger: logger,
 	})

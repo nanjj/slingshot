@@ -65,7 +65,7 @@ func extractBoolMap(t *testing.T, res *mcp.CallToolResult) map[string]bool {
 	return m
 }
 
-// ─── 1. openDocument ───────────────────────────────────────────────────────
+// ─── 1. editor_open_document ───────────────────────────────────────────────
 
 func TestOpenDocumentHandler_scratchWithLanguage(t *testing.T) {
 	es := newTestServer(t)
@@ -139,7 +139,7 @@ func TestOpenDocumentHandler_duplicateReplaces(t *testing.T) {
 	}
 }
 
-// ─── 2. closeDocument ──────────────────────────────────────────────────────
+// ─── 2. editor_close_document ──────────────────────────────────────────────
 
 func TestCloseDocumentHandler_existing(t *testing.T) {
 	es := newTestServer(t)
@@ -173,7 +173,7 @@ func TestCloseDocumentHandler_doubleClose(t *testing.T) {
 	}
 }
 
-// ─── 3. getStructure ───────────────────────────────────────────────────────
+// ─── 3. editor_get_structure ───────────────────────────────────────────────
 
 func TestGetStructureHandler_basic(t *testing.T) {
 	es := newTestServer(t)
@@ -214,86 +214,80 @@ func TestGetStructureHandler_withMaxDepth(t *testing.T) {
 	}
 }
 
-// ─── 4. getNode ────────────────────────────────────────────────────────────
+// ─── 4. editor_get_node (unified) ─────────────────────────────────────────
 
-func TestGetNodeHandler_valid(t *testing.T) {
+func TestGetNodeHandler_scopePos(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///node.go", "package main\n", "go")
 
-	args := byteURIPositionArgs{URI: "scratch:///node.go", Pos: 0}
+	args := editorGetNodeArgs{URI: "scratch:///node.go", Pos: 0}
 	res := es.getNode(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestGetNodeHandler_outOfRange(t *testing.T) {
+func TestGetNodeHandler_scopePos_outOfRange(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///node.go", "package main\n", "go")
 
-	args := byteURIPositionArgs{URI: "scratch:///node.go", Pos: 9999}
+	args := editorGetNodeArgs{URI: "scratch:///node.go", Pos: 9999}
 	res := es.getNode(args)
 	if !res.IsError {
 		t.Fatal("expected error for out-of-range position")
 	}
 }
 
-// ─── 5. getNodeAtPoint ─────────────────────────────────────────────────────
-
-func TestGetNodeAtPointHandler_valid(t *testing.T) {
+func TestGetNodeHandler_scopePoint(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///point.go", "package main\n", "go")
 
-	args := pointArgs{URI: "scratch:///point.go", Row: 0, Col: 0}
-	res := es.getNodeAtPoint(args)
+	args := editorGetNodeArgs{URI: "scratch:///point.go", Scope: "point", Row: 0, Col: 0}
+	res := es.getNode(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestGetNodeAtPointHandler_invalid(t *testing.T) {
+func TestGetNodeHandler_scopePoint_invalid(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///point.go", "package main\n", "go")
 
-	args := pointArgs{URI: "scratch:///point.go", Row: 999, Col: 0}
-	res := es.getNodeAtPoint(args)
+	args := editorGetNodeArgs{URI: "scratch:///point.go", Scope: "point", Row: 999, Col: 0}
+	res := es.getNode(args)
 	if !res.IsError {
 		t.Fatal("expected error for invalid point")
 	}
 }
 
-// ─── 6. getNodeAtRange ─────────────────────────────────────────────────────
-
-func TestGetNodeAtRangeHandler_valid(t *testing.T) {
+func TestGetNodeHandler_scopeRange(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///range.go", "package main\n", "go")
 
-	args := byteRangeArgs{URI: "scratch:///range.go", StartByte: 0, EndByte: 1}
-	res := es.getNodeAtRange(args)
+	args := editorGetNodeArgs{URI: "scratch:///range.go", Scope: "range", StartByte: 0, EndByte: 1}
+	res := es.getNode(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestGetNodeAtRangeHandler_invalid(t *testing.T) {
+func TestGetNodeHandler_scopeRange_invalid(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///range.go", "package main\n", "go")
 
-	args := byteRangeArgs{URI: "scratch:///range.go", StartByte: 0, EndByte: 9999}
-	res := es.getNodeAtRange(args)
+	args := editorGetNodeArgs{URI: "scratch:///range.go", Scope: "range", StartByte: 0, EndByte: 9999}
+	res := es.getNode(args)
 	if !res.IsError {
 		t.Fatal("expected error for invalid range")
 	}
 }
 
-// ─── 7. getDescendantsAt ───────────────────────────────────────────────────
-
-func TestGetDescendantsAtHandler_valid(t *testing.T) {
+func TestGetNodeHandler_scopeDescendants(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///desc.go", "package main\nfunc main() {}\n", "go")
 
-	args := byteURIPositionArgs{URI: "scratch:///desc.go", Pos: 0}
-	res := es.getDescendantsAt(args)
+	args := editorGetNodeArgs{URI: "scratch:///desc.go", Scope: "descendants", Pos: 0}
+	res := es.getNode(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
@@ -304,18 +298,75 @@ func TestGetDescendantsAtHandler_valid(t *testing.T) {
 	}
 }
 
-func TestGetDescendantsAtHandler_outOfRange(t *testing.T) {
+func TestGetNodeHandler_scopeDescendants_outOfRange(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///desc.go", "package main\n", "go")
 
-	args := byteURIPositionArgs{URI: "scratch:///desc.go", Pos: 9999}
-	res := es.getDescendantsAt(args)
+	args := editorGetNodeArgs{URI: "scratch:///desc.go", Scope: "descendants", Pos: 9999}
+	res := es.getNode(args)
 	if !res.IsError {
 		t.Fatal("expected error for out-of-range position")
 	}
 }
 
-// ─── 8. query ──────────────────────────────────────────────────────────────
+// ─── 5. editor_get_text (unified) ─────────────────────────────────────────
+
+func TestGetTextHandler_byRange(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///text.go", "package main\nfunc main() {}\n", "go")
+
+	args := editorGetTextArgs{URI: "scratch:///text.go", StartByte: 0, EndByte: 7}
+	res := es.getText(args)
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", extractText(res))
+	}
+	var out map[string]string
+	unmarshalJSONText(t, res, &out)
+	if out["text"] != "package" {
+		t.Errorf("expected text='package', got %q", out["text"])
+	}
+}
+
+func TestGetTextHandler_byRange_invalid(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///text.go", "package main\n", "go")
+
+	args := editorGetTextArgs{URI: "scratch:///text.go", StartByte: 0, EndByte: 9999}
+	res := es.getText(args)
+	if !res.IsError {
+		t.Fatal("expected error for invalid range")
+	}
+}
+
+func TestGetTextHandler_byLine(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///line.go",
+		"line zero\nline one\nline two\n", "go")
+
+	args := editorGetTextArgs{URI: "scratch:///line.go", By: "line", Line: 1}
+	res := es.getText(args)
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", extractText(res))
+	}
+	var out map[string]string
+	unmarshalJSONText(t, res, &out)
+	if out["text"] != "line one" {
+		t.Errorf("expected text='line one', got %q", out["text"])
+	}
+}
+
+func TestGetTextHandler_byLine_invalid(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///line.go", "package main\n", "go")
+
+	args := editorGetTextArgs{URI: "scratch:///line.go", By: "line", Line: 999}
+	res := es.getText(args)
+	if !res.IsError {
+		t.Fatal("expected error for invalid line")
+	}
+}
+
+// ─── 6. editor_query ───────────────────────────────────────────────────────
 
 func TestQueryHandler_valid(t *testing.T) {
 	es := newTestServer(t)
@@ -357,72 +408,13 @@ func TestQueryHandler_nonMatchingPattern(t *testing.T) {
 	}
 }
 
-// ─── 9. getText ────────────────────────────────────────────────────────────
+// ─── 7. editor_insert (unified) ────────────────────────────────────────────
 
-func TestGetTextHandler_valid(t *testing.T) {
-	es := newTestServer(t)
-	mustOpen(t, es, "scratch:///text.go", "package main\nfunc main() {}\n", "go")
-
-	args := byteRangeArgs{URI: "scratch:///text.go", StartByte: 0, EndByte: 7}
-	res := es.getText(args)
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", extractText(res))
-	}
-	var out map[string]string
-	unmarshalJSONText(t, res, &out)
-	if out["text"] != "package" {
-		t.Errorf("expected text='package', got %q", out["text"])
-	}
-}
-
-func TestGetTextHandler_invalidRange(t *testing.T) {
-	es := newTestServer(t)
-	mustOpen(t, es, "scratch:///text.go", "package main\n", "go")
-
-	args := byteRangeArgs{URI: "scratch:///text.go", StartByte: 0, EndByte: 9999}
-	res := es.getText(args)
-	if !res.IsError {
-		t.Fatal("expected error for invalid range")
-	}
-}
-
-// ─── 10. getLine ───────────────────────────────────────────────────────────
-
-func TestGetLineHandler_valid(t *testing.T) {
-	es := newTestServer(t)
-	mustOpen(t, es, "scratch:///line.go",
-		"line zero\nline one\nline two\n", "go")
-
-	args := lineArgs{URI: "scratch:///line.go", Line: 1}
-	res := es.getLine(args)
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", extractText(res))
-	}
-	var out map[string]string
-	unmarshalJSONText(t, res, &out)
-	if out["text"] != "line one" {
-		t.Errorf("expected text='line one', got %q", out["text"])
-	}
-}
-
-func TestGetLineHandler_invalid(t *testing.T) {
-	es := newTestServer(t)
-	mustOpen(t, es, "scratch:///line.go", "package main\n", "go")
-
-	args := lineArgs{URI: "scratch:///line.go", Line: 999}
-	res := es.getLine(args)
-	if !res.IsError {
-		t.Fatal("expected error for invalid line")
-	}
-}
-
-// ─── 11. insert ────────────────────────────────────────────────────────────
-
-func TestInsertHandler_valid(t *testing.T) {
+func TestInsertHandler_positionPos(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///insert.go", "package main\n", "go")
 
-	args := insertArgs{
+	args := editorInsertArgs{
 		URI:  "scratch:///insert.go",
 		Pos:  0,
 		Text: "// comment\n",
@@ -438,11 +430,11 @@ func TestInsertHandler_valid(t *testing.T) {
 	}
 }
 
-func TestInsertHandler_outOfBounds(t *testing.T) {
+func TestInsertHandler_positionPos_outOfBounds(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///insert.go", "package main\n", "go")
 
-	args := insertArgs{
+	args := editorInsertArgs{
 		URI:  "scratch:///insert.go",
 		Pos:  9999,
 		Text: "// comment\n",
@@ -453,19 +445,18 @@ func TestInsertHandler_outOfBounds(t *testing.T) {
 	}
 }
 
-// ─── 12. insertAtPoint ─────────────────────────────────────────────────────
-
-func TestInsertAtPointHandler_valid(t *testing.T) {
+func TestInsertHandler_positionPoint(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///iap.go", "package main\n", "go")
 
-	args := insertAtPointArgs{
-		URI:  "scratch:///iap.go",
-		Row:  0,
-		Col:  0,
-		Text: "// comment\n",
+	args := editorInsertArgs{
+		URI:      "scratch:///iap.go",
+		Position: "point",
+		Row:      0,
+		Col:      0,
+		Text:     "// comment\n",
 	}
-	res := es.insertAtPoint(args)
+	res := es.insert(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
@@ -476,19 +467,18 @@ func TestInsertAtPointHandler_valid(t *testing.T) {
 	}
 }
 
-func TestInsertAtPointHandler_emptyDoc(t *testing.T) {
+func TestInsertHandler_positionPoint_emptyDoc(t *testing.T) {
 	es := newTestServer(t)
-	// Empty scratch document — insert at (0,0) on an empty doc is valid
-	// (PointToByte clips to the last valid offset).
 	mustOpen(t, es, "scratch:///iap.go", "", "go")
 
-	args := insertAtPointArgs{
-		URI:  "scratch:///iap.go",
-		Row:  0,
-		Col:  0,
-		Text: "// comment\n",
+	args := editorInsertArgs{
+		URI:      "scratch:///iap.go",
+		Position: "point",
+		Row:      0,
+		Col:      0,
+		Text:     "// comment\n",
 	}
-	res := es.insertAtPoint(args)
+	res := es.insert(args)
 	if res.IsError {
 		t.Fatalf("insert at (0,0) on empty doc should succeed: %s", extractText(res))
 	}
@@ -499,9 +489,7 @@ func TestInsertAtPointHandler_emptyDoc(t *testing.T) {
 	}
 }
 
-// ─── 13. insertBefore ──────────────────────────────────────────────────────
-
-func TestInsertBeforeHandler_valid(t *testing.T) {
+func TestInsertHandler_positionBefore(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///ib.go",
 		"package main\nfunc main() {}\n", "go")
@@ -511,35 +499,35 @@ func TestInsertBeforeHandler_valid(t *testing.T) {
 			{Type: "function_declaration"},
 		},
 	}
-	args := insertBeforeAfterArgs{
+	args := editorInsertArgs{
 		URI:      "scratch:///ib.go",
+		Position: "before",
 		Selector: sel,
 		Text:     "// before\n",
 	}
-	res := es.insertBefore(args)
+	res := es.insert(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestInsertBeforeHandler_emptySelector(t *testing.T) {
+func TestInsertHandler_positionBefore_emptySelector(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///ib.go", "package main\n", "go")
 
-	args := insertBeforeAfterArgs{
+	args := editorInsertArgs{
 		URI:      "scratch:///ib.go",
+		Position: "before",
 		Selector: editor.NodeSelector{}, // empty — should error
 		Text:     "// before\n",
 	}
-	res := es.insertBefore(args)
+	res := es.insert(args)
 	if !res.IsError {
 		t.Fatal("expected error for empty selector")
 	}
 }
 
-// ─── 14. insertAfter ───────────────────────────────────────────────────────
-
-func TestInsertAfterHandler_valid(t *testing.T) {
+func TestInsertHandler_positionAfter(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///ia.go",
 		"package main\nfunc main() {}\n", "go")
@@ -549,40 +537,42 @@ func TestInsertAfterHandler_valid(t *testing.T) {
 			{Type: "function_declaration"},
 		},
 	}
-	args := insertBeforeAfterArgs{
+	args := editorInsertArgs{
 		URI:      "scratch:///ia.go",
+		Position: "after",
 		Selector: sel,
 		Text:     "// after\n",
 	}
-	res := es.insertAfter(args)
+	res := es.insert(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestInsertAfterHandler_emptySelector(t *testing.T) {
+func TestInsertHandler_positionAfter_emptySelector(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///ia.go", "package main\n", "go")
 
-	args := insertBeforeAfterArgs{
+	args := editorInsertArgs{
 		URI:      "scratch:///ia.go",
+		Position: "after",
 		Selector: editor.NodeSelector{},
 		Text:     "// after\n",
 	}
-	res := es.insertAfter(args)
+	res := es.insert(args)
 	if !res.IsError {
 		t.Fatal("expected error for empty selector")
 	}
 }
 
-// ─── 15. replace ───────────────────────────────────────────────────────────
+// ─── 8. editor_replace (unified) ───────────────────────────────────────────
 
-func TestReplaceHandler_valid(t *testing.T) {
+func TestReplaceHandler_targetRange(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///replace.go",
 		"package main\nfunc main() {}\n", "go")
 
-	args := replaceArgs{
+	args := editorReplaceArgs{
 		URI:       "scratch:///replace.go",
 		StartByte: 0,
 		EndByte:   13,
@@ -599,11 +589,11 @@ func TestReplaceHandler_valid(t *testing.T) {
 	}
 }
 
-func TestReplaceHandler_outOfBounds(t *testing.T) {
+func TestReplaceHandler_targetRange_outOfBounds(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///replace.go", "package main\n", "go")
 
-	args := replaceArgs{
+	args := editorReplaceArgs{
 		URI:       "scratch:///replace.go",
 		StartByte: 0,
 		EndByte:   9999,
@@ -615,9 +605,7 @@ func TestReplaceHandler_outOfBounds(t *testing.T) {
 	}
 }
 
-// ─── 16. replaceNode ───────────────────────────────────────────────────────
-
-func TestReplaceNodeHandler_valid(t *testing.T) {
+func TestReplaceHandler_targetNode(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///rn.go",
 		"package main\nfunc main() {}\n", "go")
@@ -627,18 +615,19 @@ func TestReplaceNodeHandler_valid(t *testing.T) {
 			{Type: "function_declaration"},
 		},
 	}
-	args := replaceNodeArgs{
+	args := editorReplaceArgs{
 		URI:      "scratch:///rn.go",
+		Target:   "node",
 		Selector: sel,
 		Text:     "func replaced() {}",
 	}
-	res := es.replaceNode(args)
+	res := es.replace(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestReplaceNodeHandler_badSelector(t *testing.T) {
+func TestReplaceHandler_targetNode_badSelector(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///rn.go", "package main\n", "go")
 
@@ -647,25 +636,26 @@ func TestReplaceNodeHandler_badSelector(t *testing.T) {
 			{Type: "nonexistent_type"},
 		},
 	}
-	args := replaceNodeArgs{
+	args := editorReplaceArgs{
 		URI:      "scratch:///rn.go",
+		Target:   "node",
 		Selector: sel,
 		Text:     "func replaced() {}",
 	}
-	res := es.replaceNode(args)
+	res := es.replace(args)
 	if !res.IsError {
 		t.Fatal("expected error for bad selector")
 	}
 }
 
-// ─── 17. delete ────────────────────────────────────────────────────────────
+// ─── 9. editor_delete (unified) ────────────────────────────────────────────
 
-func TestDeleteHandler_valid(t *testing.T) {
+func TestDeleteHandler_targetRange(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///del.go",
 		"package main\nfunc main() {}\n", "go")
 
-	args := deleteRangeArgs{
+	args := editorDeleteArgs{
 		URI:       "scratch:///del.go",
 		StartByte: 0,
 		EndByte:   13,
@@ -681,11 +671,11 @@ func TestDeleteHandler_valid(t *testing.T) {
 	}
 }
 
-func TestDeleteHandler_outOfBounds(t *testing.T) {
+func TestDeleteHandler_targetRange_outOfBounds(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///del.go", "package main\n", "go")
 
-	args := deleteRangeArgs{
+	args := editorDeleteArgs{
 		URI:       "scratch:///del.go",
 		StartByte: 0,
 		EndByte:   9999,
@@ -696,9 +686,7 @@ func TestDeleteHandler_outOfBounds(t *testing.T) {
 	}
 }
 
-// ─── 18. deleteNode ────────────────────────────────────────────────────────
-
-func TestDeleteNodeHandler_valid(t *testing.T) {
+func TestDeleteHandler_targetNode(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///dn.go",
 		"package main\nfunc main() {}\n", "go")
@@ -708,17 +696,18 @@ func TestDeleteNodeHandler_valid(t *testing.T) {
 			{Type: "function_declaration"},
 		},
 	}
-	args := deleteNodeArgs{
+	args := editorDeleteArgs{
 		URI:      "scratch:///dn.go",
+		Target:   "node",
 		Selector: sel,
 	}
-	res := es.deleteNode(args)
+	res := es.delete(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
 }
 
-func TestDeleteNodeHandler_badSelector(t *testing.T) {
+func TestDeleteHandler_targetNode_badSelector(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///dn.go", "package main\n", "go")
 
@@ -727,61 +716,24 @@ func TestDeleteNodeHandler_badSelector(t *testing.T) {
 			{Type: "nonexistent_type"},
 		},
 	}
-	args := deleteNodeArgs{
+	args := editorDeleteArgs{
 		URI:      "scratch:///dn.go",
+		Target:   "node",
 		Selector: sel,
 	}
-	res := es.deleteNode(args)
+	res := es.delete(args)
 	if !res.IsError {
 		t.Fatal("expected error for bad selector")
 	}
 }
 
-// ─── 19. validate ──────────────────────────────────────────────────────────
-
-func TestValidateHandler_valid(t *testing.T) {
-	es := newTestServer(t)
-	mustOpen(t, es, "scratch:///val.go",
-		"package main\nfunc main() {}\n", "go")
-
-	args := validateArgs{URI: "scratch:///val.go"}
-	res := es.validate(args)
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", extractText(res))
-	}
-	// Result body should contain validation info.
-	var result map[string]any
-	unmarshalJSONText(t, res, &result)
-	// For valid code, "syntaxErrors" should be empty.
-	if errs, ok := result["syntaxErrors"]; ok {
-		if arr, ok := errs.([]any); ok && len(arr) > 0 {
-			t.Errorf("expected no syntax errors, got %v", arr)
-		}
-	}
-}
-
-func TestValidateHandler_syntaxError(t *testing.T) {
-	es := newTestServer(t)
-	// Invalid Go with a syntax error — missing closing brace for main.
-	mustOpen(t, es, "scratch:///valerr.go",
-		"package main\nfunc main() {\nunclosed\n", "go")
-
-	args := validateArgs{URI: "scratch:///valerr.go"}
-	res := es.validate(args)
-	if res == nil {
-		t.Fatal("validate returned nil")
-	}
-	// Validate may return errors inline or as IsError depending on
-	// implementation. Both are acceptable — just verify no panic.
-}
-
-// ─── 20. save ──────────────────────────────────────────────────────────────
+// ─── 10. editor_save (unified) ─────────────────────────────────────────────
 
 func TestSaveHandler_scratchFails(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///save.go", "package main\n", "go")
 
-	args := saveArgs{URI: "scratch:///save.go"}
+	args := editorSaveArgs{URI: "scratch:///save.go"}
 	res := es.save(args)
 	if !res.IsError {
 		t.Fatal("expected error for saving scratch:// URI")
@@ -795,7 +747,7 @@ func TestSaveHandler_newFile(t *testing.T) {
 	uri := "file://" + filePath
 	mustOpen(t, es, uri, "package main\n", "go")
 
-	args := saveArgs{URI: uri}
+	args := editorSaveArgs{URI: uri}
 	res := es.save(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
@@ -821,24 +773,22 @@ func TestSaveHandler_newFile(t *testing.T) {
 
 func TestSaveHandler_notFound(t *testing.T) {
 	es := newTestServer(t)
-	args := saveArgs{URI: "file:///nonexistent.go"}
+	args := editorSaveArgs{URI: "file:///nonexistent.go"}
 	res := es.save(args)
 	if !res.IsError {
 		t.Fatal("expected error for saving non-existent document")
 	}
 }
 
-// ─── 21. forceSave ────────────────────────────────────────────────────────
-
-func TestForceSaveHandler(t *testing.T) {
+func TestSaveHandler_force(t *testing.T) {
 	es := newTestServer(t)
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "forced.go")
 	uri := "file://" + filePath
 	mustOpen(t, es, uri, "package main\n", "go")
 
-	args := saveArgs{URI: uri}
-	res := es.forceSave(args)
+	args := editorSaveArgs{URI: uri, Force: true}
+	res := es.save(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
@@ -849,255 +799,104 @@ func TestForceSaveHandler(t *testing.T) {
 	}
 }
 
-// ─── 22. isDirty ──────────────────────────────────────────────────────────
+// ─── 11. editor_validate (unified) ─────────────────────────────────────────
 
-func TestIsDirtyHandler_afterOpen(t *testing.T) {
+func TestValidateHandler_basic(t *testing.T) {
 	es := newTestServer(t)
-	mustOpen(t, es, "scratch:///dirty.go", "package main\n", "go")
+	mustOpen(t, es, "scratch:///val.go",
+		"package main\nfunc main() {}\n", "go")
 
-	args := uriOnlyArgs{URI: "scratch:///dirty.go"}
-	res := es.isDirty(args)
+	args := editorValidateArgs{URI: "scratch:///val.go"}
+	res := es.validate(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
-	m := extractBoolMap(t, res)
-	if m["dirty"] {
-		t.Error("new doc should not be dirty")
+	var out validateResponse
+	unmarshalJSONText(t, res, &out)
+	if !out.Valid {
+		t.Error("expected valid=true for correct code")
 	}
 }
 
-func TestIsDirtyHandler_afterEdit(t *testing.T) {
+func TestValidateHandler_syntaxError(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///valerr.go",
+		"package main\nfunc main() {\nunclosed\n", "go")
+
+	args := editorValidateArgs{URI: "scratch:///valerr.go"}
+	res := es.validate(args)
+	if res == nil {
+		t.Fatal("validate returned nil")
+	}
+	// Validate may return IsError or include errors inline — both OK
+}
+
+func TestValidateHandler_includeDirty(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///dirty.go", "package main\n", "go")
-	es.insert(insertArgs{URI: "scratch:///dirty.go", Pos: 0, Text: "// comment\n"})
 
-	args := uriOnlyArgs{URI: "scratch:///dirty.go"}
-	res := es.isDirty(args)
+	// Make an edit to mark as dirty
+	es.insert(editorInsertArgs{URI: "scratch:///dirty.go", Pos: 0, Text: "// comment\n"})
+
+	args := editorValidateArgs{URI: "scratch:///dirty.go", IncludeDirty: true}
+	res := es.validate(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
-	m := extractBoolMap(t, res)
-	if !m["dirty"] {
-		t.Error("after edit, doc should be dirty")
+	var out validateResponse
+	unmarshalJSONText(t, res, &out)
+	if out.Dirty == nil {
+		t.Fatal("expected dirty field to be set when includeDirty=true")
+	}
+	if !*out.Dirty {
+		t.Error("expected dirty=true after edit")
+	}
+	if len(out.DirtyURIs) == 0 {
+		t.Error("expected non-empty DirtyURIs")
 	}
 }
 
-func TestIsDirtyHandler_notFound(t *testing.T) {
-	es := newTestServer(t)
-	args := uriOnlyArgs{URI: "scratch:///nonexistent.go"}
-	res := es.isDirty(args)
-	if !res.IsError {
-		t.Fatal("expected error for non-existent document")
-	}
-}
-
-// ─── 23. listDirty ────────────────────────────────────────────────────────
-
-func TestListDirtyHandler_empty(t *testing.T) {
+func TestValidateHandler_includeDirty_afterOpen(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///clean.go", "package main\n", "go")
 
-	res := es.listDirty()
+	args := editorValidateArgs{URI: "scratch:///clean.go", IncludeDirty: true}
+	res := es.validate(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
-	var out map[string][]string
+	var out validateResponse
 	unmarshalJSONText(t, res, &out)
-	if len(out["uris"]) != 0 {
-		t.Errorf("expected 0 dirty, got %v", out["uris"])
+	if out.Dirty == nil {
+		t.Fatal("expected dirty field to be set when includeDirty=true")
+	}
+	if *out.Dirty {
+		t.Error("expected dirty=false for new doc")
 	}
 }
 
-func TestListDirtyHandler_afterEdits(t *testing.T) {
+func TestValidateHandler_listDirty(t *testing.T) {
 	es := newTestServer(t)
 	mustOpen(t, es, "scratch:///dirty1.go", "package main\n", "go")
 	mustOpen(t, es, "scratch:///dirty2.go", "package main\n", "go")
-	es.insert(insertArgs{URI: "scratch:///dirty1.go", Pos: 0, Text: "// dirty\n"})
+	es.insert(editorInsertArgs{URI: "scratch:///dirty1.go", Pos: 0, Text: "// dirty\n"})
 
-	res := es.listDirty()
+	args := editorValidateArgs{URI: "scratch:///dirty1.go", IncludeDirty: true}
+	res := es.validate(args)
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", extractText(res))
 	}
-	var out map[string][]string
+	var out validateResponse
 	unmarshalJSONText(t, res, &out)
-	if len(out["uris"]) != 1 {
-		t.Errorf("expected 1 dirty, got %v", out["uris"])
+	if len(out.DirtyURIs) != 1 {
+		t.Errorf("expected 1 dirty URI, got %v", out.DirtyURIs)
 	}
-	if out["uris"][0] != "scratch:///dirty1.go" {
-		t.Errorf("expected dirty1.go, got %v", out["uris"][0])
-	}
-}
-
-// ─── 24. pushProjectRoot ──────────────────────────────────────────────────
-
-func TestPushProjectRootHandler(t *testing.T) {
-	dir1 := t.TempDir()
-	dir2 := t.TempDir()
-	mgr, err := editor.NewEditorManager(dir1)
-	if err != nil {
-		t.Fatalf("NewEditorManager: %v", err)
-	}
-	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
-
-	args := pushProjectRootArgs{ProjectRoot: dir2}
-	res := es.pushProjectRoot(args)
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", extractText(res))
-	}
-	var out map[string]string
-	unmarshalJSONText(t, res, &out)
-	if out["status"] != "ok" {
-		t.Errorf("expected status=ok, got %q", out["status"])
-	}
-	if out["projectRoot"] != dir2 {
-		t.Errorf("expected projectRoot=%q, got %q", dir2, out["projectRoot"])
-	}
-	// Current editor should now be dir2
-	if es.mgr.Current().ProjectRoot() != dir2 {
-		t.Errorf("Current after push: got %q, want %q",
-			es.mgr.Current().ProjectRoot(), dir2)
+	if len(out.DirtyURIs) > 0 && out.DirtyURIs[0] != "scratch:///dirty1.go" {
+		t.Errorf("expected dirty1.go, got %v", out.DirtyURIs[0])
 	}
 }
 
-func TestPushProjectRootHandler_MultipleProjects(t *testing.T) {
-	dir1 := t.TempDir()
-	dir2 := t.TempDir()
-	mgr, err := editor.NewEditorManager(dir1)
-	if err != nil {
-		t.Fatalf("NewEditorManager: %v", err)
-	}
-	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
-
-	// Open a document in project 1
-	mustOpen(t, es, "scratch:///p1.go", "package p1\n", "go")
-
-	// Push to project 2
-	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
-
-	// Open a different document in project 2
-	mustOpen(t, es, "scratch:///p2.go", "package p2\n", "go")
-
-	// Push back to project 1
-	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir1})
-
-	// Project 1's document should be accessible
-	var getRes *mcp.CallToolResult
-	getRes = es.isDirty(uriOnlyArgs{URI: "scratch:///p1.go"})
-	if getRes.IsError {
-		t.Fatalf("isDirty for p1.go failed: %s", extractText(getRes))
-	}
-	m := extractBoolMap(t, getRes)
-	if _, ok := m["dirty"]; !ok {
-		t.Error("expected dirty field in response")
-	}
-
-	// Project 2's document should NOT be accessible from project 1's editor
-	getRes = es.isDirty(uriOnlyArgs{URI: "scratch:///p2.go"})
-	if !getRes.IsError {
-		t.Error("expected error for p2.go from project 1 editor")
-	}
-}
-
-// ─── 25. popProjectRoot ───────────────────────────────────────────────────
-
-func TestPopProjectRootHandler(t *testing.T) {
-	dir1 := t.TempDir()
-	dir2 := t.TempDir()
-	mgr, err := editor.NewEditorManager(dir1)
-	if err != nil {
-		t.Fatalf("NewEditorManager: %v", err)
-	}
-	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
-
-	// Push to dir2
-	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
-
-	// Pop back to dir1
-	res := es.popProjectRoot()
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", extractText(res))
-	}
-	var out map[string]string
-	unmarshalJSONText(t, res, &out)
-	if out["status"] != "ok" {
-		t.Errorf("expected status=ok, got %q", out["status"])
-	}
-	if out["previousRoot"] != dir1 {
-		t.Errorf("expected previousRoot=%q, got %q", dir1, out["previousRoot"])
-	}
-	// Current editor should be back to dir1
-	if es.mgr.Current().ProjectRoot() != dir1 {
-		t.Errorf("Current after pop: got %q, want %q",
-			es.mgr.Current().ProjectRoot(), dir1)
-	}
-}
-
-func TestPopProjectRootHandler_emptyStack(t *testing.T) {
-	dir := t.TempDir()
-	mgr, err := editor.NewEditorManager(dir)
-	if err != nil {
-		t.Fatalf("NewEditorManager: %v", err)
-	}
-	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
-
-	// Pop on empty stack should error
-	res := es.popProjectRoot()
-	if !res.IsError {
-		t.Fatal("expected error for pop on empty stack")
-	}
-	if extractText(res) != "project root stack is empty" {
-		t.Errorf("unexpected error message: %q", extractText(res))
-	}
-}
-
-func TestPushThenPop_RestoresProjectState(t *testing.T) {
-	dir1 := t.TempDir()
-	dir2 := t.TempDir()
-	mgr, err := editor.NewEditorManager(dir1)
-	if err != nil {
-		t.Fatalf("NewEditorManager: %v", err)
-	}
-	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
-
-	// Open doc and edit in project 1
-	mustOpen(t, es, "scratch:///work.go", "package main\n", "go")
-	es.insert(insertArgs{URI: "scratch:///work.go", Pos: 0, Text: "// edit\n"})
-
-	// Verify dirty
-	dirtyRes := es.isDirty(uriOnlyArgs{URI: "scratch:///work.go"})
-	m := extractBoolMap(t, dirtyRes)
-	if !m["dirty"] {
-		t.Error("expected dirty after edit")
-	}
-
-	// Push to project 2
-	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
-
-	// Open and edit a different doc in project 2
-	mustOpen(t, es, "scratch:///other.go", "package other\n", "go")
-	es.insert(insertArgs{URI: "scratch:///other.go", Pos: 0, Text: "// other edit\n"})
-
-	// Pop back to project 1
-	popRes := es.popProjectRoot()
-	if popRes.IsError {
-		t.Fatalf("pop failed: %s", extractText(popRes))
-	}
-
-	// Project 1's document should still be dirty with the edit
-	dirtyRes = es.isDirty(uriOnlyArgs{URI: "scratch:///work.go"})
-	m = extractBoolMap(t, dirtyRes)
-	if !m["dirty"] {
-		t.Error("project 1 doc should still be dirty after push/pop round trip")
-	}
-
-	// Project 2's document should not be visible from project 1
-	_, err = es.mgr.Current().GetDocument("scratch:///other.go")
-	if err == nil {
-		t.Error("project 1 editor should not see project 2's document after pop")
-	}
-}
-
-// ─── 26. getProjectRoot ───────────────────────────────────────────────────
+// ─── 12. editor_get_project_root ───────────────────────────────────────────
 
 func TestGetProjectRootHandler(t *testing.T) {
 	dir := t.TempDir()
@@ -1115,37 +914,5 @@ func TestGetProjectRootHandler(t *testing.T) {
 	unmarshalJSONText(t, res, &out)
 	if out["projectRoot"] != dir {
 		t.Errorf("expected projectRoot=%q, got %q", dir, out["projectRoot"])
-	}
-}
-
-func TestGetProjectRootHandler_afterPush(t *testing.T) {
-	dir1 := t.TempDir()
-	dir2 := t.TempDir()
-	mgr, err := editor.NewEditorManager(dir1)
-	if err != nil {
-		t.Fatalf("NewEditorManager: %v", err)
-	}
-	es := &editorServer{mgr: mgr, opts: &serveOptions{}}
-
-	// Push to dir2
-	es.pushProjectRoot(pushProjectRootArgs{ProjectRoot: dir2})
-
-	res := es.getProjectRoot()
-	if res.IsError {
-		t.Fatalf("unexpected error: %s", extractText(res))
-	}
-	var out map[string]string
-	unmarshalJSONText(t, res, &out)
-	if out["projectRoot"] != dir2 {
-		t.Errorf("expected projectRoot=%q after push, got %q", dir2, out["projectRoot"])
-	}
-
-	// Pop back
-	es.popProjectRoot()
-
-	res = es.getProjectRoot()
-	unmarshalJSONText(t, res, &out)
-	if out["projectRoot"] != dir1 {
-		t.Errorf("expected projectRoot=%q after pop, got %q", dir1, out["projectRoot"])
 	}
 }
