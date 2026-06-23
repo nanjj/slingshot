@@ -996,3 +996,323 @@ func TestOpenProjectHandler_notFound(t *testing.T) {
 	// If it succeeds, that's also acceptable (Editor can handle non-existent dirs)
 	t.Log("openProject succeeded for non-existent path (acceptable)")
 }
+
+// ─── 7. definition tools ───────────────────────────────────────────
+
+func TestGetDefinitionsHandler_Go(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}
+func bar() int { return 42 }
+type Point struct{ X, Y int }
+func (p Point) String() string { return "" }
+`, "go")
+
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///test.go"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) == 0 {
+		t.Fatal("expected at least 1 tag")
+	}
+
+	found := map[string]string{}
+	for _, tag := range tags {
+		found[tag.Name] = tag.Kind
+	}
+	expect := map[string]string{
+		"foo":    "definition.function",
+		"bar":    "definition.function",
+		"String": "definition.method",
+	}
+	for name, kind := range expect {
+		actual, ok := found[name]
+		if !ok {
+			t.Errorf("expected tag %q not found", name)
+			continue
+		}
+		if actual != kind {
+			t.Errorf("tag %q: expected kind %q, got %q", name, kind, actual)
+		}
+	}
+}
+
+func TestGetDefinitionsHandler_NotFound(t *testing.T) {
+	es := newTestServer(t)
+	// A URI without a supported extension returns error
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///nonexistent.xyz"})
+	if !res.IsError {
+		t.Fatal("expected error for non-existent document")
+	}
+}
+
+func TestGetDefinitionsHandler_AutoOpensEmpty(t *testing.T) {
+	es := newTestServer(t)
+	// A .go scratch URI auto-opens to an empty doc, getting 0 tags
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///empty.go"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+	if tags == nil {
+		t.Error("expected non-nil slice from getDefinitions")
+	}
+}
+
+func TestGetDefinitionsHandler_Python(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.py", `class Greeter:
+    def __init__(self, name):
+        self.name = name
+    def greet(self):
+        print(f"Hello, {self.name}!")
+def helper():
+    pass
+`, "python")
+
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///test.py"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) == 0 {
+		t.Fatal("expected at least 1 tag")
+	}
+
+	found := map[string]string{}
+	for _, tag := range tags {
+		found[tag.Name] = tag.Kind
+	}
+	expect := map[string]string{
+		"Greeter":  "definition.class",
+		"__init__": "definition.function",
+		"greet":    "definition.function",
+		"helper":   "definition.function",
+	}
+	for name, kind := range expect {
+		actual, ok := found[name]
+		if !ok {
+			t.Errorf("expected tag %q not found", name)
+			continue
+		}
+		if actual != kind {
+			t.Errorf("tag %q: expected kind %q, got %q", name, kind, actual)
+		}
+	}
+}
+
+func TestGetDefinitionsHandler_JavaScript(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.js", `class Counter {
+    constructor(n) { this.n = n; }
+    increment() { this.n++; }
+}
+function format(c) { return c.n; }
+`, "javascript")
+
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///test.js"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	found := map[string]string{}
+	for _, tag := range tags {
+		found[tag.Name] = tag.Kind
+	}
+	expect := map[string]string{
+		"Counter":     "definition.class",
+		"constructor": "definition.method",
+		"increment":   "definition.method",
+		"format":      "definition.function",
+	}
+	for name, kind := range expect {
+		actual, ok := found[name]
+		if !ok {
+			t.Errorf("expected tag %q not found", name)
+			continue
+		}
+		if actual != kind {
+			t.Errorf("tag %q: expected kind %q, got %q", name, kind, actual)
+		}
+	}
+}
+
+func TestGetDefinitionsHandler_Rust(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.rs", `struct Point { x: i32, y: i32 }
+impl Point {
+    fn new(x: i32, y: i32) -> Self { Point { x, y } }
+}
+fn main() {}
+`, "rust")
+
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///test.rs"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	found := map[string]string{}
+	for _, tag := range tags {
+		found[tag.Name] = tag.Kind
+	}
+	expect := []string{"Point", "new", "main"}
+	for _, name := range expect {
+		if _, ok := found[name]; !ok {
+			t.Errorf("expected tag %q not found", name)
+		}
+	}
+}
+
+func TestGetDefinitionsHandler_EmptyFile(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///empty.go", "", "go")
+
+	res := es.getDefinitions(getDefsArgs{URI: "scratch:///empty.go"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) != 0 {
+		t.Errorf("expected 0 tags for empty file, got %d", len(tags))
+	}
+}
+
+func TestLocateDefinitionHandler_Found(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}
+func bar() int { return 42 }
+`, "go")
+
+	res := es.locateDefinition(locateDefArgs{URI: "scratch:///test.go", Selector: "function:bar"})
+	var tag editor.Tag
+	unmarshalJSONText(t, res, &tag)
+
+	if tag.Name != "bar" {
+		t.Errorf("expected name 'bar', got %q", tag.Name)
+	}
+	if tag.Kind != "definition.function" {
+		t.Errorf("expected kind 'definition.function', got %q", tag.Kind)
+	}
+}
+
+func TestLocateDefinitionHandler_NotFound(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}`, "go")
+
+	res := es.locateDefinition(locateDefArgs{URI: "scratch:///test.go", Selector: "function:nonexistent"})
+	if !res.IsError {
+		t.Fatal("expected error for non-existent definition")
+	}
+}
+
+func TestLocateDefinitionHandler_InvalidSelector(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}`, "go")
+
+	res := es.locateDefinition(locateDefArgs{URI: "scratch:///test.go", Selector: "invalid"})
+	if !res.IsError {
+		t.Fatal("expected error for invalid selector")
+	}
+}
+
+func TestReplaceDefinitionHandler_Body(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() int { return 0 }
+`, "go")
+
+	res := es.replaceDefinition(replaceDefArgs{
+		URI:      "scratch:///test.go",
+		Selector: "function:foo",
+		Text:     "func foo() int { return 42 }",
+	})
+	var resp map[string]any
+	unmarshalJSONText(t, res, &resp)
+
+	if succ, ok := resp["success"]; !ok || succ != true {
+		t.Fatalf("expected success=true, got %v", resp)
+	}
+	if diff, ok := resp["byteDiff"]; !ok {
+		t.Fatal("expected byteDiff in response")
+	} else {
+		t.Logf("byteDiff: %v", diff)
+	}
+}
+
+func TestReplaceDefinitionHandler_NotFound(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}`, "go")
+
+	res := es.replaceDefinition(replaceDefArgs{
+		URI:      "scratch:///test.go",
+		Selector: "function:nonexistent",
+		Text:     "func nonexistent() {}",
+	})
+	if !res.IsError {
+		t.Fatal("expected error for non-existent definition")
+	}
+}
+
+func TestSearchDefinitionsHandler_ByName(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func hello() {}
+func world() int { return 0 }
+func helper() {}
+`, "go")
+
+	res := es.searchDefinitions(searchDefsArgs{URI: "scratch:///test.go", Pattern: "help"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) != 1 {
+		t.Fatalf("expected 1 tag, got %d", len(tags))
+	}
+	if tags[0].Name != "helper" {
+		t.Errorf("expected name 'helper', got %q", tags[0].Name)
+	}
+}
+
+func TestSearchDefinitionsHandler_ByKind(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+type Point struct{ X, Y int }
+func hello() {}
+func world() int { return 0 }
+`, "go")
+
+	res := es.searchDefinitions(searchDefsArgs{URI: "scratch:///test.go", Pattern: "", Kind: "function"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) != 2 {
+		t.Fatalf("expected 2 functions, got %d", len(tags))
+	}
+}
+
+func TestSearchDefinitionsHandler_EmptyURI(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}`, "go")
+
+	// Empty URI should return empty (cross-doc search not yet implemented)
+	res := es.searchDefinitions(searchDefsArgs{URI: "", Pattern: "foo"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) != 0 {
+		t.Errorf("expected 0 tags for empty URI, got %d", len(tags))
+	}
+}
+
+func TestSearchDefinitionsHandler_NoMatch(t *testing.T) {
+	es := newTestServer(t)
+	mustOpen(t, es, "scratch:///test.go", `package main
+func foo() {}`, "go")
+
+	res := es.searchDefinitions(searchDefsArgs{URI: "scratch:///test.go", Pattern: "ZZZ_XYZ_NONEXISTENT"})
+	var tags []editor.Tag
+	unmarshalJSONText(t, res, &tags)
+
+	if len(tags) != 0 {
+		t.Errorf("expected 0 tags for non-matching pattern, got %d", len(tags))
+	}
+}
