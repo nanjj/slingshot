@@ -94,6 +94,10 @@ type editorValidateArgs struct {
 	IncludeDirty bool   `json:"includeDirty,omitempty"`
 }
 
+type openProjectArgs struct {
+	Path string `json:"path"`
+}
+
 // ─── Response types ─────────────────────────────────────────────────────────
 
 // editResultResponse is the MCP-friendly subset of editor.EditResult.
@@ -232,11 +236,19 @@ func (es *editorServer) getText(args editorGetTextArgs) *mcp.CallToolResult {
 		}
 		return jsonResult(map[string]string{"text": text})
 	default: // "range"
+		if args.StartByte == 0 && args.EndByte == 0 {
+			text, err := es.mgr.Current().GetSource(args.URI)
+			if err != nil {
+				return errorResult(fmt.Errorf("get source: %w", err))
+			}
+			return jsonResult(map[string]string{"text": text})
+		}
 		text, err := es.mgr.Current().GetText(args.URI, args.StartByte, args.EndByte)
 		if err != nil {
 			return errorResult(fmt.Errorf("get text: %w", err))
 		}
 		return jsonResult(map[string]string{"text": text})
+
 	}
 }
 
@@ -367,6 +379,15 @@ func (es *editorServer) getProjectRoot() *mcp.CallToolResult {
 		"projectRoot": es.mgr.Current().ProjectRoot(),
 	})
 }
+func (es *editorServer) openProject(args openProjectArgs) *mcp.CallToolResult {
+	ed, err := es.mgr.SwitchTo(args.Path)
+	if err != nil {
+		return errorResult(fmt.Errorf("open project: %w", err))
+	}
+	return jsonResult(map[string]string{
+		"projectRoot": ed.ProjectRoot(),
+	})
+}
 
 // --- Helper functions ---
 
@@ -415,14 +436,14 @@ func parseLogLevel(level string) slog.Level {
 func registerAllTools(srv *mcp.Server, es *editorServer) {
 	// --- Document lifecycle ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_open_document",
+		Name:        "open_document",
 		Description: "Open a document for editing. If a document with the same URI is already open, it is closed first. Supports file:// URIs and scratch:// URIs for ephemeral snippets.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args openDocumentArgs) (*mcp.CallToolResult, any, error) {
 		return es.openDocument(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_close_document",
+		Name:        "close_document",
 		Description: "Close a document and release its tree-sitter resources. Unsaved changes are discarded.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args closeDocumentArgs) (*mcp.CallToolResult, any, error) {
 		return es.closeDocument(args), nil, nil
@@ -430,14 +451,14 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 
 	// --- Read operations ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_get_structure",
+		Name:        "get_structure",
 		Description: "Get the hierarchical code structure (syntax tree) of an open document. Returns nested NodeInfo with type, byte range, and child nodes. Use maxDepth and maxChildren to limit output size. Default: recursive, unlimited children.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getStructureArgs) (*mcp.CallToolResult, any, error) {
 		return es.getStructure(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_get_node",
+		Name:        "get_node",
 		Description: "Get AST nodes from a document. The 'scope' parameter selects the mode:\n" +
 			"  - 'pos' (default): Get the smallest AST node at a byte offset.\n" +
 			"  - 'point': Get the smallest AST node at a row/col position.\n" +
@@ -449,7 +470,7 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_get_text",
+		Name:        "get_text",
 		Description: "Get source text from a document. Use 'by' to select mode:\n" +
 			"  - 'range' (default): Get text in byte range [startByte, endByte).\n" +
 			"  - 'line': Get the content of a specific line (0-indexed, trailing newline stripped).",
@@ -458,7 +479,7 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_query",
+		Name:        "query",
 		Description: "Execute a tree-sitter S-expression query (.scm pattern) against the document's syntax tree. Returns matching captures grouped by capture name.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args queryArgs) (*mcp.CallToolResult, any, error) {
 		return es.query(args), nil, nil
@@ -466,7 +487,7 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 
 	// --- Edit operations ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_insert",
+		Name:        "insert",
 		Description: "Insert text into a document. Use 'position' to select mode:\n" +
 			"  - 'pos' (default): Insert at a byte offset.\n" +
 			"  - 'point': Insert at a row/col position.\n" +
@@ -478,7 +499,7 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_replace",
+		Name:        "replace",
 		Description: "Replace text in a document. Use 'target' to select mode:\n" +
 			"  - 'range' (default): Replace text in byte range [startByte, endByte).\n" +
 			"  - 'node': Replace the content of an AST node (identified by NodeSelector).",
@@ -487,7 +508,7 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_delete",
+		Name:        "delete",
 		Description: "Delete text from a document. Use 'target' to select mode:\n" +
 			"  - 'range' (default): Delete text in byte range [startByte, endByte).\n" +
 			"  - 'node': Delete an AST node (identified by NodeSelector).",
@@ -497,14 +518,14 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 
 	// --- Save & Validate ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_save",
+		Name:        "save",
 		Description: "Save an open document to disk. By default detects external file modification conflicts. Set 'force' to true to skip conflict detection and overwrite.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorSaveArgs) (*mcp.CallToolResult, any, error) {
 		return es.save(args), nil, nil
 	})
 
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_validate",
+		Name:        "validate",
 		Description: "Validate an open document's syntax. Returns syntax errors, line ending style, and trailing newline status. Set 'includeDirty' to true to also return dirty status and list of all dirty document URIs.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorValidateArgs) (*mcp.CallToolResult, any, error) {
 		return es.validate(args), nil, nil
@@ -512,10 +533,17 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 
 	// --- Project root ---
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "editor_get_project_root",
+		Name:        "get_project_root",
 		Description: "Get the current project root directory. Returns the absolute path of the active editor's project root.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
 		return es.getProjectRoot(), nil, nil
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "open_project",
+		Description: "Switch to a different project root directory. Opens or creates an isolated editor for the given path. All subsequent tool calls operate on the new project. Returns the absolute path of the new project root.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args openProjectArgs) (*mcp.CallToolResult, any, error) {
+		return es.openProject(args), nil, nil
 	})
 }
 

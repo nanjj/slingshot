@@ -38,6 +38,7 @@ func (ed *Editor) Validate(uri string) (*ValidationResult, error) {
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 	return doc.validate(), nil
 }
 

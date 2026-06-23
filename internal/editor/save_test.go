@@ -286,3 +286,165 @@ func TestSaveDocumentNotFound(t *testing.T) {
 		t.Errorf("expected ErrDocumentNotFound, got %v", err)
 	}
 }
+
+// ─── AutoSave ───
+
+func TestAutoSaveAfterEdit(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	uri := "file://" + filePath
+
+	ed := NewEditor(dir)
+	openFileDoc(t, ed, uri, "package main\n", "go")
+
+	// Edit — after this, auto-save should have written to disk
+	_, err := ed.Insert(uri, 0, "// comment\n")
+	if err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	want := "// comment\npackage main\n"
+	if string(content) != want {
+		t.Errorf("after auto-save: got %q, want %q", string(content), want)
+	}
+
+	// Doc should not be dirty
+	dirty, _ := ed.IsDirty(uri)
+	if dirty {
+		t.Errorf("after auto-save, doc should not be dirty")
+	}
+}
+
+func TestAutoSaveScratchDoc(t *testing.T) {
+	ed := NewEditor("")
+	openFileDoc(t, ed, "scratch:///test.go", "package main\n", "go")
+
+	ed.Insert("scratch:///test.go", 0, "// comment\n")
+
+	// Should still be dirty (auto-save skips scratch docs)
+	dirty, _ := ed.IsDirty("scratch:///test.go")
+	if !dirty {
+		t.Errorf("scratch doc should be dirty after edit (auto-save skipped)")
+	}
+}
+
+func TestAutoSaveMultipleEdits(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	uri := "file://" + filePath
+
+	ed := NewEditor(dir)
+	openFileDoc(t, ed, uri, "package main\n", "go")
+
+	ed.Insert(uri, 0, "// first\n")
+	ed.Insert(uri, 0, "// second\n")
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	want := "// second\n// first\npackage main\n"
+	if string(content) != want {
+		t.Errorf("after multiple auto-saves: got %q, want %q", string(content), want)
+	}
+
+	dirty, _ := ed.IsDirty(uri)
+	if dirty {
+		t.Errorf("after auto-save, doc should not be dirty")
+	}
+}
+
+// ─── AutoReload ───
+
+func TestAutoReloadOnRead(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	uri := "file://" + filePath
+
+	ed := NewEditor(dir)
+	openFileDoc(t, ed, uri, "package main\n", "go")
+	ed.Save(uri)
+
+	// Externally modify the file
+	os.WriteFile(filePath, []byte("package main\n\nfunc external() {}\n"), 0644)
+
+	// Read should trigger auto-reload
+	text, err := ed.GetText(uri, 0, 33)
+	if err != nil {
+		t.Fatalf("GetText failed: %v", err)
+	}
+	want := "package main\n\nfunc external() {}\n"
+	if string(text) != want {
+		t.Errorf("after auto-reload: got %q, want %q", string(text), want)
+	}
+
+	// Doc should not be dirty after reload
+	dirty, _ := ed.IsDirty(uri)
+	if dirty {
+		t.Errorf("after auto-reload, doc should not be dirty")
+	}
+}
+
+func TestAutoReloadNoChangeIfSame(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	uri := "file://" + filePath
+
+	ed := NewEditor(dir)
+	openFileDoc(t, ed, uri, "package main\n", "go")
+	ed.Save(uri)
+
+	// Read with no external modification — should work fine
+	text, err := ed.GetText(uri, 0, 13)
+	if err != nil {
+		t.Fatalf("GetText failed: %v", err)
+	}
+	want := "package main\n"
+	if string(text) != want {
+		t.Errorf("expected %q, got %q", want, text)
+	}
+}
+
+func TestAutoReloadScratchDoc(t *testing.T) {
+	ed := NewEditor("")
+	openFileDoc(t, ed, "scratch:///test.go", "package main\n", "go")
+
+	// Read on scratch doc — should not panic or error
+	text, err := ed.GetText("scratch:///test.go", 0, 13)
+	if err != nil {
+		t.Fatalf("GetText failed: %v", err)
+	}
+	want := "package main\n"
+	if string(text) != want {
+		t.Errorf("expected %q, got %q", want, text)
+	}
+}
+
+func TestAutoReloadAfterInsert(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.go")
+	uri := "file://" + filePath
+
+	ed := NewEditor(dir)
+	openFileDoc(t, ed, uri, "package main\n", "go")
+
+	// Auto-save after insert writes to disk
+	ed.Insert(uri, 0, "// added\n")
+
+	// Externally modify
+	os.WriteFile(filePath, []byte("package main\n\nfunc external() {}\n"), 0644)
+
+	// Auto-reload on the next read
+	text, err := ed.GetText(uri, 0, 33)
+	if err != nil {
+		t.Fatalf("GetText failed: %v", err)
+	}
+	want := "package main\n\nfunc external() {}\n"
+	if string(text) != want {
+		t.Errorf("after auto-reload: got %q, want %q", string(text), want)
+	}
+}

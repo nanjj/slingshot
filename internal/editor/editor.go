@@ -237,6 +237,7 @@ func (ed *Editor) GetStructure(uri string, maxDepth, maxChildren int) (NodeInfo,
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if doc.tree == nil {
 		return NodeInfo{}, fmt.Errorf("document has no tree")
@@ -253,6 +254,7 @@ func (ed *Editor) GetNode(uri string, pos uint32) (NodeInfo, error) {
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if doc.tree == nil {
 		return NodeInfo{}, ErrDocumentNotReady
@@ -273,6 +275,7 @@ func (ed *Editor) GetNodeAtPoint(uri string, row, col uint32) (NodeInfo, error) 
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if doc.tree == nil {
 		return NodeInfo{}, ErrDocumentNotReady
@@ -294,6 +297,7 @@ func (ed *Editor) GetNodeAtRange(uri string, startByte, endByte uint32) (NodeInf
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if doc.tree == nil {
 		return NodeInfo{}, ErrDocumentNotReady
@@ -314,6 +318,7 @@ func (ed *Editor) GetDescendantsAt(uri string, pos uint32) ([]NodeInfo, error) {
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if doc.tree == nil {
 		return nil, ErrDocumentNotReady
@@ -339,6 +344,7 @@ func (ed *Editor) Query(uri string, pattern string) ([]QueryResult, error) {
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if doc.tree == nil {
 		return nil, ErrDocumentNotReady
@@ -372,12 +378,26 @@ func (ed *Editor) GetText(uri string, startByte, endByte uint32) (string, error)
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	if startByte > endByte || endByte > uint32(len(doc.source)) {
 		return "", ErrInvalidPosition
 	}
 	return string(doc.source[startByte:endByte]), nil
 }
+
+// GetSource 返回文档的全文。
+func (ed *Editor) GetSource(uri string) (string, error) {
+	doc, err := ed.getOrOpenDocument(uri)
+	if err != nil {
+		return "", err
+	}
+	doc.Lock()
+	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
+	return string(doc.source), nil
+}
+
 
 // GetLine 获取指定行。
 func (ed *Editor) GetLine(uri string, line uint32) (string, error) {
@@ -387,6 +407,7 @@ func (ed *Editor) GetLine(uri string, line uint32) (string, error) {
 	}
 	doc.Lock()
 	defer doc.Unlock()
+	ed.reloadIfExternalModified(doc)
 
 	source := doc.source
 	li := doc.lineIdx
@@ -454,6 +475,7 @@ func (ed *Editor) Insert(uri string, pos uint32, text string) (*EditResult, erro
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -495,6 +517,7 @@ func (ed *Editor) InsertAtPoint(uri string, row, col uint32, text string) (*Edit
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -527,6 +550,7 @@ func (ed *Editor) InsertBefore(uri string, sel NodeSelector, text string) (*Edit
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -559,6 +583,7 @@ func (ed *Editor) InsertAfter(uri string, sel NodeSelector, text string) (*EditR
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -590,6 +615,7 @@ func (ed *Editor) Replace(uri string, startByte, endByte uint32, text string) (*
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -622,6 +648,7 @@ func (ed *Editor) ReplaceNode(uri string, sel NodeSelector, text string) (*EditR
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -650,6 +677,7 @@ func (ed *Editor) Delete(uri string, startByte, endByte uint32) (*EditResult, er
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -679,6 +707,7 @@ func (ed *Editor) DeleteNode(uri string, sel NodeSelector) (*EditResult, error) 
 	if err != nil {
 		return nil, err
 	}
+	ed.saveAfterEdit(doc)
 	return doc.successResult(newSource, oldLen), nil
 }
 
@@ -772,6 +801,65 @@ func checkFileExists(path string) (os.FileInfo, bool) {
 		return nil, false
 	}
 	return info, true
+}
+// saveAfterEdit 在编辑操作后自动保存文件（假设文档已锁定）。
+// scratch 文档（无文件路径）静默跳过。
+// 如果保存失败，将 dirty 标记为 true 并记录警告。
+func (ed *Editor) saveAfterEdit(doc *Document) {
+	if doc.origFilePath == "" {
+		return // scratch 文档无文件可写
+	}
+	_, err := atomicWrite(doc.origFilePath, doc.source, doc.origFileMode)
+	if err != nil {
+		log.Printf("warning: auto-save failed for %s: %v", doc.uri, err)
+		doc.dirty = true
+		return
+	}
+	doc.dirty = false
+	doc.origFileSize = int64(len(doc.source))
+	if fi, err := os.Stat(doc.origFilePath); err == nil {
+		doc.lastSavedMTime = fi.ModTime()
+	}
+}
+
+// reloadIfExternalModified 检测外部修改并自动重载文档（假设文档已锁定）。
+// 读取操作前调用，确保读取的是最新内容。
+// 如果文件在外部被修改，重新从磁盘加载并全量解析。
+func (ed *Editor) reloadIfExternalModified(doc *Document) {
+	if doc.origFilePath == "" {
+		return // scratch 文档
+	}
+	fi, err := os.Stat(doc.origFilePath)
+	if err != nil {
+		return // 文件已删除或无法访问
+	}
+	if fi.ModTime().Equal(doc.lastSavedMTime) && fi.Size() == doc.origFileSize {
+		return // 无外部修改
+	}
+	// 外部有修改，重新加载
+	source, err := os.ReadFile(doc.origFilePath)
+	if err != nil {
+		log.Printf("warning: auto-reload read failed for %s: %v", doc.uri, err)
+		return
+	}
+	newTree, err := doc.parser.Parse(source)
+	if err != nil {
+		log.Printf("warning: auto-reload parse failed for %s: %v", doc.uri, err)
+		return
+	}
+	if doc.tree != nil {
+		doc.tree.Release()
+	}
+	doc.source = source
+	doc.tree = newTree
+	doc.bound = gotreesitter.Bind(newTree)
+	doc.lineIdx = NewLineIndex(source)
+	doc.dirty = false
+	doc.version = 0
+	doc.modifiedAt = time.Now()
+	doc.origFileSize = fi.Size()
+	doc.origModTime = fi.ModTime()
+	doc.lastSavedMTime = fi.ModTime()
 }
 
 // extractVirtualPath 从非文件 URI 中提取路径部分，用于语言检测。
