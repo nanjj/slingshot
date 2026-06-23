@@ -660,10 +660,9 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args replaceDefArgs) (*mcp.CallToolResult, any, error) {
 		return es.replaceDefinition(args), nil, nil
 	})
-
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "search_definitions",
-		Description: "Search definitions by name pattern and optional kind filter. Set uri to scope to a single document; omit to search all open documents.",
+		Description: "Search definitions by name pattern and optional kind filter in a specific document. URI is required.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchDefsArgs) (*mcp.CallToolResult, any, error) {
 		return es.searchDefinitions(args), nil, nil
 	})
