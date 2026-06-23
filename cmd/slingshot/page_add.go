@@ -20,6 +20,7 @@ import (
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/highlight"
 	"github.com/nanjj/slingshot/internal/mdtowx"
 	"github.com/nanjj/slingshot/internal/site"
 	u "github.com/nanjj/slingshot/internal/usage"
@@ -32,6 +33,7 @@ var imgSrcRe = regexp.MustCompile(`<img[^>]+src=["']([^"']+)["']`)
 var dateParagraphRe = regexp.MustCompile(`(?i)<p\s+class="date"[^>]*>.*?</p>\s*`)
 
 // slingshotDateRe matches the embedded date comment written by page add.
+
 // Format: <!-- slingshot-date: YYYY-MM-DD -->
 var slingshotDateRe = regexp.MustCompile(`(?i)<!--\s*slingshot-date:\s*(\d{4}-\d{2}-\d{2})\s*-->`)
 // --- cmdPageAdd ---
@@ -191,6 +193,13 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
 		// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
 		htmlContent = mdtowx.RemoveCJCSpace(htmlContent)
+
+		// Syntax-highlight code blocks in the HTML
+		if highlighted, count, hlErr := highlight.HighlightPage(htmlContent); hlErr == nil && count > 0 {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %d code block(s) highlighted\n",
+				color.CyanString("\xe2\x86\x92"), count)
+			htmlContent = highlighted
+		}
 
 		// Write index.html
 		indexPath := filepath.Join(pageDir, "index.html")

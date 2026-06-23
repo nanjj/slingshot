@@ -11,9 +11,9 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
+	"github.com/nanjj/slingshot/internal/highlight"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/site"
 	u "github.com/nanjj/slingshot/internal/usage"
@@ -478,6 +478,14 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 		if upgraded {
 			fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("CSS upgraded to responsive version."))
 		}
+	}
+
+	// Syntax-highlight code blocks in all HTML files before deploying
+	count, _, hlErr := highlight.HighlightDir(rsyncDir)
+	if hlErr == nil && count > 0 {
+		fmt.Fprintf(color.Output, "%s %d code block(s) highlighted\n", color.CyanString("\xe2\x86\x92"), count)
+	} else if hlErr != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s %v\n", color.YellowString(i18n.G("Warning:")), hlErr)
 	}
 
 	if err := doRsync(rsyncDir, siteConfig.Rsync); err != nil {
