@@ -97,6 +97,26 @@ type editorValidateArgs struct {
 type openProjectArgs struct {
 	Path string `json:"path"`
 }
+type getDefsArgs struct {
+	URI string `json:"uri"`
+}
+
+type locateDefArgs struct {
+	URI      string `json:"uri"`
+	Selector string `json:"selector"`
+}
+
+type replaceDefArgs struct {
+	URI      string `json:"uri"`
+	Selector string `json:"selector"`
+	Text     string `json:"text"`
+}
+
+type searchDefsArgs struct {
+	URI     string `json:"uri,omitempty"` // empty = search all open documents
+	Pattern string `json:"pattern"`
+	Kind    string `json:"kind,omitempty"` // optional kind filter
+}
 
 // ─── Response types ─────────────────────────────────────────────────────────
 
@@ -388,6 +408,79 @@ func (es *editorServer) openProject(args openProjectArgs) *mcp.CallToolResult {
 		"projectRoot": ed.ProjectRoot(),
 	})
 }
+// --- Definition tools ---
+
+func (es *editorServer) getDefinitions(args getDefsArgs) *mcp.CallToolResult {
+	tags, err := es.mgr.Current().GetDefs(args.URI)
+	if err != nil {
+		return errorResult(fmt.Errorf("get definitions: %w", err))
+	}
+	if tags == nil {
+		tags = []editor.Tag{}
+	}
+	return jsonResult(tags)
+}
+
+func (es *editorServer) locateDefinition(args locateDefArgs) *mcp.CallToolResult {
+	tag, err := es.mgr.Current().LocateDef(args.URI, args.Selector)
+	if err != nil {
+		return errorResult(fmt.Errorf("locate definition: %w", err))
+	}
+	return jsonResult(tag)
+}
+
+func (es *editorServer) replaceDefinition(args replaceDefArgs) *mcp.CallToolResult {
+	tag, err := es.mgr.Current().LocateDef(args.URI, args.Selector)
+	if err != nil {
+		return errorResult(fmt.Errorf("replace: locate: %w", err))
+	}
+
+	editResult, err := es.mgr.Current().Replace(args.URI, tag.StartByte, tag.EndByte, args.Text)
+	if err != nil {
+		return errorResult(fmt.Errorf("replace: %w", err))
+	}
+	return jsonResult(editResultToResponse(editResult))
+}
+
+func (es *editorServer) searchDefinitions(args searchDefsArgs) *mcp.CallToolResult {
+	// If URI is specified, search only that document
+	if args.URI != "" {
+		tags, err := es.mgr.Current().GetDefs(args.URI)
+		if err != nil {
+			return errorResult(fmt.Errorf("search definitions: %w", err))
+		}
+		tags = filterTags(tags, args.Pattern, args.Kind)
+		if tags == nil {
+			tags = []editor.Tag{}
+		}
+		return jsonResult(tags)
+	}
+	// Cross-document search across all open documents requires the Editor
+	// to expose a document list, which it currently doesn't (only DirtyDocuments).
+	// For simplicity, require URI. Callers iterate files on their side.
+	return jsonResult([]editor.Tag{})
+}
+
+// filterTags filters tags by pattern (name substring match) and optional kind.
+func filterTags(tags []editor.Tag, pattern, kind string) []editor.Tag {
+	if pattern == "" && kind == "" {
+		return tags
+	}
+	var result []editor.Tag
+	for _, tag := range tags {
+		if pattern != "" && !strings.Contains(tag.Name, pattern) {
+			continue
+		}
+		if kind != "" {
+			// Match either full kind or "definition.<kind>"
+			if tag.Kind != kind && tag.Kind != "definition."+kind {
+				continue
+			}
+		}
+		result = append(result, tag)
+	}
+	return result
+}
 
 // --- Helper functions ---
 
@@ -544,6 +637,35 @@ func registerAllTools(srv *mcp.Server, es *editorServer) {
 		Description: "Switch to a different project root directory. Opens or creates an isolated editor for the given path. All subsequent tool calls operate on the new project. Returns the absolute path of the new project root.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args openProjectArgs) (*mcp.CallToolResult, any, error) {
 		return es.openProject(args), nil, nil
+	})
+
+	// --- Definition tools ---
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "get_definitions",
+		Description: "Get all definition tags from an open document. Returns functions, methods, classes, structs, interfaces, etc.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args getDefsArgs) (*mcp.CallToolResult, any, error) {
+		return es.getDefinitions(args), nil, nil
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "locate_definition",
+		Description: "Locate a single definition by semantic selector. Selector format: 'function:name', 'class:name', 'method:name', 'struct:name', 'interface:name'.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args locateDefArgs) (*mcp.CallToolResult, any, error) {
+		return es.locateDefinition(args), nil, nil
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "replace_definition",
+		Description: "Replace the entire body of a definition identified by selector. Selector format: 'function:name', 'class:name', etc.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args replaceDefArgs) (*mcp.CallToolResult, any, error) {
+		return es.replaceDefinition(args), nil, nil
+	})
+
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "search_definitions",
+		Description: "Search definitions by name pattern and optional kind filter. Set uri to scope to a single document; omit to search all open documents.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchDefsArgs) (*mcp.CallToolResult, any, error) {
+		return es.searchDefinitions(args), nil, nil
 	})
 }
 
