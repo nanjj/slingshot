@@ -70,7 +70,7 @@ type detectChangesArgs struct {
 func registerSearchGraph(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "search_graph",
-		Description: "Search the code knowledge graph for functions, classes, routes, and variables. Three search modes: (1) query for BM25 ranked full-text search with camelCase splitting; (2) namePattern for exact pattern matching; (3) semanticQuery for vector cosine search.",
+		Description: "Search the code knowledge graph for functions, classes, routes, and variables. Three search modes: (1) query for BM25 ranked full-text search with camelCase splitting — Function/Method/Route nodes are boosted; (2) namePattern for exact pattern matching; (3) semanticQuery for vector cosine search. Supports pagination: use limit/offset, response includes total (full count) and has_more flag.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchGraphArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleSearchGraph(args), nil, nil
 	})
@@ -89,38 +89,46 @@ func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
 
 	// Primary mode: BM25 full-text search via SearchNodes
 	if args.Query != "" {
-		nodes, err := s.store.SearchNodes(args.Query, project, args.PathFilter, limit, args.Offset)
+		nodes, total, err := s.store.SearchNodes(args.Query, project, args.PathFilter, limit, args.Offset)
 		if err != nil {
 			return errorResult(fmt.Errorf("search nodes: %w", err))
 		}
+		hasMore := args.Offset+len(nodes) < total
 		return jsonResult(map[string]any{
-			"results": nodes,
-			"total":   len(nodes),
+			"results":  nodes,
+			"total":    total,
+			"has_more": hasMore,
+			"mode":     "bm25",
 		})
 	}
 
 	// Name pattern mode via FindSymbols
 	if args.NamePattern != "" {
-		nodes, err := s.store.FindSymbols(args.NamePattern, project, args.Kind, limit, args.Offset)
+		nodes, total, err := s.store.FindSymbols(args.NamePattern, project, args.Kind, limit, args.Offset)
 		if err != nil {
 			return errorResult(fmt.Errorf("find symbols: %w", err))
 		}
+		hasMore := args.Offset+len(nodes) < total
 		return jsonResult(map[string]any{
-			"results": nodes,
-			"total":   len(nodes),
+			"results":  nodes,
+			"total":    total,
+			"has_more": hasMore,
+			"mode":     "namePattern",
 		})
 	}
 
 	// Semantic query mode: BM25 fallback (true vector search requires embeddings)
 	if len(args.Semantic) > 0 {
 		query := strings.Join(args.Semantic, " ")
-		nodes, err := s.store.SearchNodes(query, project, args.PathFilter, limit, args.Offset)
+		nodes, total, err := s.store.SearchNodes(query, project, args.PathFilter, limit, args.Offset)
 		if err != nil {
 			return errorResult(fmt.Errorf("semantic search: %w", err))
 		}
+		hasMore := args.Offset+len(nodes) < total
 		return jsonResult(map[string]any{
 			"results":     nodes,
-			"total":       len(nodes),
+			"total":       total,
+			"has_more":    hasMore,
 			"mode":        "semantic",
 			"note":        "BM25 fallback — true vector semantic search requires embedding infrastructure",
 		})

@@ -166,27 +166,30 @@ func (s *Store) GetNodeByQN(qn, project string) (*Node, error) {
 }
 
 // FindSymbols finds nodes by pattern (qualified name or name substring) and optional kind filter.
-func (s *Store) FindSymbols(pattern, project, kind string, limit, offset int) ([]Node, error) {
+func (s *Store) FindSymbols(pattern, project, kind string, limit, offset int) ([]Node, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var args []any
 	var conditions []string
+	var countArgs, selectArgs []any
 
 	conditions = append(conditions, "p.name = ?")
-	args = append(args, project)
+	countArgs = append(countArgs, project)
+	selectArgs = append(selectArgs, project)
 
 	if pattern != "" {
 		conditions = append(conditions, "(n.qualified_name LIKE ? OR n.name LIKE ?)")
 		like := "%" + pattern + "%"
-		args = append(args, like, like)
+		countArgs = append(countArgs, like, like)
+		selectArgs = append(selectArgs, like, like)
 	}
 	if kind != "" {
 		kinds := strings.Split(kind, ",")
 		placeholders := make([]string, len(kinds))
 		for i, k := range kinds {
 			placeholders[i] = "?"
-			args = append(args, strings.TrimSpace(k))
+			countArgs = append(countArgs, strings.TrimSpace(k))
+			selectArgs = append(selectArgs, strings.TrimSpace(k))
 		}
 		conditions = append(conditions, "n.kind IN ("+strings.Join(placeholders, ",")+")")
 	}
@@ -194,8 +197,17 @@ func (s *Store) FindSymbols(pattern, project, kind string, limit, offset int) ([
 	if limit <= 0 {
 		limit = 50
 	}
-	args = append(args, limit, offset)
 
+	whereSQL := strings.Join(conditions, " AND ")
+
+	// Total count (before limit)
+	var total int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM nodes n JOIN projects p ON p.id = n.project_id WHERE %s", whereSQL)
+	if err := s.db.QueryRow(countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count symbols: %w", err)
+	}
+
+	selectArgs = append(selectArgs, limit, offset)
 	query := fmt.Sprintf(`
 		SELECT n.id, n.project_id, n.qualified_name, n.kind, n.name,
 		       n.file_path, n.line, n.col, n.end_line, n.end_col,
@@ -208,20 +220,28 @@ func (s *Store) FindSymbols(pattern, project, kind string, limit, offset int) ([
 		WHERE %s
 		ORDER BY n.qualified_name
 		LIMIT ? OFFSET ?
-	`, strings.Join(conditions, " AND "))
+	`, whereSQL)
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.Query(query, selectArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("find symbols: %w", err)
+		return nil, 0, fmt.Errorf("find symbols: %w", err)
 	}
 	defer rows.Close()
 
-	return scanNodes(rows)
+	nodes, err := scanNodes(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return nodes, total, nil
 }
 
 // SearchNodes performs full-text search across nodes using FTS5.
-// The query string supports FTS5 syntax (e.g., "function" OR "method").
-func (s *Store) SearchNodes(query, project, pathFilter string, limit, offset int) ([]Node, error) {
+// The query string supports FTS5 syntax.
+// Returns the matching nodes, total count (before limit), and any error.
+// BM25 ranking is boosted for Function/Method (2x), Route (1.5x),
+// and Class/Struct/Interface (1.3x) nodes.
+func (s *Store) SearchNodes(query, project, pathFilter string, limit, offset int) ([]Node, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -229,47 +249,69 @@ func (s *Store) SearchNodes(query, project, pathFilter string, limit, offset int
 		limit = 20
 	}
 
-	var args []any
-	args = append(args, query)
-
+	fromClause := "FROM node_fts f JOIN nodes n ON n.id = f.rowid"
 	var extraJoins string
-	var whereExtra string
+	var whereClauses []string
+	var countArgs, selectArgs []any
+
+	whereClauses = append(whereClauses, "node_fts MATCH ?")
+	countArgs = append(countArgs, query)
+	selectArgs = append(selectArgs, query)
 
 	if project != "" {
 		extraJoins = "JOIN projects p ON p.id = n.project_id"
-		whereExtra = "AND p.name = ?"
-		args = append(args, project)
+		whereClauses = append(whereClauses, "p.name = ?")
+		countArgs = append(countArgs, project)
+		selectArgs = append(selectArgs, project)
 	}
 	if pathFilter != "" {
-		whereExtra += " AND n.file_path LIKE ?"
-		args = append(args, "%"+pathFilter+"%")
+		whereClauses = append(whereClauses, "n.file_path LIKE ?")
+		countArgs = append(countArgs, "%"+pathFilter+"%")
+		selectArgs = append(selectArgs, "%"+pathFilter+"%")
 	}
 
-	args = append(args, limit, offset)
+	whereSQL := strings.Join(whereClauses, " AND ")
 
-	sqlQuery := fmt.Sprintf(`
+	// Total count (before limit)
+	var total int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) %s %s WHERE %s",
+		fromClause, extraJoins, whereSQL)
+	if err := s.db.QueryRow(countQuery, countArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count nodes: %w", err)
+	}
+
+	// Results with BM25 structural boosting
+	selectArgs = append(selectArgs, limit, offset)
+	selectQuery := fmt.Sprintf(`
 		SELECT n.id, n.project_id, n.qualified_name, n.kind, n.name,
 		       n.file_path, n.line, n.col, n.end_line, n.end_col,
 		       n.signature, n.doc_comment,
 		       n.complexity, n.cognitive, n.loop_depth, n.transitive_loop_depth,
 		       n.loop_count, n.recursive, n.param_count, n.linear_scan_in_loop,
 		       n.alloc_in_loop, n.recursion_in_loop, n.unguarded_recursion, n.max_access_depth
-		FROM node_fts f
-		JOIN nodes n ON n.id = f.rowid
-		%s
-		WHERE node_fts MATCH ?
-		%s
-		ORDER BY rank
+		%s %s
+		WHERE %s
+		ORDER BY rank / CASE
+			WHEN n.kind IN ('Function', 'Method') THEN 2.0
+			WHEN n.kind = 'Route' THEN 1.5
+			WHEN n.kind IN ('Class', 'Struct', 'Interface') THEN 1.3
+			ELSE 1.0
+		END
 		LIMIT ? OFFSET ?
-	`, extraJoins, whereExtra)
+	`, fromClause, extraJoins, whereSQL)
 
-	rows, err := s.db.Query(sqlQuery, args...)
+	rows, err := s.db.Query(selectQuery, selectArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("search nodes: %w", err)
+		return nil, 0, fmt.Errorf("search nodes: %w", err)
 	}
 	defer rows.Close()
 
-	return scanNodes(rows)
+	nodes, err := scanNodes(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return nodes, total, nil
 }
 
 // ─── Edge CRUD ────────────────────────────────────────────────────────────────
