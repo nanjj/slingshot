@@ -390,7 +390,7 @@ func (s *Server) handleTracePath(args tracePathArgs) *mcp.CallToolResult {
 func registerDetectChanges(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "detect_changes",
-		Description: "Detect code changes and their impact. Supports git diff-based change detection with configurable scope and depth.",
+		Description: "Detect code changes and their impact. Supports git diff-based change detection with configurable scope and depth. Scope 'impact' also returns impacted symbols via graph propagation.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args detectChangesArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleDetectChanges(args), nil, nil
 	})
@@ -437,7 +437,7 @@ func (s *Server) handleDetectChanges(args detectChangesArgs) *mcp.CallToolResult
 	// Run git diff --stat for summary
 	statOutput, _ := gitDiffStat(rootDir, baseBranch)
 
-	return jsonResult(map[string]any{
+	result := map[string]any{
 		"project":      args.Project,
 		"baseBranch":   baseBranch,
 		"root":         rootDir,
@@ -446,7 +446,28 @@ func (s *Server) handleDetectChanges(args detectChangesArgs) *mcp.CallToolResult
 		"total":        len(changedFiles),
 		"scope":        scope,
 		"depth":        depth,
-	})
+	}
+
+	// Impact analysis mode: propagate changes through the call graph
+	if scope == "impact" && len(changedFiles) > 0 {
+		// Extract just the file paths from changed files
+		var filePaths []string
+		for _, f := range changedFiles {
+			if path, ok := f["file"]; ok {
+				filePaths = append(filePaths, path)
+			}
+		}
+
+		impacted, err := s.store.ImpactAnalysis(args.Project, filePaths, depth)
+		if err != nil {
+			result["impactError"] = fmt.Sprintf("impact analysis: %v", err)
+		} else {
+			result["impactedSymbols"] = impacted
+			result["impactedCount"] = len(impacted)
+		}
+	}
+
+	return jsonResult(result)
 }
 
 // gitDiffNameStatus returns a list of changed files with their status.
