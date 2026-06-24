@@ -674,6 +674,108 @@ func nodeText(node *gotreesitter.Node, lang *gotreesitter.Language, source []byt
 	return ""
 }
 
+// ─── Signature & DocComment Extraction ────────────────────────────────────
+
+// ExtractSignature returns the full function/method signature text (up to but
+// not including the body).  For "func (g *Greeter) Hello() string {", returns
+// "func (g *Greeter) Hello() string".  For "func main() {" returns "func main()".
+// lang and source are obtained from the caller's parse result.
+func ExtractSignature(fnNode *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	if fnNode == nil || source == nil {
+		return ""
+	}
+	bodyNode := findBodyChild(fnNode, lang)
+	if bodyNode == nil {
+		// No body found — use entire node text
+		return string(fnNode.Text(source))
+	}
+	// Signature is text from function node start to body start.
+	sig := string(source[fnNode.StartByte():bodyNode.StartByte()])
+	// Trim trailing whitespace/braces
+	sig = strings.TrimRight(sig, " \t\n\r{")
+	return sig
+}
+
+// ExtractDocComment returns the doc comment text preceding a definition node.
+// It looks at previous siblings for a "comment" node.
+func ExtractDocComment(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	if node == nil || source == nil {
+		return ""
+	}
+	// Walk previous siblings looking for comment nodes.
+	// A doc comment is typically the last comment before the definition.
+	var comments []string
+	for prev := node.PrevSibling(); prev != nil; prev = prev.PrevSibling() {
+		if prev.Type(lang) != "comment" {
+			break
+		}
+		text := strings.TrimSpace(prev.Text(source))
+		// Strip comment markers
+		text = stripCommentMarkers(text)
+		if text != "" {
+			comments = append([]string{text}, comments...)
+		}
+	}
+	return strings.Join(comments, "\n")
+}
+
+// findBodyChild returns the first body-like child of a function/method node.
+func findBodyChild(node *gotreesitter.Node, lang *gotreesitter.Language) *gotreesitter.Node {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		typ := child.Type(lang)
+		if isBodyBlock(typ) {
+			return child
+		}
+	}
+	return nil
+}
+
+// stripCommentMarkers removes //, /*, */, and leading whitespace from a comment string.
+func stripCommentMarkers(text string) string {
+	text = strings.TrimLeft(text, " \t")
+	if strings.HasPrefix(text, "///") {
+		text = strings.TrimPrefix(text, "///")
+	} else if strings.HasPrefix(text, "//") {
+		text = strings.TrimPrefix(text, "//")
+	} else if strings.HasPrefix(text, "/*") {
+		text = strings.TrimPrefix(text, "/*")
+		text = strings.TrimSuffix(text, "*/")
+	} else if strings.HasPrefix(text, "#") {
+		text = strings.TrimPrefix(text, "#")
+	} else if strings.HasPrefix(text, "--") {
+		text = strings.TrimPrefix(text, "--")
+	}
+	return strings.TrimSpace(text)
+}
+
+// ExtractDeclName returns the simple name from a function/method declaration node.
+// For "func Hello()" returns "Hello", for "func (g *Greeter) Hello()" returns "Hello".
+func ExtractDeclName(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	if node == nil || source == nil {
+		return ""
+	}
+	// Try field "name" first (Go/Python/Rust grammar convention)
+	if nameChild := node.ChildByFieldName("name", lang); nameChild != nil {
+		return string(nameChild.Text(source))
+	}
+	// Fallback: look for identifier children
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		typ := child.Type(lang)
+		if typ == "identifier" || typ == "field_identifier" {
+			return string(child.Text(source))
+		}
+	}
+	return ""
+}
+
 
 // buildStructure recursively builds a NodeInfo tree.
 func buildStructure(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, depth, maxDepth, maxWidth int) NodeInfo {

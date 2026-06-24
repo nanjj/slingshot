@@ -9,6 +9,7 @@ import (
 
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
+	"github.com/nanjj/slingshot/internal/code/lsp"
 )
 
 // SupportedExts lists file extensions the indexer recognizes.
@@ -181,10 +182,17 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 	var defQNs []string
 	for _, tag := range tags {
 		qn := tag.Name
-		defQNs = append(defQNs, qn)
+
+		// Build package-qualified name when available
+		pkgQualified := qn
+		if meta.packageName != "" && !strings.Contains(qn, ".") {
+			pkgQualified = meta.packageName + "." + qn
+		}
+
+		defQNs = append(defQNs, pkgQualified)
 		n := Node{
 			ProjectID:     projectID,
-			QualifiedName: qn,
+			QualifiedName: pkgQualified,
 			Kind:          kindFromTag(tag.Kind),
 			Name:          tag.Name,
 			FilePath:      relPath,
@@ -194,7 +202,7 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 			EndCol:        tag.Range.EndPoint.Column,
 		}
 
-		// Compute complexity for functions/methods
+		// Compute complexity and extract signature/doc for functions/methods
 		if n.Kind == "function" || n.Kind == "method" {
 			bodyNode := findFunctionBody(root, tag.Range, lang)
 			if bodyNode != nil {
@@ -205,6 +213,21 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 				n.Recursive = isRecursive(bodyNode, tag.Name, lang, source)
 				n.ParamCount = countParams(bodyNode, tag.Kind, lang)
 				n.LinearScanInLoop = linearScanInLoop(bodyNode, lang, source, false)
+
+				// Extract signature and doc comment from the declaration node
+				declNode := findDeclNode(root, tag, lang)
+				if declNode != nil {
+					n.Signature = lsp.ExtractSignature(declNode, lang, source)
+					n.DocComment = lsp.ExtractDocComment(declNode, lang, source)
+				}
+			}
+		}
+
+		// Extract signature and doc comment for class/struct/interface definitions
+		if n.Kind == "class" || n.Kind == "struct" || n.Kind == "interface" {
+			declNode := findDeclNode(root, tag, lang)
+			if declNode != nil {
+				n.DocComment = lsp.ExtractDocComment(declNode, lang, source)
 			}
 		}
 
@@ -212,8 +235,6 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 	}
 
 	// 4. Extract variable/constant definitions via manual AST walk
-	//    The Tagger API (go-specific override) doesn't emit definition.variable
-	//    or definition.constant tags, so we handle them here.
 	varConstNodes := extractVarConstDefs(root, lang, source, projectID, relPath)
 	for _, vc := range varConstNodes {
 		defQNs = append(defQNs, vc.QualifiedName)
@@ -269,10 +290,20 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 
 	// 5. CONTAINS edges from struct/class → method
 	for methodName, parentStruct := range meta.methodParents {
+		// Build the package-qualified QN for the parent
+		parentQN := parentStruct
+		if meta.packageName != "" && !strings.Contains(parentStruct, ".") {
+			parentQN = meta.packageName + "." + parentStruct
+		}
+		// The method QN is already package-qualified
+		methodQN := methodName
+		if meta.packageName != "" && !strings.Contains(methodName, ".") {
+			methodQN = meta.packageName + "." + methodName
+		}
 		edges = append(edges, Edge{
 			ProjectID: projectID,
-			SourceQN:  parentStruct,
-			TargetQN:  methodName,
+			SourceQN:  parentQN,
+			TargetQN:  methodQN,
 			EdgeType:  "CONTAINS",
 		})
 	}
@@ -284,10 +315,12 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 			if bodyNode != nil {
 				calls := extractCalls(bodyNode, lang, source)
 				for _, callee := range calls {
+					// Resolve call target: try package-qualified first, then raw
+					resolvedCallee := resolveCallTarget(callee, meta.importPaths, meta.packageName)
 					edges = append(edges, Edge{
 						ProjectID: projectID,
 						SourceQN:  tag.Name,
-						TargetQN:  callee,
+						TargetQN:  resolvedCallee,
 						EdgeType:  "CALLS",
 					})
 				}
@@ -1271,4 +1304,51 @@ func isTestFile(path string) bool {
 	default:
 		return false
 	}
+}
+
+// ─── Declaration Node Resolution ──────────────────────────────────────────
+
+// findDeclNode locates the declaration AST node (function_declaration,
+// method_declaration, class_declaration, etc.) from a tag's range.
+func findDeclNode(root *gotreesitter.Node, tag gotreesitter.Tag, lang *gotreesitter.Language) *gotreesitter.Node {
+	// Start from the name position
+	n := root.DescendantForByteRange(tag.NameRange.StartByte, tag.NameRange.StartByte)
+	if n == nil {
+		return nil
+	}
+	// Walk up to find a declaration node
+	for n != nil {
+		typ := n.Type(lang)
+		switch typ {
+		case "function_declaration", "method_declaration",
+			"class_declaration", "class_definition",
+			"struct_declaration", "type_declaration",
+			"interface_declaration", "interface_type",
+			"module_declaration":
+			return n
+		}
+		n = n.Parent()
+	}
+	return nil
+}
+
+// ─── Call Target Resolution ────────────────────────────────────────────────
+
+// resolveCallTarget attempts to resolve a raw call expression (e.g., "fmt.Println")
+// to a qualified name that can be matched against definition nodes.
+func resolveCallTarget(callee string, imports []string, currentPackage string) string {
+	if callee == "" {
+		return callee
+	}
+	// Already qualified (has a dot) — keep as-is
+	if strings.Contains(callee, ".") {
+		return callee
+	}
+
+	// Unqualified call — add current package prefix if available
+	if currentPackage != "" {
+		return currentPackage + "." + callee
+	}
+
+	return callee
 }

@@ -803,16 +803,16 @@ func main() {
 	assert.NilError(t, err)
 	assert.Equal(t, info.Status, "ready")
 
-	// Verify specific nodes were indexed
-	hello, err := store.GetNodeByQN("Hello", "test-project")
+	// Verify specific nodes were indexed — now package-qualified
+	hello, err := store.GetNodeByQN("main.Hello", "test-project")
 	assert.NilError(t, err)
 	assert.Equal(t, hello.Kind, "method")
 	assert.Equal(t, hello.Name, "Hello")
 
-	main, err := store.GetNodeByQN("main", "test-project")
+	mainfn, err := store.GetNodeByQN("main.main", "test-project")
 	assert.NilError(t, err)
-	assert.Equal(t, main.Kind, "function")
-	assert.Assert(t, main.Complexity >= 1, "main should have complexity ≥1")
+	assert.Equal(t, mainfn.Kind, "function")
+	assert.Assert(t, mainfn.Complexity >= 1, "main should have complexity ≥1")
 
 	// Verify edges (calls) were extracted
 	refs, err := store.GetReferences("fmt.Println", "test-project", "inbound", 1)
@@ -859,7 +859,7 @@ func add(a, b int) int {
 	assert.Equal(t, result.Errors, 0)
 
 	// Verify cross-file call: helper called from main
-	refs, err := store.GetReferences("helper", "multi-project", "inbound", 1)
+	refs, err := store.GetReferences("main.helper", "multi-project", "inbound", 1)
 	assert.NilError(t, err)
 	assert.Assert(t, len(refs) > 0, "helper should have inbound calls from main")
 }

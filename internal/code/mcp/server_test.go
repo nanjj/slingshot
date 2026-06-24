@@ -260,7 +260,7 @@ func TestIndexAndSearch(t *testing.T) {
 	var snippetRes snippetResult
 	callToolUnmarshal(t, cs, "get_code_snippet", map[string]any{
 		"project":       projName,
-		"qualifiedName": "Hello",
+		"qualifiedName": "main.Hello",
 	}, &snippetRes)
 	assert.Assert(t, snippetRes.Node != nil)
 	assert.Assert(t, strings.Contains(snippetRes.Source, "Hello"), "source should contain Hello")
@@ -641,7 +641,7 @@ func TestCodeLocate_Found(t *testing.T) {
 	var locRes locateResult
 	callToolUnmarshal(t, cs, "code_locate", map[string]any{
 		"project":       idxRes.ProjectName,
-		"qualifiedName": "Hello",
+		"qualifiedName": "main.Hello",
 	}, &locRes)
 	assert.Assert(t, locRes.Found, "Hello should be found")
 	assert.Equal(t, locRes.Source, "sqlite")

@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/odvcencio/gotreesitter/grammars"
+	"github.com/odvcencio/gotreesitter"
+	"github.com/odvcencio/gotreesitter/grammars"
 	"gotest.tools/v3/assert"
 
 	"github.com/nanjj/slingshot/internal/code/lsp"
@@ -874,4 +875,137 @@ func TestParseResult_Release(t *testing.T) {
 
 	// Second release should not panic
 	result.Tree.Release()
+}
+
+// ─── Tests: Signature & DocComment Extraction ─────────────────────────────
+
+// TestExtractSignature verifies ExtractSignature extracts the correct signature.
+func TestExtractSignature(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTestFile(t, dir, "sig.go", `package main
+
+// Greeter greets people.
+type Greeter struct {
+	Name string
+}
+
+// Hello returns a greeting.
+func (g *Greeter) Hello() string {
+	return "Hello, " + g.Name + "!"
+}
+
+// main is the entry point.
+func main() {
+	g := &Greeter{Name: "World"}
+	println(g.Hello())
+}
+`)
+	a := lsp.NewAnalyzer()
+	result, err := a.ParseFile(path)
+	assert.NilError(t, err)
+	defer result.Tree.Release()
+
+	root := result.Tree.RootNode()
+	entry := grammars.DetectLanguage(path)
+	lang := entry.Language()
+
+	// Find function declarations and test signatures
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil { return }
+		typ := n.Type(lang)
+		if typ == "method_declaration" || typ == "function_declaration" {
+			sig := lsp.ExtractSignature(n, lang, result.Source)
+			t.Logf("Signature for %s: %q", typ, sig)
+			assert.Assert(t, sig != "", "signature should not be empty")
+			assert.Assert(t, strings.Contains(sig, "func"), "signature should contain 'func'")
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(root)
+}
+
+// TestExtractDocComment verifies ExtractDocComment finds the preceding doc comment.
+func TestExtractDocComment(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTestFile(t, dir, "doc.go", `package main
+
+// Hello returns a greeting.
+func Hello() string {
+	return "hello"
+}
+
+// MultiLineDoc explains something
+// over multiple lines.
+func MultiLine() int {
+	return 42
+}
+`)
+	a := lsp.NewAnalyzer()
+	result, err := a.ParseFile(path)
+	assert.NilError(t, err)
+	defer result.Tree.Release()
+
+	root := result.Tree.RootNode()
+	entry := grammars.DetectLanguage(path)
+	lang := entry.Language()
+
+	// Collect doc comments
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil { return }
+		typ := n.Type(lang)
+		if typ == "function_declaration" {
+			doc := lsp.ExtractDocComment(n, lang, result.Source)
+			t.Logf("DocComment for node at %d: %q", n.StartByte(), doc)
+			// Hello() has doc, MultiLine() has doc
+			assert.Assert(t, doc != "", "function should have doc comment")
+		}
+		if typ == "method_declaration" {
+			// Methods might not have doc comments in our simple fixture
+			_ = lsp.ExtractDocComment(n, lang, result.Source)
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(root)
+}
+
+// TestExtractDeclName verifies ExtractDeclName returns the correct name.
+func TestExtractDeclName(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTestFile(t, dir, "name.go", `package main
+
+func Foo() {}
+func (r *Receiver) Bar() {}
+`)
+	a := lsp.NewAnalyzer()
+	result, err := a.ParseFile(path)
+	assert.NilError(t, err)
+	defer result.Tree.Release()
+
+	root := result.Tree.RootNode()
+	entry := grammars.DetectLanguage(path)
+	lang := entry.Language()
+
+	found := make(map[string]bool)
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil { return }
+		typ := n.Type(lang)
+		if typ == "function_declaration" || typ == "method_declaration" {
+			name := lsp.ExtractDeclName(n, lang, result.Source)
+			assert.Assert(t, name != "", "name should not be empty")
+			found[name] = true
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(root)
+	assert.Assert(t, found["Foo"], "Foo should be found")
+	assert.Assert(t, found["Bar"], "Bar should be found")
 }
