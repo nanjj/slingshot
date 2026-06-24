@@ -1,46 +1,43 @@
-# Slingshot Code Intelligence — Phase 4 进度
+# Slingshot Code Intelligence — Phase 4 ✅ 完成
 
-## ✅ 已完成
+## 全部完成
 
-### P4B (张衡) — search_code 新工具 ✅
-- 新建 `internal/code/mcp/handler_search_code.go`
-- 注册在 `server.go` (Search & Navigation 组)
-- 功能: `rg` JSON 模式搜索 + 图节点去重 + 函数级富化 + 排序
-- 三种模式: compact (默认), full (源码), files (仅路径)
+| 任务 | 负责人 | 提交 | 状态 |
+|------|-------|:----:|:----:|
+| P4A: search_graph BM25 结构提升 + 分页 | 张衡 | `0263dcd` | ✅ |
+| P4B: search_code (rg+图富化) | 张衡 | `29559fb` | ✅ |
+| P4C: get_architecture 升级 (hotspots/fileTree/packageDeps) | 居里 | `7b6840c` | ✅ |
+| P4D: detect_changes 影响分析 | 居里 | `29ad34f` | ✅ |
+| P4E: trace_path 升级 (data_flow/cross_service/risk_labels) | 居里 | `496dadb` | ✅ |
 
-### P4C (居里) — get_architecture 升级 ✅
-- 新建 `internal/code/base/architecture.go` + `architecture_test.go`
-- Hotspots: 按 fan-in 排序取 Top N
-- FileTree: 目录分组统计
-- PackageDeps: 跨包 CALLS 聚合
-- handler_search.go: aspects 参数支持
+## P4A 细节
 
-### P4D (居里) — detect_changes 影响分析 ✅
-- 新建 `internal/code/base/impact.go` + `impact_test.go`
-- ImpactAnalysis: 沿 CALLS 双向传播变更影响
-- handler_search.go: scope="impact" 返回 impactedSymbols
-- 深度控制: 默认 2，最大 10
-
-### P4E (居里) — trace_path 升级 ✅
-- TracePath 替代 TraceCallChain (旧函数委托调用)
-- 支持 mode: calls / data_flow (传递参数) / cross_service (HTTP_CALLS 边)
-- RiskLabels: depth≤2→HIGH, 3-4→MEDIUM, >4→LOW
-- IncludeTests: 默认过滤测试文件
-- 新建 `tracepath_test.go`: 5 个测试
-
-### P4A (张衡) — 附加改动
-- `internal/code/base/crud.go`: 新增 `GetNodesByFile()` 方法
-- `internal/code/mcp/server.go`: 注册 search_code
-
-## 📋 待完成
-
-### P4A (张衡) — search_graph BM25 结构提升 + 分页
+- **BM25 结构提升**: Function/Method 2x, Route 1.5x, Class/Struct/Interface 1.3x
+- **分页**: `limit`/`offset` 参数 + `has_more` 标记 + `total` 改为实际总数
+- **mode**: 响应中标注 `bm25` / `namePattern` / `semantic` 模式
 
 ## 测试状态
 
 ```
-internal/code/base/  55 tests ✅  (34 原 + 9 P4C + 7 P4D + 5 P4E)
+internal/code/base/  55 tests ✅
 internal/code/lsp/   36 tests ✅
 internal/code/mcp/   39 tests ✅
 总计: 130 ✅
+```
+
+## 架构说明
+
+```
+internal/code/
+├── base/          ── 数据层 Store (crud, graph, architecture, impact, trace)
+│   ├── crud.go          ── CRUD + SearchNodes/FindSymbols (BM25 结构提升)
+│   ├── graph.go         ── 图查询 + TracePath
+│   ├── architecture.go  ── Hotspots/FileTree/PackageDeps (居里)
+│   ├── impact.go        ── ImpactAnalysis 变更影响 (居里)
+│   └── indexer.go       ── 索引器
+├── lsp/           ── LSP 分析层
+└── mcp/           ── MCP 服务层 + 所有 handler
+    ├── handler_search.go      ── search_graph / get_architecture
+    ├── handler_search_code.go ── search_code (张衡)
+    └── server.go              ── 注册入口
 ```
