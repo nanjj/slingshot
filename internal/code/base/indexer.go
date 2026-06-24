@@ -177,9 +177,10 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		})
 	}
 
-	// 3. Extract definitions via Tagger API
+	// 3. Extract definitions via Tagger API, building a tag→QN map for CALLS linking
 	tags := extractTags(tree, entry, lang)
 	var defQNs []string
+	tagQNMap := make(map[string]string) // tag.Name → package-qualified QN
 	for _, tag := range tags {
 		qn := tag.Name
 
@@ -188,6 +189,7 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		if meta.packageName != "" && !strings.Contains(qn, ".") {
 			pkgQualified = meta.packageName + "." + qn
 		}
+		tagQNMap[tag.Name] = pkgQualified
 
 		defQNs = append(defQNs, pkgQualified)
 		n := Node{
@@ -319,14 +321,15 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 					resolvedCallee := resolveCallTarget(callee, meta.importPaths, meta.packageName)
 					edges = append(edges, Edge{
 						ProjectID: projectID,
-						SourceQN:  tag.Name,
+						SourceQN:  tagQNMap[tag.Name],
 						TargetQN:  resolvedCallee,
 						EdgeType:  "CALLS",
+						Metadata:  fmt.Sprintf(`{"callee":"%s"}`, callee),
 					})
 				}
 				// Also extract variable/constant REFERENCES from this function body
 				if len(varNameMap) > 0 {
-					refs := extractVarRefs(bodyNode, lang, source, tag.Name, varNameMap, projectID)
+					refs := extractVarRefs(bodyNode, lang, source, tagQNMap[tag.Name], varNameMap, projectID)
 					edges = append(edges, refs...)
 				}
 			}

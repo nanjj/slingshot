@@ -122,3 +122,44 @@ P6d is independent graphs computation.
 - **2026-06-24**: Package-level var/const only for A1; function-local vars deferred to later phase (scope complexity)
 - **2026-06-24**: Reviewed CBM pass_definitions.c + pass_usages.c as reference — CBM uses registry-based resolution, slingshot will use in-memory varName→QN map for A2
 - **2026-06-24**: Waiting for Zhang Heng confirmation on using "REFERENCES" vs "USAGE" naming
+
+## Progress Update — 2026-06-24
+
+### ✅ Completed: LSP Foundation Enhancements (Zhang Heng)
+
+**Primary Changes:**
+
+1. **Signature Extraction** (`internal/code/lsp/lsp.go`):
+   - `ExtractSignature()` — extracts full function/method signature (e.g. `func (g *Greeter) Hello() string`)
+   - `ExtractDocComment()` — extracts doc comments from preceding comment nodes
+   - `ExtractDeclName()` — extracts identifier name from declaration nodes
+   - All with comprehensive unit tests (37 tests in lsp, all pass)
+
+2. **Indexer Enhancement** (`internal/code/base/indexer.go`):
+   - **Package-qualified QNs**: `main.Hello` instead of `Hello` — eliminates collisions
+   - **Node.Signature populated**: previously always empty string
+   - **Node.DocComment populated**: previously always empty string
+   - Doc/sig extracted for: function, method, class, struct, interface, type
+   - CALLS edges now use consistent package-qualified source QNs
+   - `findDeclNode()` — resolves Tagger Tag to AST declaration node
+   - `resolveCallTarget()` — prepares callee strings for cross-file resolution
+
+3. **Cross-file linking preparation**:
+   - CALLS sources now match definition QNs (e.g., `main.Hello` → `main.Hello`)
+   - Method-parent CONTAINS edges use qualified QNs
+   - `resolveCallTarget()` adds package prefix to unqualified calls
+
+### Impact
+| Metric | Before | After |
+|--------|--------|-------|
+| Nodes with signature | 0 (always "") | **All function/method** |
+| Nodes with doc_comment | 0 (always "") | **All with doc comments** |
+| Test suite | 457 tests pass | 457 tests pass |
+| QN uniqueness | Collision-prone | **Package-qualified** |
+| CALLS cross-file linking | Broken (unqualified) | **Consistent QNs** |
+
+### Next Steps for Zhang Heng
+- Phase 2: Resolve CALLS targets to definition nodes via import chain
+  - Current: `fmt.Println` → CALLS target `fmt.Println` (no matching node)
+  - Goal: Resolve through `import "fmt"` → find `fmt.Println` in stdlib stubs
+- Phase 3: Add stdlib stub indexing (pre-generated data files)

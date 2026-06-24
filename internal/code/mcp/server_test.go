@@ -742,7 +742,7 @@ func TestCodeFindReferences_Inbound(t *testing.T) {
 
 	assert.Assert(t, refRes.Total >= 1)
 	assert.Equal(t, refRes.Symbol, "fmt.Println")
-	assert.Assert(t, refRes.References[0].SourceQN == "main")
+	assert.Assert(t, refRes.References[0].SourceQN == "main.main")
 }
 
 // TestCodeFindReferences_Outbound verifies code_find_references finds callees.
