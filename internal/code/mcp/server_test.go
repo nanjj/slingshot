@@ -534,3 +534,173 @@ func TestGetNode(t *testing.T) {
 	// At byte 0 in a Go file, we expect a named node (the root or a named descendant)
 	t.Logf("get_node at pos=0: type=%q isNamed=%v", posRes.Type, posRes.IsNamed)
 }
+
+// ─── Phase 1: New tools ────────────────────────────────────────────────────────
+
+// TestCodeEdit_InsertInsert verifies code_edit with insert mode.
+func TestCodeEdit_Insert(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	// Insert a line at the end of package declaration
+	var result map[string]any
+	callToolUnmarshal(t, cs, "code_edit", map[string]any{
+		"file": filePath,
+		"mode": "insert",
+		"pos":  15,
+		"text": "\n\n// NewFunc is a test function.\nfunc NewFunc() string {\n\treturn \"hello\"\n}\n",
+	}, &result)
+	assert.Assert(t, result["success"].(bool))
+	t.Logf("code_edit insert byteDiff=%v", result["byteDiff"])
+}
+
+// TestCodeEdit_Replace verifies code_edit with replace mode.
+func TestCodeEdit_Replace(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	// Replace "Greeter" with "Saluter"
+	var result map[string]any
+	callToolUnmarshal(t, cs, "code_edit", map[string]any{
+		"file":      filePath,
+		"mode":      "replace",
+		"startByte": 52,
+		"endByte":   59,
+		"text":      "Saluter",
+	}, &result)
+	assert.Assert(t, result["success"].(bool))
+}
+
+// TestCodeEdit_Delete verifies code_edit with delete mode.
+func TestCodeEdit_Delete(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	// Delete the Greeter struct
+	var result map[string]any
+	callToolUnmarshal(t, cs, "code_edit", map[string]any{
+		"file":      filePath,
+		"mode":      "delete",
+		"startByte": 51,
+		"endByte":   82,
+	}, &result)
+	assert.Assert(t, result["success"].(bool))
+}
+
+// TestCodeEditBody verifies code_edit_body replaces a function body.
+func TestCodeEditBody(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	var result map[string]any
+	callToolUnmarshal(t, cs, "code_edit_body", map[string]any{
+		"file":     filePath,
+		"selector": "function:main",
+		"text":     `fmt.Println("modified")`,
+	}, &result)
+	assert.Assert(t, result["success"].(bool))
+}
+
+// TestCodeLocate_Found verifies code_locate finds an indexed symbol.
+func TestCodeLocate_Found(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+
+	// Index first
+	type idxResult struct {
+		ProjectName string `json:"projectName"`
+	}
+	var idxRes idxResult
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+	}, &idxRes)
+
+	// Locate the Hello method
+	type locateResult struct {
+		Found         bool   `json:"found"`
+		Source        string `json:"source"`
+		File          string `json:"file"`
+		Kind          string `json:"kind"`
+		Name          string `json:"name"`
+		QualifiedName string `json:"qualifiedName"`
+	}
+	var locRes locateResult
+	callToolUnmarshal(t, cs, "code_locate", map[string]any{
+		"project":       idxRes.ProjectName,
+		"qualifiedName": "Hello",
+	}, &locRes)
+	assert.Assert(t, locRes.Found, "Hello should be found")
+	assert.Equal(t, locRes.Source, "sqlite")
+}
+
+// TestCodeLocate_Fallback verifies code_locate falls back to tree-sitter.
+func TestCodeLocate_Fallback(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	type locateResult struct {
+		Found         bool   `json:"found"`
+		Source        string `json:"source"`
+		Name          string `json:"name"`
+		QualifiedName string `json:"qualifiedName"`
+	}
+	var locRes locateResult
+	callToolUnmarshal(t, cs, "code_locate", map[string]any{
+		"file":          filePath,
+		"qualifiedName": "Hello",
+	}, &locRes)
+	assert.Assert(t, locRes.Found, "Hello should be found via tree-sitter fallback")
+	assert.Equal(t, locRes.Source, "treesitter")
+}
+
+// TestCodeLocate_NotFound verifies code_locate returns found=false for missing symbol.
+func TestCodeLocate_NotFound(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	type locateResult struct {
+		Found bool `json:"found"`
+	}
+	var locRes locateResult
+	callToolUnmarshal(t, cs, "code_locate", map[string]any{
+		"qualifiedName": "NonExistentSymbol",
+	}, &locRes)
+	assert.Assert(t, !locRes.Found, "NonExistentSymbol should not be found")
+}
+
+// TestCodeEdit_ErrorHandling verifies code_edit returns errors for missing args.
+func TestCodeEdit_ErrorHandling(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	tests := []struct {
+		name string
+		args map[string]any
+	}{
+		{"missing mode", map[string]any{"file": "/tmp/test.go"}},
+		{"missing file", map[string]any{"mode": "insert"}},
+		{"insert missing text", map[string]any{"file": "/tmp/test.go", "mode": "insert"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callToolError(t, cs, "code_edit", tt.args)
+		})
+	}
+}

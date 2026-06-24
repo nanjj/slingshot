@@ -10,6 +10,7 @@ import (
 
 	"github.com/nanjj/slingshot/internal/code/base"
 	"github.com/nanjj/slingshot/internal/code/lsp"
+	"github.com/nanjj/slingshot/internal/editor"
 )
 
 // Server manages MCP tool handlers for code intelligence.
@@ -19,6 +20,7 @@ import (
 type Server struct {
 	store    *base.Store
 	analyzer *lsp.Analyzer
+	ed       *editor.Editor
 	opts     *Options
 }
 
@@ -32,14 +34,16 @@ type Options struct {
 
 // NewServer creates a new MCP server with the given store, analyzer, and options.
 func NewServer(store *base.Store, analyzer *lsp.Analyzer, opts *Options) *Server {
+	ed := editor.NewEditor(opts.ProjectRoot)
 	return &Server{
 		store:    store,
 		analyzer: analyzer,
+		ed:       ed,
 		opts:     opts,
 	}
 }
 
-// RegisterAll registers all 23 code intelligence tools on the given MCP server.
+// RegisterAll registers all 26 code intelligence tools on the given MCP server.
 func (s *Server) RegisterAll(srv *mcp.Server) {
 	// ─── Search & Navigation (6) ─────────────────────────────────────────
 	registerSearchGraph(srv, s)
@@ -73,4 +77,9 @@ func (s *Server) RegisterAll(srv *mcp.Server) {
 	registerGetProjectRoot(srv, s)
 	registerOpenProject(srv, s)
 	registerIngestTraces(srv, s)
+
+	// ─── Edit & Locate (3, Phase 1) ─────────────────────────────────────
+	registerCodeEdit(srv, s)
+	registerCodeEditBody(srv, s)
+	registerCodeLocate(srv, s)
 }

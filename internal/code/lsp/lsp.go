@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"slices"
 	"fmt"
 	"os"
 	"strings"
@@ -469,11 +470,9 @@ func detectLineEnding(source []byte) string {
 		return "\n"
 	}
 	// Check for \r\n
-	for _, b := range source {
-		if b == '\r' {
+	if slices.Contains(source, '\r') {
 			return "\r\n"
 		}
-	}
 	return "\n"
 }
 
