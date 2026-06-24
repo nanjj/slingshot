@@ -1,0 +1,72 @@
+package mcp
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// ─── Argument structs ──────────────────────────────────────────────────────────
+
+type ingestTraceSpan struct {
+	TraceID      string `json:"traceId"`
+	SpanID       string `json:"spanId"`
+	ParentSpanID string `json:"parentSpanId,omitempty"`
+	Service      string `json:"service"`
+	Operation    string `json:"operation"`
+	StartTime    int64  `json:"startTime"`
+	Duration     int64  `json:"duration"`
+	Status       string `json:"status,omitempty"`
+	Tags         string `json:"tags,omitempty"`
+}
+
+type ingestTracesArgs struct {
+	Project string            `json:"project"`
+	Traces  []ingestTraceSpan `json:"traces"`
+}
+
+// ─── ingest_traces ──────────────────────────────────────────────────────────────
+
+func registerIngestTraces(srv *mcp.Server, s *Server) {
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "ingest_traces",
+		Description: "Ingest runtime traces to enhance the knowledge graph with execution paths, call frequencies, and latency data.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args ingestTracesArgs) (*mcp.CallToolResult, any, error) {
+		return s.handleIngestTraces(args), nil, nil
+	})
+}
+
+func (s *Server) handleIngestTraces(args ingestTracesArgs) *mcp.CallToolResult {
+	if args.Project == "" {
+		return errorResult(fmt.Errorf("project is required"))
+	}
+	if len(args.Traces) == 0 {
+		return errorResult(fmt.Errorf("traces is required"))
+	}
+
+	// Ingest traces using raw SQL via the store's underlying DB connection.
+	// This is a simplified initial implementation — a bulk insert API can
+	// be added to base.Store when performance matters.
+	db := s.store.DB()
+	inserted := 0
+	for _, t := range args.Traces {
+		result, err := db.Exec(`
+			INSERT INTO traces (project_id, trace_id, span_id, parent_span_id, service, operation, start_time, duration, status, tags)
+			VALUES ((SELECT id FROM projects WHERE name = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, args.Project, t.TraceID, t.SpanID, t.ParentSpanID, t.Service, t.Operation,
+			t.StartTime, t.Duration, t.Status, t.Tags)
+		if err != nil {
+			continue
+		}
+		n, _ := result.RowsAffected()
+		if n > 0 {
+			inserted++
+		}
+	}
+
+	return jsonResult(map[string]any{
+		"inserted": inserted,
+		"total":    len(args.Traces),
+	})
+}

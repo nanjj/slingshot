@@ -129,6 +129,7 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdJaeger{global: global}).command(),
 		(&cmdI18n{global: global}).command(),
 		(&cmdEditor{global: global}).command(),
+		(&cmdCode{global: global}).command(),
 	)
 
 
