@@ -6,7 +6,33 @@ import (
 	"strings"
 )
 
-// ─── Node CRUD ────────────────────────────────────────────────────────────────
+// ─── Node CRUD ───────────────────────────────────────────────────────
+// GetNodesByFile returns all nodes in a given file for a project.
+func (s *Store) GetNodesByFile(filePath, project string) ([]Node, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+		SELECT n.id, n.project_id, n.qualified_name, n.kind, n.name,
+		       n.file_path, n.line, n.col, n.end_line, n.end_col,
+		       n.signature, n.doc_comment,
+		       n.complexity, n.cognitive, n.loop_depth, n.transitive_loop_depth,
+		       n.loop_count, n.recursive, n.param_count, n.linear_scan_in_loop,
+		       n.alloc_in_loop, n.recursion_in_loop, n.unguarded_recursion, n.max_access_depth
+		FROM nodes n
+		JOIN projects p ON p.id = n.project_id
+		WHERE p.name = ? AND n.file_path = ?
+		ORDER BY n.line ASC
+	`
+	rows, err := s.db.Query(query, project, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes by file: %w", err)
+	}
+	defer rows.Close()
+
+	return scanNodes(rows)
+}
+// ─────────
 
 // SaveNode inserts or updates a node.
 func (s *Store) SaveNode(n *Node) (int64, error) {

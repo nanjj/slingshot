@@ -1,7 +1,7 @@
 // Package mcp provides MCP tool handlers for code intelligence.
 //
 // It connects the base (storage/graph) and lsp (analysis) packages
-// to the Model Context Protocol, exposing 25 tools for code search,
+// to the Model Context Protocol, exposing 27 tools for code search,
 // navigation, editing, referencing, analysis, and project management.
 package mcp
 
@@ -43,10 +43,11 @@ func NewServer(store *base.Store, analyzer *lsp.Analyzer, opts *Options) *Server
 	}
 }
 
-// RegisterAll registers all 26 code intelligence tools on the given MCP server.
+// RegisterAll registers all 27 code intelligence tools on the given MCP server.
 func (s *Server) RegisterAll(srv *mcp.Server) {
-	// ─── Search & Navigation (6) ─────────────────────────────────────────
+	// ─── Search & Navigation (7) ─────────────────────────────────────────
 	registerSearchGraph(srv, s)
+	registerSearchCode(srv, s)
 	registerGetArchitecture(srv, s)
 	registerGetCodeSnippet(srv, s)
 	registerGetGraphSchema(srv, s)
