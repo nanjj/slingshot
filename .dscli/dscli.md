@@ -1,6 +1,6 @@
-# code MCP Phase 1: base + lsp 包
-
-## 目标
+[07d48d8] ✅ Phase 1 + Phase 2 合并提交，22 files，3712 lines
+- Curie 完成了 mcp/ 包（8 文件）和 code serve CLI（cmd/code.go）
+- 已回复 Curie 邮件，建议下一步方向：indexer 测试 vs 联调
 在 `internal/code/` 下创建 `base`（图存储）和 `lsp`（AST分析）两个包，为 Phase 2（Curie 的 mcp + CLI）打下基础。
 
 ## 模块结构
