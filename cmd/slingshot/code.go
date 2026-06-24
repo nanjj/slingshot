@@ -97,8 +97,7 @@ The server includes:
 
 Environment:
   SLINGSHOT_PROJECT_ROOT  Project root directory (default: current directory)
-  SLINGSHOT_CODE_DB       Code graph database path (default: ~/.dscli/code.db)
-
+  SLINGSHOT_CODE_DB       Code graph database path (default: ~/.config/slingshot/code.db)
 Flags:
   --project-root <path>   Project root directory
   --db-path <path>        Code graph database path
@@ -126,7 +125,7 @@ Flags:
 			if err != nil {
 				return fmt.Errorf("get home directory: %w", err)
 			}
-			opts.dbPath = filepath.Join(home, ".dscli", "code.db")
+			opts.dbPath = filepath.Join(home, ".config", "slingshot", "code.db")
 		}
 
 		return c.run(cmd.Context())
