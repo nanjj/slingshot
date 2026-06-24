@@ -1,6 +1,7 @@
 package base
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -298,4 +299,128 @@ func seedEdgeCall(t *testing.T, s *Store, pid int64, src, tgt string) {
 	}
 	_, err := s.SaveEdge(e)
 	assert.NilError(t, err)
+}
+
+func seedEdgeImport(t *testing.T, s *Store, pid int64, src, tgt string) {
+	t.Helper()
+	e := &Edge{
+		ProjectID: pid,
+		SourceQN:  src,
+		TargetQN:  tgt,
+		EdgeType:  "IMPORTS",
+	}
+	_, err := s.SaveEdge(e)
+	assert.NilError(t, err)
+}
+
+// ─── Clusters ────────────────────────────────────────────────────────────────
+
+func TestClusters_NoData(t *testing.T) {
+	store := openTestStore(t)
+	defer store.Close()
+
+	clusters, err := store.Clusters("unknown", 10)
+	assert.NilError(t, err)
+	assert.Assert(t, len(clusters) == 0)
+}
+
+func TestClusters_SingleComponent(t *testing.T) {
+	store := openTestStore(t)
+	defer store.Close()
+
+	pid := seedProject(t, store, "proj")
+
+	// Three functions in one package, calling each other
+	seedNode(t, store, pid, "proj.pkg.FuncA", "function", "FuncA", "pkg/a.go", 10)
+	seedNode(t, store, pid, "proj.pkg.FuncB", "function", "FuncB", "pkg/a.go", 20)
+	seedNode(t, store, pid, "proj.pkg.FuncC", "function", "FuncC", "pkg/a.go", 30)
+
+	seedEdgeCall(t, store, pid, "proj.pkg.FuncA", "proj.pkg.FuncB")
+	seedEdgeCall(t, store, pid, "proj.pkg.FuncB", "proj.pkg.FuncC")
+	seedEdgeCall(t, store, pid, "proj.pkg.FuncC", "proj.pkg.FuncA")
+
+	clusters, err := store.Clusters("proj", 10)
+	assert.NilError(t, err)
+	assert.Assert(t, len(clusters) == 1, "expected 1 cluster, got %d", len(clusters))
+	assert.Equal(t, clusters[0].Size, 3)
+	assert.Assert(t, clusters[0].Cohesion > 0, "expected positive cohesion")
+	assert.Assert(t, len(clusters[0].TopNodes) > 0)
+}
+
+func TestClusters_TwoComponents(t *testing.T) {
+	store := openTestStore(t)
+	defer store.Close()
+
+	pid := seedProject(t, store, "proj")
+
+	// Component A: pkg-a with 2 functions
+	seedNode(t, store, pid, "proj.pkg-a.FuncA1", "function", "FuncA1", "pkg-a/a.go", 10)
+	seedNode(t, store, pid, "proj.pkg-a.FuncA2", "function", "FuncA2", "pkg-a/a.go", 20)
+	seedEdgeCall(t, store, pid, "proj.pkg-a.FuncA1", "proj.pkg-a.FuncA2")
+
+	// Component B: pkg-b with 2 functions (disconnected from A)
+	seedNode(t, store, pid, "proj.pkg-b.FuncB1", "function", "FuncB1", "pkg-b/b.go", 30)
+	seedNode(t, store, pid, "proj.pkg-b.FuncB2", "function", "FuncB2", "pkg-b/b.go", 40)
+	seedEdgeCall(t, store, pid, "proj.pkg-b.FuncB1", "proj.pkg-b.FuncB2")
+
+	clusters, err := store.Clusters("proj", 10)
+	assert.NilError(t, err)
+	assert.Assert(t, len(clusters) == 2, "expected 2 clusters, got %d", len(clusters))
+
+	// Both clusters should have size 2
+	smaller := 0
+	larger := 1
+	if clusters[0].Size > clusters[1].Size {
+		smaller, larger = larger, smaller
+	}
+	assert.Equal(t, clusters[smaller].Size, 2)
+	assert.Equal(t, clusters[larger].Size, 2)
+}
+
+func TestClusters_Limit(t *testing.T) {
+	store := openTestStore(t)
+	defer store.Close()
+
+	pid := seedProject(t, store, "proj")
+
+	// Create 3 isolated components
+	for i := 0; i < 3; i++ {
+		pkg := fmt.Sprintf("pkg-%c", 'A'+i)
+		fn := fmt.Sprintf("proj.%s.Func", pkg)
+		seedNode(t, store, pid, fn, "function", "Func", pkg+"/f.go", uint32(i*10))
+		// One self-call to create a component
+		seedEdgeCall(t, store, pid, fn, fn)
+	}
+
+	// With limit=2, should get only 2 clusters
+	clusters, err := store.Clusters("proj", 2)
+	assert.NilError(t, err)
+	assert.Assert(t, len(clusters) <= 2, "limit=2 but got %d", len(clusters))
+}
+
+func TestClusters_ImportBased(t *testing.T) {
+	store := openTestStore(t)
+	defer store.Close()
+
+	pid := seedProject(t, store, "proj")
+
+	// Two packages connected via IMPORTS (not CALLS)
+	seedNode(t, store, pid, "proj.pkg-a.Func", "function", "Func", "pkg-a/a.go", 10)
+	seedNode(t, store, pid, "proj.pkg-b.Func", "function", "Func", "pkg-b/b.go", 20)
+
+	seedEdgeImport(t, store, pid, "proj.pkg-b.Func", "proj.pkg-a.Func")
+
+	clusters, err := store.Clusters("proj", 10)
+	assert.NilError(t, err)
+	assert.Assert(t, len(clusters) >= 1, "expected at least 1 cluster from IMPORTS edges")
+
+	// The two nodes should be in the same cluster via IMPORTS edge
+	found := false
+	for _, c := range clusters {
+		if c.Size >= 2 {
+			found = true
+			break
+		}
+	}
+	assert.Assert(t, found, "expected a cluster with size >= 2 from IMPORTS")
 }

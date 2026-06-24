@@ -33,6 +33,16 @@ type FileTreeEntry struct {
 	NodeCount int    `json:"nodeCount"`
 }
 
+// Cluster represents a structural community detected from the call/import graph.
+type Cluster struct {
+	Label          string   `json:"label"`          // auto-generated name (top package/representative)
+	Size           int      `json:"size"`           // number of nodes in the cluster
+	InternalEdges  int      `json:"internalEdges"`  // edges with both endpoints inside the cluster
+	ExternalEdges  int      `json:"externalEdges"`  // edges crossing cluster boundary
+	Cohesion       float64  `json:"cohesion"`       // internal / total edges ratio (0–1)
+	TopNodes       []string `json:"topNodes"`       // highest-degree nodes in the cluster
+	Packages       []string `json:"packages"`       // packages that dominate this cluster
+}
 // ─── Hotspots (fan-in analysis) ──────────────────────────────────────────────
 
 // Hotspots returns the top N functions/methods ranked by fan-in (number of
@@ -190,4 +200,198 @@ func (s *Store) FileTree(project string) ([]FileTreeEntry, error) {
 		result[i] = *dirMap[d]
 	}
 	return result, nil
+}
+
+// ─── Community Detection ───────────────────────────────────────────────────
+//
+// Clusters detects structural communities from the CALLS and IMPORTS edge
+// graph using connected components.  Each component becomes a cluster with
+// cohesion (internal-edge ratio), top nodes (highest degree), and dominant
+// packages.
+//
+// Limits total clusters returned (default 20) to keep the response size
+// manageable.  Use limit=0 for all.
+func (s *Store) Clusters(project string, limit int) ([]Cluster, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// 1. Fetch all CALLS and IMPORTS edges for the project.
+	rows, err := s.db.Query(`
+		SELECT e.source_qn, e.target_qn, e.edge_type
+		FROM edges e
+		JOIN projects p ON p.id = e.project_id
+		WHERE p.name = ? AND e.edge_type IN ('CALLS', 'IMPORTS')
+	`, project)
+	if err != nil {
+		return nil, fmt.Errorf("clusters: %w", err)
+	}
+	defer rows.Close()
+
+	// adj[n] = neighbours of n
+	adj := make(map[string]map[string]bool)
+	// edgeSet stores "src→tgt:type" for dedup and internal/edge counting
+	edgeSet := make(map[string]struct{ src, tgt, etype string })
+	// nodeDegrees[n] = degree count
+	nodeDegrees := make(map[string]int)
+
+	for rows.Next() {
+		var src, tgt, etype string
+		if err := rows.Scan(&src, &tgt, &etype); err != nil {
+			return nil, fmt.Errorf("scan edge: %w", err)
+		}
+		key := src + "→" + tgt + ":" + etype
+		if _, ok := edgeSet[key]; ok {
+			continue // deduplicate
+		}
+		edgeSet[key] = struct{ src, tgt, etype string }{src, tgt, etype}
+
+		// Undirected adjacency for clustering
+		if adj[src] == nil {
+			adj[src] = make(map[string]bool)
+		}
+		adj[src][tgt] = true
+		if adj[tgt] == nil {
+			adj[tgt] = make(map[string]bool)
+		}
+		adj[tgt][src] = true
+
+		nodeDegrees[src]++
+		nodeDegrees[tgt]++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(adj) == 0 {
+		return []Cluster{}, nil
+	}
+
+	// 2. BFS connected components
+	visited := make(map[string]bool)
+	var clusters []Cluster
+
+	for node := range adj {
+		if visited[node] {
+			continue
+		}
+		// BFS this component
+		component := make(map[string]bool)
+		queue := []string{node}
+		visited[node] = true
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			component[cur] = true
+			for nb := range adj[cur] {
+				if !visited[nb] {
+					visited[nb] = true
+					queue = append(queue, nb)
+				}
+			}
+		}
+
+		// 3. Compute cluster metrics
+		memberCount := len(component)
+		internalEdges := 0
+		externalEdges := 0
+
+		// For each edge, check if both endpoints are in this component
+		for _, e := range edgeSet {
+			_, srcIn := component[e.src]
+			_, tgtIn := component[e.tgt]
+			if srcIn || tgtIn {
+				// Edge involves this component
+				if srcIn && tgtIn {
+					internalEdges++
+				} else {
+					externalEdges++
+				}
+			}
+		}
+
+		// 4. Find top nodes (highest degree)
+		type degreeItem struct {
+			qn    string
+			deg   int
+		}
+		var top []degreeItem
+		for n := range component {
+			top = append(top, degreeItem{n, nodeDegrees[n]})
+		}
+		// Sort by degree descending
+		for i := 1; i < len(top); i++ {
+			for j := i; j > 0 && top[j].deg > top[j-1].deg; j-- {
+				top[j], top[j-1] = top[j-1], top[j]
+			}
+		}
+		topCount := 5
+		if len(top) < topCount {
+			topCount = len(top)
+		}
+		topNodes := make([]string, topCount)
+		for i := 0; i < topCount; i++ {
+			topNodes[i] = top[i].qn
+		}
+
+		// 5. Determine dominant packages
+		pkgSet := make(map[string]int)
+		for n := range component {
+			pkg := extractPackage(n, project)
+			pkgSet[pkg]++
+		}
+		packages := make([]string, 0, len(pkgSet))
+		for p := range pkgSet {
+			packages = append(packages, p)
+		}
+		// Sort packages by frequency
+		for i := 1; i < len(packages); i++ {
+			for j := i; j > 0 && pkgSet[packages[j]] > pkgSet[packages[j-1]]; j-- {
+				packages[j], packages[j-1] = packages[j-1], packages[j]
+			}
+		}
+		if len(packages) > 5 {
+			packages = packages[:5]
+		}
+
+		// 6. Generate label from top package or top node
+		label := packages[0]
+		if label == "" && len(topNodes) > 0 {
+			label = topNodes[0]
+		}
+
+		totalEdges := internalEdges + externalEdges
+		var cohesion float64
+		if totalEdges > 0 {
+			cohesion = float64(internalEdges) / float64(totalEdges)
+		} else {
+			cohesion = 1.0 // singleton cluster with no edges
+		}
+
+		clusters = append(clusters, Cluster{
+			Label:          label,
+			Size:           memberCount,
+			InternalEdges:  internalEdges,
+			ExternalEdges:  externalEdges,
+			Cohesion:       cohesion,
+			TopNodes:       topNodes,
+			Packages:       packages,
+		})
+	}
+
+	// 7. Sort clusters by size descending
+	for i := 1; i < len(clusters); i++ {
+		for j := i; j > 0 && clusters[j].Size > clusters[j-1].Size; j-- {
+			clusters[j], clusters[j-1] = clusters[j-1], clusters[j]
+		}
+	}
+
+	if len(clusters) > limit {
+		clusters = clusters[:limit]
+	}
+
+	return clusters, nil
 }
