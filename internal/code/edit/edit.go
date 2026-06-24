@@ -1,4 +1,4 @@
-package editor
+package edit
 
 // EditResult 是编辑操作的结果。
 type EditResult struct {

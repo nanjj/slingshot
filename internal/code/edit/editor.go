@@ -1,4 +1,4 @@
-package editor
+package edit
 
 import (
 	"bytes"
@@ -102,9 +102,9 @@ func (em *EditorManager) Current() *Editor {
 //
 // 典型使用模式：
 //
-//	editor.OpenDocument("file:///main.go", nil, "go")        // 打开已有文件
-//	editor.OpenDocument("file:///new.go", genCode, "go")     // AI 生成新文件
-//	editor.OpenDocument("scratch:///snippet", code, "go")    // 分析代码片段
+//	edit.OpenDocument("file:///main.go", nil, "go")        // 打开已有文件
+//	edit.OpenDocument("file:///new.go", genCode, "go")     // AI 生成新文件
+//	edit.OpenDocument("scratch:///snippet", code, "go")    // 分析代码片段
 func (ed *Editor) OpenDocument(uri string, source []byte, languageName string) error {
 	// 1. 关闭同名已有文档（如有）
 	if existing, ok := ed.documents.Load(uri); ok {

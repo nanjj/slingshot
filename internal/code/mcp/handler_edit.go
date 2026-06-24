@@ -8,7 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nanjj/slingshot/internal/code/editor"
+	"github.com/nanjj/slingshot/internal/code/edit"
 )
 
 // ─── Argument structs ──────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ type codeEditArgs struct {
 	EndByte   uint32              `json:"endByte,omitempty"`   // End byte for range replace/delete
 	Row       uint32              `json:"row,omitempty"`       // Row for point insert
 	Col       uint32              `json:"col,omitempty"`       // Column for point insert
-	Selector  editor.NodeSelector `json:"selector,omitempty"`  // Node selector for before/after/node target
+	Selector  edit.NodeSelector `json:"selector,omitempty"`  // Node selector for before/after/node target
 }
 
 // codeEditBodyArgs is the argument struct for code_edit_body (semantic node replacement).
@@ -94,7 +94,7 @@ func (s *Server) handleCodeEdit(args codeEditArgs) *mcp.CallToolResult {
 // ─── Insert ────────────────────────────────────────────────────────────────────
 
 func (s *Server) handleCodeEditInsert(filePath string, args codeEditArgs) *mcp.CallToolResult {
-	var result *editor.EditResult
+	var result *edit.EditResult
 	var err error
 
 	switch args.Position {
@@ -116,7 +116,7 @@ func (s *Server) handleCodeEditInsert(filePath string, args codeEditArgs) *mcp.C
 // ─── Replace ───────────────────────────────────────────────────────────────────
 
 func (s *Server) handleCodeEditReplace(filePath string, args codeEditArgs) *mcp.CallToolResult {
-	var result *editor.EditResult
+	var result *edit.EditResult
 	var err error
 
 	switch args.Target {
@@ -134,7 +134,7 @@ func (s *Server) handleCodeEditReplace(filePath string, args codeEditArgs) *mcp.
 // ─── Delete ────────────────────────────────────────────────────────────────────
 
 func (s *Server) handleCodeEditDelete(filePath string, args codeEditArgs) *mcp.CallToolResult {
-	var result *editor.EditResult
+	var result *edit.EditResult
 	var err error
 
 	switch args.Target {
@@ -289,8 +289,8 @@ func (s *Server) handleCodeLocate(args codeLocateArgs) *mcp.CallToolResult {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
-// editResultToResponse converts editor.EditResult to a friendly JSON map.
-func editResultToResponse(er *editor.EditResult) map[string]any {
+// editResultToResponse converts edit.EditResult to a friendly JSON map.
+func editResultToResponse(er *edit.EditResult) map[string]any {
 	if er == nil {
 		return map[string]any{"success": false}
 	}

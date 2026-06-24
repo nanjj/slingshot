@@ -10,7 +10,7 @@ import (
 
 	"github.com/nanjj/slingshot/internal/code/base"
 	"github.com/nanjj/slingshot/internal/code/lsp"
-	"github.com/nanjj/slingshot/internal/code/editor"
+	"github.com/nanjj/slingshot/internal/code/edit"
 )
 
 // Server manages MCP tool handlers for code intelligence.
@@ -20,7 +20,7 @@ import (
 type Server struct {
 	store    *base.Store
 	analyzer *lsp.Analyzer
-	ed       *editor.Editor
+	ed       *edit.Editor
 	opts     *Options
 }
 
@@ -34,7 +34,7 @@ type Options struct {
 
 // NewServer creates a new MCP server with the given store, analyzer, and options.
 func NewServer(store *base.Store, analyzer *lsp.Analyzer, opts *Options) *Server {
-	ed := editor.NewEditor(opts.ProjectRoot)
+	ed := edit.NewEditor(opts.ProjectRoot)
 	return &Server{
 		store:    store,
 		analyzer: analyzer,

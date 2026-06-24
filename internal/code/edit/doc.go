@@ -23,7 +23,7 @@
 //
 // # Lifecycle (typical)
 //
-//	ed := editor.NewEditor(projectRoot)
+//	ed := edit.NewEditor(projectRoot)
 //	ed.OpenDocument("file:///main.go", nil, "go") // loads disk, detects language
 //	info, _ := ed.GetStructure("file:///main.go", -1, -1) // full AST as JSON
 //	res, _ := ed.Insert("file:///main.go", 0, "package main\n")
@@ -44,4 +44,4 @@
 //     uses mtime comparison (not content hash).
 //   - URI resolution respects projectRoot. scratch:// URIs bypass filesystem.
 //   - Auto-open: read/write methods open documents on demand if not cached.
-package editor
+package edit

@@ -2,7 +2,7 @@
 // Definition extraction via gotreesitter Tagger API
 // ──────────────────────────────────────────────
 
-package editor
+package edit
 
 import (
 	"fmt"
