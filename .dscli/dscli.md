@@ -1,15 +1,32 @@
 # Slingshot code intelligence — 开发追踪
 
-## 最新状态 (9131975)
+## 最新状态 (2026-06-24)
 
 ✅ **Phase 1** (a23b482) — code_edit, code_edit_body, code_locate (base layer)
-✅ **Phase 2** (08a98ef) — code_find_references, code_analysis, linear_scan_in_loop (6 files, +725/-10)
-  - Curie: indexer + analyzer + MCP handlers + 5 integration tests
-  - 39 tests 全部通过
-✅ **Phase 3 — 3 个 MCP 缺口修复** (9131975) — 张衡
-  - `index_repository.mode` — 支持 full/moderate/fast 三级过滤
-  - `detect_changes` — git diff 真实实现（替代 stub）
-  - `search_graph.semanticQuery` — BM25 保底搜索
+✅ **Phase 2** (08a98ef) — code_find_references, code_analysis, linear_scan_in_loop
+✅ **Phase 3** (9131975) — 3 个 MCP 缺口修复 (张衡)
+✅ **Task A** (e73eab2) — lsp 包测试 36 个 (居里)
+✅ **Task C** — 多语言验证 (Python/JS/Rust/Java) 全部通过 (张衡)
+📬 **Task D** — 联调中，等待张衡 MCP client 端到端验证
+🔵 **Phase 4 追赶计划** — 9 个能力缺口，5 个子任务
+
+### Phase 4 任务分工
+
+| 任务 | 负责人 | 优先级 | 状态 |
+|------|--------|:------:|:----:|
+| P4C — get_architecture 升级 (热点/文件树/包依赖) | 居里 | 🔴 P0 | **进行中** |
+| P4D — detect_changes 影响分析 | 居里 | 🔴 P0 | 待开始 |
+| P4E — trace_path 升级 (data_flow/cross_service/risk_labels) | 居里 | 🟡 P1 | 待开始 |
+| P4B — search_code 新工具 (grep+图增强) | 张衡 | 🔴 P0 | 待开始 |
+| P4A — search_graph 增强 (BM25 结构提升+分页) | 张衡 | 🟡 P1 | 待开始 |
+
+### 当前测试覆盖
+```
+internal/code/base/  34 tests
+internal/code/lsp/   36 tests
+internal/code/mcp/   39 tests
+```
+**总计：109 个测试，全部通过**
 
 ### 当前工具 (28个)
 
@@ -25,15 +42,10 @@
 | 编辑器 | open_project, get_project_root, validate, query_ast | 编辑器基础设施 |
 | 记忆 | save_memo, search_memos | 持久化记忆 |
 
-### 测试覆盖
-```
-internal/code/base/  32 tests
-internal/code/mcp/   42 tests (Phase 1: 37 + Phase 2: 5)
-internal/code/lsp/    0 tests  ← 仍需补
-```
-
 ## 待办
-
-- [ ] **lsp 包测试**（analyer.go + lsp.go）→ 已分配居里
-- [ ] **联调** — `slingshot code serve` + codebase-memory-mcp MCP client → 居里（lsp 测试之后）
-- [ ] **多语言支持验证**（Python/JS/Rust/Java 等）→ 排期中
+- [ ] **联调** — `slingshot code serve` + dscli MCP client（张衡 + 居里协调）
+- [ ] **P4C** — get_architecture 升级（居里）
+- [ ] **P4D** — detect_changes 影响分析（居里）
+- [ ] **P4E** — trace_path 升级（居里）
+- [ ] **P4B** — search_code 新工具（张衡）
+- [ ] **P4A** — search_graph 增强（张衡）

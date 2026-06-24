@@ -132,7 +132,7 @@ func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
 func registerGetArchitecture(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_architecture",
-		Description: "Get high-level architecture overview — packages, services, dependencies, and project structure at a glance. Includes Leiden community detection clusters over the call/import graph.",
+		Description: "Get high-level architecture overview — packages, services, dependencies, and project structure at a glance. Includes Leiden community detection clusters over the call/import graph. Use `aspects` to select subsets: kindDistribution, edgeDistribution, hotspots, fileTree, packageDeps. Default (empty aspects) returns all.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getArchitectureArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetArchitecture(args), nil, nil
 	})
@@ -149,41 +149,76 @@ func (s *Server) handleGetArchitecture(args getArchitectureArgs) *mcp.CallToolRe
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 
-	// Query cluster structure via graph: count nodes by kind
-	kindQuery := fmt.Sprintf(`
-		SELECT n.kind, COUNT(*) as count
-		FROM nodes n
-		JOIN projects p ON p.id = n.project_id
-		WHERE p.name = '%s'
-		GROUP BY n.kind
-		ORDER BY count DESC
-	`, args.Project)
-
-	kindDist, err := s.store.QueryGraph(kindQuery)
-	if err != nil {
-		kindDist = nil // non-critical
+	result := map[string]any{
+		"project": info,
 	}
 
-	// Count edge types
-	edgeQuery := fmt.Sprintf(`
-		SELECT e.edge_type, COUNT(*) as count
-		FROM edges e
-		JOIN projects p ON p.id = e.project_id
-		WHERE p.name = '%s'
-		GROUP BY e.edge_type
-		ORDER BY count DESC
-	`, args.Project)
-
-	edgeDist, err := s.store.QueryGraph(edgeQuery)
-	if err != nil {
-		edgeDist = nil
+	// Determine which aspects to include.
+	// If no aspects specified, return all for backward compatibility.
+	include := func(name string) bool {
+		if len(args.Aspects) == 0 {
+			return true
+		}
+		for _, a := range args.Aspects {
+			if a == name {
+				return true
+			}
+		}
+		return false
 	}
 
-	return jsonResult(map[string]any{
-		"project":          info,
-		"kindDistribution": kindDist,
-		"edgeDistribution": edgeDist,
-	})
+	if include("kindDistribution") || len(args.Aspects) == 0 {
+		kindQuery := fmt.Sprintf(`
+			SELECT n.kind, COUNT(*) as count
+			FROM nodes n
+			JOIN projects p ON p.id = n.project_id
+			WHERE p.name = '%s'
+			GROUP BY n.kind
+			ORDER BY count DESC
+		`, args.Project)
+		kindDist, err := s.store.QueryGraph(kindQuery)
+		if err == nil {
+			result["kindDistribution"] = kindDist
+		}
+	}
+
+	if include("edgeDistribution") || len(args.Aspects) == 0 {
+		edgeQuery := fmt.Sprintf(`
+			SELECT e.edge_type, COUNT(*) as count
+			FROM edges e
+			JOIN projects p ON p.id = e.project_id
+			WHERE p.name = '%s'
+			GROUP BY e.edge_type
+			ORDER BY count DESC
+		`, args.Project)
+		edgeDist, err := s.store.QueryGraph(edgeQuery)
+		if err == nil {
+			result["edgeDistribution"] = edgeDist
+		}
+	}
+
+	if include("hotspots") {
+		hotspots, err := s.store.Hotspots(args.Project, 20)
+		if err == nil {
+			result["hotspots"] = hotspots
+		}
+	}
+
+	if include("fileTree") {
+		ft, err := s.store.FileTree(args.Project)
+		if err == nil {
+			result["fileTree"] = ft
+		}
+	}
+
+	if include("packageDeps") {
+		deps, err := s.store.PackageDeps(args.Project)
+		if err == nil {
+			result["packageDeps"] = deps
+		}
+	}
+
+	return jsonResult(result)
 }
 
 // ─── get_code_snippet ──────────────────────────────────────────────────────────
