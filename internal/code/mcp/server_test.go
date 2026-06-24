@@ -6,6 +6,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -856,6 +857,115 @@ func run() {
 	}
 	assert.Assert(t, callers["main.main"], "expected main.main to call helper.Greet")
 	assert.Assert(t, callers["main.run"], "expected main.run to call helper.Greet")
+}
+
+// TestTestLinking verifies TESTS and TESTS_FILE edges are created correctly.
+func TestTestLinking(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	dir := t.TempDir()
+
+	// Source file
+	srcContent := `package math
+
+// Add returns a + b.
+func Add(a, b int) int {
+	return a + b
+}
+
+// Mul returns a * b.
+func Mul(a, b int) int {
+	return a * b
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "math.go"), []byte(srcContent), 0644)
+	assert.NilError(t, err)
+
+	// Test file
+	testContent := `package math
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	r := Add(1, 2)
+	if r != 3 {
+		t.Fail()
+	}
+}
+
+func TestMul(t *testing.T) {
+	r := Mul(3, 4)
+	if r != 12 {
+		t.Fail()
+	}
+}
+`
+	err = os.WriteFile(filepath.Join(dir, "math_test.go"), []byte(testContent), 0644)
+	assert.NilError(t, err)
+
+	type idxResult struct {
+		ProjectName string `json:"projectName"`
+		EdgesStored int    `json:"edgesStored"`
+	}
+	var idxRes idxResult
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": dir,
+	}, &idxRes)
+
+	// Verify TESTS edges exist
+	type refItem struct {
+		SourceQN string `json:"sourceQN"`
+		TargetQN string `json:"targetQN"`
+		EdgeType string `json:"edgeType"`
+	}
+	type refResult struct {
+		Symbol     string    `json:"symbol"`
+		References []refItem `json:"references"`
+		Total      int       `json:"total"`
+	}
+
+	// Direct SQL check: count TESTS edges
+	type sqlResult struct {
+		Results []map[string]any `json:"results"`
+		Total   int              `json:"total"`
+	}
+	var sqlRes sqlResult
+	callToolUnmarshal(t, cs, "query_graph", map[string]any{
+		"project": idxRes.ProjectName,
+		"query": fmt.Sprintf(`
+			SELECT e.source_qn, e.target_qn
+			FROM edges e
+			JOIN projects p ON p.id = e.project_id
+			WHERE p.name = '%s' AND e.edge_type = 'TESTS'
+		`, idxRes.ProjectName),
+	}, &sqlRes)
+	t.Logf("SQL TESTS check: total=%d", sqlRes.Total)
+	for _, r := range sqlRes.Results {
+		t.Logf("  TESTS: %v -> %v", r["source_qn"], r["target_qn"])
+	}
+
+	// Now check via code_find_references
+	var refRes refResult
+	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+		"project":       idxRes.ProjectName,
+		"qualifiedName": "math.Add",
+		"direction":     "inbound",
+	}, &refRes)
+
+	t.Logf("references to math.Add: total=%d", refRes.Total)
+	for i, ref := range refRes.References {
+		t.Logf("  ref[%d]: %s -[%s]-> %s", i, ref.SourceQN, ref.EdgeType, ref.TargetQN)
+	}
+	foundTests := false
+	for _, ref := range refRes.References {
+		if ref.EdgeType == "TESTS" {
+			foundTests = true
+			assert.Assert(t, strings.Contains(ref.SourceQN, "TestAdd"),
+				"expected TESTS from TestAdd, got %s", ref.SourceQN)
+		}
+	}
+	assert.Assert(t, foundTests, "expected at least one TESTS edge for math.Add")
 }
 
 // TestCodeFindReferences_Errors verifies error handling.

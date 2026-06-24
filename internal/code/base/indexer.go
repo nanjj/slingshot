@@ -109,8 +109,20 @@ func (s *Store) IndexProject(root, name string, mode IndexMode) (*IndexResult, e
 		}
 		result.EdgesStored = len(allEdges)
 	}
+	// 5. Link tests — post-processing to create TESTS edges from test functions
+	//    to the functions they call.  Reuses existing CALLS edges from test files.
+	testEdges, linkErr := s.LinkTests(projectID, name)
+	if linkErr != nil {
+		result.Errors++
+	}
+	if len(testEdges) > 0 {
+		if err := s.SaveEdgesBatch(testEdges); err != nil {
+			return nil, fmt.Errorf("save test edges: %w", err)
+		}
+		result.EdgesStored += len(testEdges)
+	}
 
-	// 5. Mark project ready
+	// 6. Mark project ready
 	if err := s.SetProjectStatus(name, "ready"); err != nil {
 		return nil, fmt.Errorf("set project status: %w", err)
 	}

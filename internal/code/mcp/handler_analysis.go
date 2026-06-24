@@ -81,7 +81,7 @@ func (s *Server) handleCodeFindReferences(args codeFindReferencesArgs) *mcp.Call
 			continue
 		}
 
-		key := e.SourceQN + "->" + e.TargetQN
+		key := e.SourceQN + "->" + e.TargetQN + ":" + e.EdgeType
 		if seen[key] {
 			continue
 		}

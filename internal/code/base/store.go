@@ -44,8 +44,110 @@ func OpenStore(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+	// Run schema migrations
+	store := &Store{db: db, path: dbPath}
+	if err := store.migrateSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate schema: %w", err)
+	}
 
-	return &Store{db: db, path: dbPath}, nil
+	return store, nil
+}
+
+// ─── Schema Migration ─────────────────────────────────────────────────────────
+
+// migrateSchema handles schema changes that can't be done with CREATE IF NOT EXISTS.
+// It uses a schema_migrations table to track applied migrations.
+func (s *Store) migrateSchema() error {
+	// Create migrations tracking table
+	_, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version   INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create migrations table: %w", err)
+	}
+
+	// Migration 1: Add TESTS/TESTS_FILE to edges CHECK constraint
+	var hasV1 int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&hasV1)
+	if err != nil {
+		return fmt.Errorf("check migration v1: %w", err)
+	}
+	if hasV1 == 0 {
+		if err := s.migrateV1(); err != nil {
+			return fmt.Errorf("migrate v1: %w", err)
+		}
+		_, err = s.db.Exec("INSERT INTO schema_migrations (version) VALUES (1)")
+		if err != nil {
+			return fmt.Errorf("record migration v1: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// migrateV1 recreates the edges table to add TESTS and TESTS_FILE to the CHECK constraint.
+func (s *Store) migrateV1() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Create new edges table with updated CHECK constraint
+	_, err = tx.Exec(`
+		CREATE TABLE IF NOT EXISTS edges_v2 (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			source_qn   TEXT    NOT NULL,
+			target_qn   TEXT    NOT NULL,
+			edge_type   TEXT    NOT NULL CHECK(edge_type IN ('CALLS','IMPLEMENTS','CONTAINS','IMPORTS','REFERENCES','DATA_FLOWS','DEFINES','TESTS','TESTS_FILE')),
+			metadata    TEXT    DEFAULT '{}',
+			created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+			UNIQUE(project_id, source_qn, target_qn, edge_type)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create edges_v2: %w", err)
+	}
+
+	// Copy existing data
+	_, err = tx.Exec(`
+		INSERT OR IGNORE INTO edges_v2 (id, project_id, source_qn, target_qn, edge_type, metadata, created_at)
+		SELECT id, project_id, source_qn, target_qn, edge_type, metadata, created_at FROM edges
+	`)
+	if err != nil {
+		return fmt.Errorf("copy edges: %w", err)
+	}
+
+	// Drop old table and rename new one
+	_, err = tx.Exec("DROP TABLE edges")
+	if err != nil {
+		return fmt.Errorf("drop edges: %w", err)
+	}
+	_, err = tx.Exec("ALTER TABLE edges_v2 RENAME TO edges")
+	if err != nil {
+		return fmt.Errorf("rename edges_v2: %w", err)
+	}
+
+	// Recreate indexes
+	_, err = tx.Exec("CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(project_id, source_qn)")
+	if err != nil {
+		return fmt.Errorf("create idx_edges_source: %w", err)
+	}
+	_, err = tx.Exec("CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(project_id, target_qn)")
+	if err != nil {
+		return fmt.Errorf("create idx_edges_target: %w", err)
+	}
+	_, err = tx.Exec("CREATE INDEX IF NOT EXISTS idx_edges_type ON edges(project_id, edge_type)")
+	if err != nil {
+		return fmt.Errorf("create idx_edges_type: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // Close closes the database connection.

@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS edges (
     project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     source_qn   TEXT    NOT NULL,
     target_qn   TEXT    NOT NULL,
-    edge_type   TEXT    NOT NULL CHECK(edge_type IN ('CALLS','IMPLEMENTS','CONTAINS','IMPORTS','REFERENCES','DATA_FLOWS','DEFINES')),
+    edge_type   TEXT    NOT NULL CHECK(edge_type IN ('CALLS','IMPLEMENTS','CONTAINS','IMPORTS','REFERENCES','DATA_FLOWS','DEFINES','TESTS','TESTS_FILE')),
     metadata    TEXT    DEFAULT '{}',
     created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(project_id, source_qn, target_qn, edge_type)
