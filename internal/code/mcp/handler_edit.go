@@ -8,7 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nanjj/slingshot/internal/editor"
+	"github.com/nanjj/slingshot/internal/code/editor"
 )
 
 // ─── Argument structs ──────────────────────────────────────────────────────────

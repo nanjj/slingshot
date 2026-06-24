@@ -43,6 +43,7 @@ func (d *Document) applyEdit(inputEdit gotreesitter.InputEdit, newSource []byte)
 
 	return nil
 }
+
 // applyEdits 批量应用多个 InputEdit（来自 Rewriter.Apply）。
 func (d *Document) applyEdits(edits []gotreesitter.InputEdit, newSource []byte) error {
 	// 应用所有 InputEdit 到旧树

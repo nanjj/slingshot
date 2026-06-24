@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -195,4 +196,20 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 	// 8. Wait for shutdown
 	logger.Info("code MCP server started")
 	return session.Wait()
+}
+
+// parseLogLevel converts a log level string to slog.Level.
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelWarn
+	}
 }

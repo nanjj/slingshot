@@ -398,7 +398,6 @@ func (ed *Editor) GetSource(uri string) (string, error) {
 	return string(doc.source), nil
 }
 
-
 // GetLine 获取指定行。
 func (ed *Editor) GetLine(uri string, line uint32) (string, error) {
 	doc, err := ed.getOrOpenDocument(uri)
@@ -434,9 +433,10 @@ func (ed *Editor) GetLine(uri string, line uint32) (string, error) {
 	return string(lineBytes), nil
 }
 
-// ─── 写入操作（原 Edit 方法） ───
+// ─── 写入操作 ───
 
 // Insert 在指定字节偏移位置插入文本。
+// 编辑后立即原子写入磁盘（write-through 语义）。
 func (ed *Editor) Insert(uri string, pos uint32, text string) (*EditResult, error) {
 	doc, err := ed.getOrOpenDocument(uri)
 	if err != nil {
@@ -802,9 +802,13 @@ func checkFileExists(path string) (os.FileInfo, bool) {
 	}
 	return info, true
 }
+
 // saveAfterEdit 在编辑操作后自动保存文件（假设文档已锁定）。
 // scratch 文档（无文件路径）静默跳过。
 // 如果保存失败，将 dirty 标记为 true 并记录警告。
+//
+// 这是 write-through 语义的核心：每次编辑后即时将内容写入磁盘，
+// 确保 AI 编辑操作的结果即时持久化。
 func (ed *Editor) saveAfterEdit(doc *Document) {
 	if doc.origFilePath == "" {
 		return // scratch 文档无文件可写

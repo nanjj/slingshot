@@ -10,7 +10,7 @@ import (
 
 	"github.com/nanjj/slingshot/internal/code/base"
 	"github.com/nanjj/slingshot/internal/code/lsp"
-	"github.com/nanjj/slingshot/internal/editor"
+	"github.com/nanjj/slingshot/internal/code/editor"
 )
 
 // Server manages MCP tool handlers for code intelligence.
