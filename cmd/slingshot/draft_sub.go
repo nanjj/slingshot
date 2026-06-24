@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/fatih/color"
+	"github.com/nanjj/clog"
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	u "github.com/nanjj/slingshot/internal/usage"
 	"github.com/spf13/cobra"
@@ -32,7 +33,16 @@ func (s *cmdDraftSub) command() *cobra.Command {
 	return cmd
 }
 
-func (s *cmdDraftSub) run(cmd *cobra.Command, args []string) error {
+func (s *cmdDraftSub) run(cmd *cobra.Command, args []string) (err error) {
+	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_"+s.name)
+	defer func() {
+		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
+		}
+		span.Finish()
+	}()
+	span.LogKV("event", "draft_"+s.name)
+
 	parsed, err := s.global.Parse(s.usage, cmd, args)
 	if err != nil {
 		return err

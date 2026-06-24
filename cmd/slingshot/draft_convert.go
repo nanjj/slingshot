@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/nanjj/clog"
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
@@ -69,7 +70,15 @@ This command handles all common syntax:
 	return cmd
 }
 
-func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
+func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) (err error) {
+	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_convert")
+	defer func() {
+		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
+		}
+		span.Finish()
+	}()
+
 	parsed, err := c.global.Parse(draftConvertUsage, cmd, args)
 	if err != nil {
 		return err
@@ -77,6 +86,7 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 
 	// parsed[0] = File
 	file := parsed[0]
+	span.LogKV("event", "draft_convert", "file", file.String, "upload", c.upload)
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Converting %s to WeChat HTML...\n"), file.String)
 
@@ -112,6 +122,7 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Written to %s\n"), outPath)
+		span.LogKV("event", "draft_convert_result", "outPath", outPath, "upload", false)
 		return nil
 	}
 

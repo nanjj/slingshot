@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/fatih/color"
+	"github.com/nanjj/clog"
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/draft"
@@ -61,7 +62,15 @@ The --index flag specifies which article in a multi-article draft to update
 	return cmd
 }
 
-func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
+func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
+	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_update")
+	defer func() {
+		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
+		}
+		span.Finish()
+	}()
+
 	parsed, err := c.global.Parse(draftUpdateUsage, cmd, args)
 	if err != nil {
 		return err
@@ -69,6 +78,9 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if len(parsed) < 1 || parsed[0].Skipped {
 		return errors.New(i18n.G("expected <file> argument"))
 	}
+
+	file := parsed[0].String
+	span.LogKV("event", "draft_update", "file", file)
 
 	// Load config and get token early (needed for ID resolution)
 	cfg, _, err := config.Load()
@@ -82,7 +94,7 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 
 	// Resolve media_id and file path
 	var mediaID string
-	file := parsed[0].String
+	file = parsed[0].String
 
 	// Auto-convert .org/.md to .html if needed
 	file, err = ensureHTMLFile(cmd, file)
@@ -237,5 +249,6 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) error {
 	if err := writeSidecarYAML(file, meta); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
 	}
+	span.LogKV("event", "draft_update_result", "mediaID", mediaID)
 	return nil
 }
