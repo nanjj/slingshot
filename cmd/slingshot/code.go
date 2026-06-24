@@ -140,23 +140,23 @@ Flags:
 
 	return cmd
 }
+
 func (c *cmdCodeServe) run(ctx context.Context) error {
-	
 	opts := c.opts
 
-	// 1. Logger
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	// 1. Logger — text handler to stderr, gated by configured level.
+	// clog.Info/Warn/Error writes to slog.Default() AND to the active span,
+	// eliminating the need for separate span.LogKV calls.
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: parseLogLevel(opts.logLevel),
-	}))
-	slog.SetDefault(logger)
+	})))
 
-	// Log server initialization to the trace
-	if span := clog.SpanFromContext(ctx); span != nil {
-		span.LogKV("event", "code_serve_init",
-			"projectRoot", opts.projectRoot,
-			"dbPath", opts.dbPath,
-			"logLevel", opts.logLevel)
-	}
+	// Log server initialization to both span and stderr.
+	// At default log level "warn", clog.Info only writes to span (stderr filtered).
+	clog.Info(ctx, "code_serve_init",
+		"projectRoot", opts.projectRoot,
+		"dbPath", opts.dbPath,
+		"logLevel", opts.logLevel)
 
 	// 2. Ensure DB directory exists
 	dbDir := filepath.Dir(opts.dbPath)
@@ -167,15 +167,11 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 	// 3. Open store
 	store, err := base.OpenStore(opts.dbPath)
 	if err != nil {
-		if span := clog.SpanFromContext(ctx); span != nil {
-			span.LogKV("event", "open_store", "error", err.Error())
-		}
+		clog.Error(ctx, "open_store", "error", err.Error())
 		return fmt.Errorf("open store: %w", err)
 	}
 	defer store.Close()
-	if span := clog.SpanFromContext(ctx); span != nil {
-		span.LogKV("event", "open_store", "status", "ok", "dbPath", opts.dbPath)
-	}
+	clog.Info(ctx, "open_store", "status", "ok", "dbPath", opts.dbPath)
 
 	// 4. Create analyzer
 	analyzer := lsp.NewAnalyzer()
@@ -191,7 +187,7 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 		Name:    "slingshot-code",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Logger: logger,
+		Logger: slog.Default(),
 	})
 
 	// Register tracing middleware for cross-process span propagation.
@@ -200,28 +196,19 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 	// of the caller's spans in Jaeger.
 	srv.AddReceivingMiddleware(codemcp.TracingMiddleware)
 
-	// 6. Register all 27 tools
+	// 6. Register all tools
 	codeServer.RegisterAll(srv)
-	if span := clog.SpanFromContext(ctx); span != nil {
-		span.LogKV("event", "register_tools", "count", 27)
-	}
+	clog.Info(ctx, "register_tools", "count", 27)
 
 	// 7. Connect stdio transport
-	logger.Info("code MCP server starting",
-		"projectRoot", opts.projectRoot,
-		"dbPath", opts.dbPath,
-		"logLevel", opts.logLevel,
-	)
-	if span := clog.SpanFromContext(ctx); span != nil {
-		span.LogKV("event", "server_listening", "transport", "stdio")
-	}
+	clog.Info(ctx, "server_listening", "transport", "stdio")
 	session, err := srv.Connect(ctx, &mcp.StdioTransport{}, nil)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
 
 	// 8. Wait for shutdown
-	logger.Info("code MCP server started")
+	clog.Info(ctx, "server_started")
 	return session.Wait()
 }
 

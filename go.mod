@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/fatih/color v1.18.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/nanjj/clog v0.1.4
+	github.com/nanjj/clog v0.3.0
 	github.com/nanjj/i18n v0.1.1
 	github.com/odvcencio/gotreesitter v0.20.2
 	github.com/spf13/cobra v1.8.1
