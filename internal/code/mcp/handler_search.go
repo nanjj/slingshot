@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/nanjj/slingshot/internal/code/base"
 )
 
 // ─── Argument structs ──────────────────────────────────────────────────────────
@@ -349,7 +351,7 @@ func (s *Server) handleGetGraphSchema(args getGraphSchemaArgs) *mcp.CallToolResu
 func registerTracePath(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "trace_path",
-		Description: "Trace paths through the code graph. Modes: calls (callers/callees), data_flow (value propagation with args at each hop), cross_service (through HTTP/async Route nodes).",
+		Description: "Trace paths through the code graph. Modes: calls (callers/callees), data_flow (value propagation with args at each hop), cross_service (through HTTP/async Route nodes). Supports risk_labels (HIGH/MEDIUM/LOW by depth), include_tests (exclude test files by default).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args tracePathArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleTracePath(args), nil, nil
 	})
@@ -363,20 +365,20 @@ func (s *Server) handleTracePath(args tracePathArgs) *mcp.CallToolResult {
 		return errorResult(fmt.Errorf("project is required"))
 	}
 
-	direction := args.Direction
-	if direction == "" {
-		direction = "both"
+	req := base.TracePathRequest{
+		FunctionName:  args.FunctionName,
+		Project:       args.Project,
+		Direction:     args.Direction,
+		Depth:         args.Depth,
+		Mode:          args.Mode,
+		IncludeTests:  args.IncludeTests,
+		ParameterName: args.ParameterName,
+		RiskLabels:    args.RiskLabels,
 	}
 
-	depth := args.Depth
-	if depth <= 0 {
-		depth = 3
-	}
-
-	// Use TraceCallChain for call tracing
-	hops, err := s.store.TraceCallChain(args.FunctionName, args.Project, direction, depth)
+	hops, err := s.store.TracePath(req)
 	if err != nil {
-		return errorResult(fmt.Errorf("trace call chain: %w", err))
+		return errorResult(fmt.Errorf("trace path: %w", err))
 	}
 
 	return jsonResult(map[string]any{

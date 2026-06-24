@@ -96,105 +96,174 @@ func (s *Store) GetReferences(qn, project, direction string, depth int) ([]Edge,
 
 // TraceCallChain traces call chains between nodes using recursive CTE.
 // Returns a flat list of hops.
+//
+// Deprecated: use TracePath for full mode/risk/test support.
 func (s *Store) TraceCallChain(qn, project, direction string, depth int) ([]TraceHop, error) {
+	return s.TracePath(TracePathRequest{
+		FunctionName: qn,
+		Project:      project,
+		Direction:    direction,
+		Depth:        depth,
+		Mode:         "calls",
+	})
+}
+
+
+
+// TracePath traces code paths through the graph with support for multiple
+// modes (calls, data_flow, cross_service), risk labels, and test filtering.
+func (s *Store) TracePath(req TracePathRequest) ([]TraceHop, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if depth <= 0 {
-		depth = 3
+	if req.Depth <= 0 {
+		req.Depth = 3
 	}
-	if depth > 20 {
-		depth = 20 // safety limit
+	if req.Depth > 20 {
+		req.Depth = 20 // safety limit
 	}
+
+	direction := req.Direction
+	if direction == "" {
+		direction = "both"
+	}
+
+	mode := req.Mode
+	if mode == "" {
+		mode = "calls"
+	}
+
+	// Determine which edge types to follow based on mode
+	edgeTypes := "'CALLS'"
+	if mode == "cross_service" {
+		edgeTypes = "'CALLS', 'HTTP_CALLS'"
+	}
+
+	// Always select metadata so the scan is always 7 fixed columns
+	metadataCol := "COALESCE(e.metadata, '')"
 
 	var query string
 	var args []any
 
 	switch direction {
 	case "inbound":
-		args = []any{project, qn, project, depth}
+		args = []any{req.Project, req.FunctionName, req.Project, req.Depth}
 		query = `
-			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl) AS (
-				SELECT e.source_qn, e.target_qn, e.edge_type, 1
+			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl, metadata) AS (
+				SELECT e.source_qn, e.target_qn, e.edge_type, 1, ` + metadataCol + `
 				FROM edges e
 				JOIN projects p ON p.id = e.project_id
-				WHERE p.name = ? AND e.target_qn = ? AND e.edge_type = 'CALLS'
+				WHERE p.name = ? AND e.target_qn = ? AND e.edge_type IN (` + edgeTypes + `)
 				UNION ALL
-				SELECT e.source_qn, e.target_qn, e.edge_type, c.lvl + 1
+				SELECT e.source_qn, e.target_qn, e.edge_type, c.lvl + 1, ` + metadataCol + `
 				FROM edges e
 				JOIN chain c ON e.target_qn = c.source_qn
 				JOIN projects p ON p.id = e.project_id
-				WHERE p.name = ? AND e.edge_type = 'CALLS' AND c.lvl < ?
+				WHERE p.name = ? AND e.edge_type IN (` + edgeTypes + `) AND c.lvl < ?
 			)
 			SELECT c.source_qn, c.target_qn, c.edge_type, c.lvl,
-			       COALESCE(n.file_path, ''), COALESCE(n.line, 0)
+			       COALESCE(ns.file_path, ''), COALESCE(nt.file_path, ''),
+			       COALESCE(ns.line, 0), c.metadata
 			FROM chain c
-			LEFT JOIN nodes n ON n.qualified_name = c.source_qn
+			LEFT JOIN nodes ns ON ns.qualified_name = c.source_qn
+			LEFT JOIN nodes nt ON nt.qualified_name = c.target_qn
 			ORDER BY c.lvl, c.source_qn
 		`
 	case "outbound":
-		args = []any{project, qn, project, depth}
+		args = []any{req.Project, req.FunctionName, req.Project, req.Depth}
 		query = `
-			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl) AS (
-				SELECT e.source_qn, e.target_qn, e.edge_type, 1
+			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl, metadata) AS (
+				SELECT e.source_qn, e.target_qn, e.edge_type, 1, ` + metadataCol + `
 				FROM edges e
 				JOIN projects p ON p.id = e.project_id
-				WHERE p.name = ? AND e.source_qn = ? AND e.edge_type = 'CALLS'
+				WHERE p.name = ? AND e.source_qn = ? AND e.edge_type IN (` + edgeTypes + `)
 				UNION ALL
-				SELECT e.source_qn, e.target_qn, e.edge_type, c.lvl + 1
+				SELECT e.source_qn, e.target_qn, e.edge_type, c.lvl + 1, ` + metadataCol + `
 				FROM edges e
 				JOIN chain c ON e.source_qn = c.target_qn
 				JOIN projects p ON p.id = e.project_id
-				WHERE p.name = ? AND e.edge_type = 'CALLS' AND c.lvl < ?
+				WHERE p.name = ? AND e.edge_type IN (` + edgeTypes + `) AND c.lvl < ?
 			)
 			SELECT c.source_qn, c.target_qn, c.edge_type, c.lvl,
-			       COALESCE(n.file_path, ''), COALESCE(n.line, 0)
+			       COALESCE(ns.file_path, ''), COALESCE(nt.file_path, ''),
+			       COALESCE(ns.line, 0), c.metadata
 			FROM chain c
-			LEFT JOIN nodes n ON n.qualified_name = c.source_qn
+			LEFT JOIN nodes ns ON ns.qualified_name = c.source_qn
+			LEFT JOIN nodes nt ON nt.qualified_name = c.target_qn
 			ORDER BY c.lvl, c.source_qn
 		`
 	default: // both
-		args = []any{project, qn, qn, project, depth}
+		args = []any{req.Project, req.FunctionName, req.FunctionName, req.Project, req.Depth}
 		query = `
-			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl) AS (
-				SELECT e.source_qn, e.target_qn, e.edge_type, 1
+			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl, metadata) AS (
+				SELECT e.source_qn, e.target_qn, e.edge_type, 1, ` + metadataCol + `
 				FROM edges e
 				JOIN projects p ON p.id = e.project_id
-				WHERE p.name = ? AND (e.source_qn = ? OR e.target_qn = ?) AND e.edge_type = 'CALLS'
+				WHERE p.name = ? AND (e.source_qn = ? OR e.target_qn = ?) AND e.edge_type IN (` + edgeTypes + `)
 				UNION ALL
-				SELECT e.source_qn, e.target_qn, e.edge_type, c.lvl + 1
+				SELECT e.source_qn, e.target_qn, e.edge_type, c.lvl + 1, ` + metadataCol + `
 				FROM edges e
 				JOIN chain c ON (e.source_qn = c.target_qn OR e.target_qn = c.source_qn)
 				JOIN projects p ON p.id = e.project_id
-				WHERE p.name = ? AND e.edge_type = 'CALLS' AND c.lvl < ?
+				WHERE p.name = ? AND e.edge_type IN (` + edgeTypes + `) AND c.lvl < ?
 			)
 			SELECT c.source_qn, c.target_qn, c.edge_type, c.lvl,
-			       COALESCE(n.file_path, ''), COALESCE(n.line, 0)
+			       COALESCE(ns.file_path, ''), COALESCE(nt.file_path, ''),
+			       COALESCE(ns.line, 0), c.metadata
 			FROM chain c
-			LEFT JOIN nodes n ON n.qualified_name = c.source_qn
+			LEFT JOIN nodes ns ON ns.qualified_name = c.source_qn
+			LEFT JOIN nodes nt ON nt.qualified_name = c.target_qn
 			ORDER BY c.lvl, c.source_qn
 		`
 	}
 
-
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("trace call chain: %w", err)
+		return nil, fmt.Errorf("trace path: %w", err)
 	}
 	defer rows.Close()
 
 	var hops []TraceHop
 	for rows.Next() {
 		var h TraceHop
-		if err := rows.Scan(&h.SourceQN, &h.TargetQN, &h.EdgeType, &h.Depth, &h.File, &h.Line); err != nil {
+		var srcFile, tgtFile string
+		var line uint32
+		var metadata string
+
+		// Scan order: source_qn, target_qn, edge_type, lvl, srcFile, tgtFile, line, metadata
+		if err := rows.Scan(&h.SourceQN, &h.TargetQN, &h.EdgeType, &h.Depth, &srcFile, &tgtFile, &line, &metadata); err != nil {
 			return nil, fmt.Errorf("scan hop: %w", err)
 		}
+		h.File = srcFile
+		h.Line = line
+
+		// In data_flow mode, metadata contains the call arguments
+		if mode == "data_flow" && metadata != "" {
+			h.Args = metadata
+		}
+
+		// Filter test files if not requested — check both source and target
+		if !req.IncludeTests && (isTestFile(srcFile) || isTestFile(tgtFile)) {
+			continue
+		}
+
+		// Add risk labels
+		if req.RiskLabels {
+			switch {
+			case h.Depth <= 2:
+				h.Risk = "HIGH"
+			case h.Depth <= 4:
+				h.Risk = "MEDIUM"
+			default:
+				h.Risk = "LOW"
+			}
+		}
+
 		hops = append(hops, h)
 	}
 	return hops, rows.Err()
 }
 
-// QueryGraph executes a raw SQL query against the graph tables.
 // Only SELECT queries are allowed for safety.
 func (s *Store) QueryGraph(cql string) ([]map[string]any, error) {
 	s.mu.RLock()

@@ -80,6 +80,22 @@ type TraceHop struct {
 	Depth    int    `json:"depth"`
 	File     string `json:"file,omitempty"`
 	Line     uint32 `json:"line,omitempty"`
+	Args     string `json:"args,omitempty"`     // call arguments (data_flow mode)
+	Method   string `json:"method,omitempty"`   // HTTP method (cross_service mode)
+	URLPath  string `json:"urlPath,omitempty"`  // URL path (cross_service mode)
+	Risk     string `json:"risk,omitempty"`     // risk label (risk_labels mode)
+}
+
+// TracePathRequest encapsulates all parameters for TracePath.
+type TracePathRequest struct {
+	FunctionName  string
+	Project       string
+	Direction     string // inbound, outbound, both
+	Depth         int
+	Mode          string // calls, data_flow, cross_service
+	IncludeTests  bool
+	ParameterName string // scope data_flow to a specific parameter
+	RiskLabels    bool
 }
 
 // ADR represents an Architecture Decision Record.
