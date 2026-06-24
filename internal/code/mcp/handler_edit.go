@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nanjj/clog"
 	"github.com/nanjj/slingshot/internal/code/edit"
 )
 
@@ -25,7 +26,7 @@ type codeEditArgs struct {
 	EndByte   uint32              `json:"endByte,omitempty"`   // End byte for range replace/delete
 	Row       uint32              `json:"row,omitempty"`       // Row for point insert
 	Col       uint32              `json:"col,omitempty"`       // Column for point insert
-	Selector  edit.NodeSelector `json:"selector,omitempty"`  // Node selector for before/after/node target
+	Selector  edit.NodeSelector   `json:"selector,omitempty"`  // Node selector for before/after/node target
 }
 
 // codeEditBodyArgs is the argument struct for code_edit_body (semantic node replacement).
@@ -48,11 +49,15 @@ func registerCodeEdit(srv *mcp.Server, s *Server) {
 		Name:        "code_edit",
 		Description: "Edit a file with write-through semantics. Modes: insert (pos/point/before/after), replace (range/node), delete (range/node). Opens the file with tree-sitter incremental parsing, applies the edit, and saves to disk atomically. The document is cached for subsequent edits.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeEditArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleCodeEdit(args), nil, nil
+		return s.handleCodeEdit(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleCodeEdit(args codeEditArgs) *mcp.CallToolResult {
+func (s *Server) handleCodeEdit(ctx context.Context, args codeEditArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "code_edit")
+	defer span.Finish()
+	span.LogKV("event", "code_edit", "file", args.File, "mode", args.Mode)
+
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
 	}
@@ -156,11 +161,15 @@ func registerCodeEditBody(srv *mcp.Server, s *Server) {
 		Name:        "code_edit_body",
 		Description: "Replace the body of a definition identified by a semantic selector. Selector format: 'function:name', 'method:name', 'struct:name', 'class:name', 'interface:name'. Opens the file, locates the definition, replaces its content, and saves to disk atomically.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeEditBodyArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleCodeEditBody(args), nil, nil
+		return s.handleCodeEditBody(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleCodeEditBody(args codeEditBodyArgs) *mcp.CallToolResult {
+func (s *Server) handleCodeEditBody(ctx context.Context, args codeEditBodyArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "code_edit_body")
+	defer span.Finish()
+	span.LogKV("event", "code_edit_body", "file", args.File, "selector", args.Selector)
+
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
 	}
@@ -182,6 +191,7 @@ func (s *Server) handleCodeEditBody(args codeEditBodyArgs) *mcp.CallToolResult {
 	// Locate the definition via semantic selector
 	tag, err := s.ed.LocateDef(filePath, args.Selector)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("locate definition: %w", err))
 	}
 	if tag == nil {
@@ -191,6 +201,7 @@ func (s *Server) handleCodeEditBody(args codeEditBodyArgs) *mcp.CallToolResult {
 	// Replace the definition body
 	result, err := s.ed.Replace(filePath, tag.StartByte, tag.EndByte, args.Text)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("replace definition: %w", err))
 	}
 	return jsonResult(editResultToResponse(result))
@@ -203,11 +214,15 @@ func registerCodeLocate(srv *mcp.Server, s *Server) {
 		Name:        "code_locate",
 		Description: "Locate a symbol definition by qualified name. First searches the SQLite code graph for the symbol's file, line, and column. Falls back to tree-sitter definition search in the specified file when the symbol is not indexed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeLocateArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleCodeLocate(args), nil, nil
+		return s.handleCodeLocate(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleCodeLocate(args codeLocateArgs) *mcp.CallToolResult {
+func (s *Server) handleCodeLocate(ctx context.Context, args codeLocateArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "code_locate")
+	defer span.Finish()
+	span.LogKV("event", "code_locate", "qualifiedName", args.QualifiedName, "project", args.Project)
+
 	if args.QualifiedName == "" {
 		return errorResult(fmt.Errorf("qualifiedName is required"))
 	}
@@ -216,6 +231,7 @@ func (s *Server) handleCodeLocate(args codeLocateArgs) *mcp.CallToolResult {
 	if args.Project != "" {
 		node, err := s.store.GetNodeByQN(args.QualifiedName, args.Project)
 		if err == nil {
+			span.LogKV("event", "code_locate_result", "source", "sqlite", "file", node.FilePath)
 			return jsonResult(map[string]any{
 				"found":         true,
 				"source":        "sqlite",
@@ -289,6 +305,7 @@ func (s *Server) handleCodeLocate(args codeLocateArgs) *mcp.CallToolResult {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
 // editResultToResponse converts edit.EditResult to a friendly JSON map.
 func editResultToResponse(er *edit.EditResult) map[string]any {
 	if er == nil {
