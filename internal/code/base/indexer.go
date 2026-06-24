@@ -148,11 +148,11 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		if n.Kind == "function" || n.Kind == "method" {
 			bodyNode := findFunctionBody(tree.RootNode(), tag.Range, lang)
 			if bodyNode != nil {
-				n.Complexity = cyclomaticComplexity(bodyNode, lang)
+				n.Complexity = cyclomaticComplexity(bodyNode, lang, source)
 				n.Cognitive = cognitiveComplexity(bodyNode, lang, 0)
 				n.LoopDepth = maxLoopDepth(bodyNode, lang, 0)
 				n.LoopCount = countLoops(bodyNode, lang)
-				n.Recursive = isRecursive(bodyNode, tag.Name, lang)
+				n.Recursive = isRecursive(bodyNode, tag.Name, lang, source)
 				n.ParamCount = countParams(bodyNode, tag.Kind, lang)
 			}
 		}
@@ -166,7 +166,7 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		if tag.Kind == "definition.function" || tag.Kind == "definition.method" {
 			bodyNode := findFunctionBody(tree.RootNode(), tag.Range, lang)
 			if bodyNode != nil {
-				calls := extractCalls(bodyNode, lang)
+				calls := extractCalls(bodyNode, lang, source)
 				for _, callee := range calls {
 					edges = append(edges, Edge{
 						ProjectID: projectID,
@@ -283,16 +283,16 @@ func isBodyNode(typ string) bool {
 
 // cyclomaticComplexity counts branching constructs in a node.
 // Base = 1, plus: if/else/for/while/switch/case/&&/||/catch/ternary.
-func cyclomaticComplexity(node *gotreesitter.Node, lang *gotreesitter.Language) int {
+func cyclomaticComplexity(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) int {
 	if node == nil {
 		return 1
 	}
 	count := 1
-	collectCyclomatic(node, lang, &count)
+	collectCyclomatic(node, lang, source, &count)
 	return count
 }
 
-func collectCyclomatic(node *gotreesitter.Node, lang *gotreesitter.Language, count *int) {
+func collectCyclomatic(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, count *int) {
 	if node == nil {
 		return
 	}
@@ -304,14 +304,14 @@ func collectCyclomatic(node *gotreesitter.Node, lang *gotreesitter.Language, cou
 		*count++
 	case "binary_expression":
 		// Check for && and || operators
-		op := nodeText(node, lang, nil) // simplified
+		op := nodeText(node, lang, source) // simplified
 		if strings.Contains(op, "&&") || strings.Contains(op, "||") {
 			*count++
 		}
 	}
 
 	for i := 0; i < int(node.ChildCount()); i++ {
-		collectCyclomatic(node.Child(i), lang, count)
+		collectCyclomatic(node.Child(i), lang, source, count)
 	}
 }
 
@@ -334,12 +334,16 @@ func collectCognitive(node *gotreesitter.Node, lang *gotreesitter.Language, nest
 	case "if_statement", "else_clause", "for_statement", "while_statement",
 		"do_statement", "catch_clause":
 		*sum += 1 + nesting
-		collectCognitive(node, lang, nesting+1, sum)
+		for i := 0; i < int(node.ChildCount()); i++ {
+			collectCognitive(node.Child(i), lang, nesting+1, sum)
+		}
 		return
 	case "switch_statement", "case_statement", "case":
 		*sum += 1 + nesting
 		// Cases don't increment nesting for their children
-		collectCognitive(node, lang, nesting, sum)
+		for i := 0; i < int(node.ChildCount()); i++ {
+			collectCognitive(node.Child(i), lang, nesting, sum)
+		}
 		return
 	case "conditional_expression", "ternary_expression":
 		*sum += 1 + nesting
@@ -397,22 +401,22 @@ func collectLoops(node *gotreesitter.Node, lang *gotreesitter.Language, count *i
 }
 
 // isRecursive checks if a function body contains a call to itself.
-func isRecursive(body *gotreesitter.Node, name string, lang *gotreesitter.Language) bool {
+func isRecursive(body *gotreesitter.Node, name string, lang *gotreesitter.Language, source []byte) bool {
 	if body == nil {
 		return false
 	}
 	found := false
-	checkRecursive(body, name, lang, &found)
+	checkRecursive(body, name, lang, source, &found)
 	return found
 }
 
-func checkRecursive(node *gotreesitter.Node, name string, lang *gotreesitter.Language, found *bool) {
+func checkRecursive(node *gotreesitter.Node, name string, lang *gotreesitter.Language, source []byte, found *bool) {
 	if *found || node == nil {
 		return
 	}
 	// This is a simplified check — we look for identifier nodes matching the name
 	// within what appears to be a call context
-	if node.Type(lang) == "identifier" && nodeText(node, lang, nil) == name {
+	if node.Type(lang) == "identifier" && nodeText(node, lang, source) == name {
 		parent := node.Parent()
 		if parent != nil && parent.Type(lang) == "call_expression" {
 			*found = true
@@ -420,17 +424,21 @@ func checkRecursive(node *gotreesitter.Node, name string, lang *gotreesitter.Lan
 		}
 	}
 	// Also check method calls like this.foo()
-	if node.Type(lang) == "method" || node.Type(lang) == "property_identifier" {
-		if nodeText(node, lang, nil) == name {
-			parent := node.Parent()
-			if parent != nil && parent.Type(lang) == "call_expression" {
+	if node.Type(lang) == "method" || node.Type(lang) == "property_identifier" || node.Type(lang) == "field_identifier" {
+		if nodeText(node, lang, source) == name {
+			p := node.Parent()
+			// In Go, r.self() has selector_expression between field_identifier and call_expression
+			if p != nil && p.Type(lang) == "selector_expression" {
+				p = p.Parent()
+			}
+			if p != nil && p.Type(lang) == "call_expression" {
 				*found = true
 				return
 			}
 		}
 	}
 	for i := 0; i < int(node.ChildCount()); i++ {
-		checkRecursive(node.Child(i), name, lang, found)
+		checkRecursive(node.Child(i), name, lang, source, found)
 	}
 }
 
@@ -450,8 +458,27 @@ func countParams(body *gotreesitter.Node, kind string, lang *gotreesitter.Langua
 			// Find parameters node
 			for i := 0; i < int(parent.ChildCount()); i++ {
 				child := parent.Child(i)
-				if child != nil && child.Type(lang) == "parameters" {
-					return int(child.NamedChildCount())
+			if child != nil && (child.Type(lang) == "parameters" || child.Type(lang) == "parameter_list") {
+					// Count parameter_declaration children; each may contain multiple
+					// identifiers (e.g. "a, b int" in Go is a single declaration).
+					params := 0
+					for j := 0; j < int(child.ChildCount()); j++ {
+						gc := child.Child(j)
+						if gc != nil && gc.Type(lang) == "parameter_declaration" {
+							idCount := 0
+							for k := 0; k < int(gc.ChildCount()); k++ {
+								if gc.Child(k) != nil && gc.Child(k).Type(lang) == "identifier" {
+									idCount++
+								}
+							}
+							if idCount > 0 {
+								params += idCount
+							} else {
+								params++ // at least one parameter
+							}
+						}
+					}
+					return params
 				}
 			}
 		}
@@ -463,13 +490,13 @@ func countParams(body *gotreesitter.Node, kind string, lang *gotreesitter.Langua
 // ─── Call Extraction ──────────────────────────────────────────────────────────
 
 // extractCalls extracts function call names from a node subtree.
-func extractCalls(node *gotreesitter.Node, lang *gotreesitter.Language) []string {
+func extractCalls(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) []string {
 	var calls []string
-	collectCalls(node, lang, &calls)
+	collectCalls(node, lang, source, &calls)
 	return calls
 }
 
-func collectCalls(node *gotreesitter.Node, lang *gotreesitter.Language, calls *[]string) {
+func collectCalls(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, calls *[]string) {
 	if node == nil {
 		return
 	}
@@ -480,7 +507,7 @@ func collectCalls(node *gotreesitter.Node, lang *gotreesitter.Language, calls *[
 		if node.ChildCount() > 0 {
 			fnNode := node.Child(0)
 			if fnNode != nil {
-				fnName := nodeText(fnNode, lang, nil)
+			fnName := nodeText(fnNode, lang, source)
 				if fnName != "" && !isBuiltinOrKeyword(fnName) {
 					*calls = append(*calls, fnName)
 				}
@@ -489,7 +516,7 @@ func collectCalls(node *gotreesitter.Node, lang *gotreesitter.Language, calls *[
 	}
 
 	for i := 0; i < int(node.ChildCount()); i++ {
-		collectCalls(node.Child(i), lang, calls)
+		collectCalls(node.Child(i), lang, source, calls)
 	}
 }
 
