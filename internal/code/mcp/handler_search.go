@@ -10,6 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nanjj/clog"
 	"github.com/nanjj/slingshot/internal/code/base"
 )
 
@@ -72,11 +73,15 @@ func registerSearchGraph(srv *mcp.Server, s *Server) {
 		Name:        "search_graph",
 		Description: "Search the code knowledge graph for functions, classes, routes, and variables. Three search modes: (1) query for BM25 ranked full-text search with camelCase splitting — Function/Method/Route nodes are boosted; (2) namePattern for exact pattern matching; (3) semanticQuery for vector cosine search. Supports pagination: use limit/offset, response includes total (full count) and has_more flag.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchGraphArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleSearchGraph(args), nil, nil
+		return s.handleSearchGraph(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
+func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "search_graph")
+	defer span.Finish()
+	span.LogKV("event", "search_graph_start", "project", args.Project, "query", args.Query, "namePattern", args.NamePattern)
+
 	project := args.Project
 	if project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -91,9 +96,11 @@ func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
 	if args.Query != "" {
 		nodes, total, err := s.store.SearchNodes(args.Query, project, args.PathFilter, limit, args.Offset)
 		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
 			return errorResult(fmt.Errorf("search nodes: %w", err))
 		}
 		hasMore := args.Offset+len(nodes) < total
+		span.LogKV("event", "search_graph_result", "mode", "bm25", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
 			"results":  nodes,
 			"total":    total,
@@ -106,9 +113,11 @@ func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
 	if args.NamePattern != "" {
 		nodes, total, err := s.store.FindSymbols(args.NamePattern, project, args.Kind, limit, args.Offset)
 		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
 			return errorResult(fmt.Errorf("find symbols: %w", err))
 		}
 		hasMore := args.Offset+len(nodes) < total
+		span.LogKV("event", "search_graph_result", "mode", "namePattern", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
 			"results":  nodes,
 			"total":    total,
@@ -122,9 +131,11 @@ func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
 		query := strings.Join(args.Semantic, " ")
 		nodes, total, err := s.store.SearchNodes(query, project, args.PathFilter, limit, args.Offset)
 		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
 			return errorResult(fmt.Errorf("semantic search: %w", err))
 		}
 		hasMore := args.Offset+len(nodes) < total
+		span.LogKV("event", "search_graph_result", "mode", "semantic", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
 			"results":     nodes,
 			"total":       total,
@@ -144,11 +155,15 @@ func registerGetArchitecture(srv *mcp.Server, s *Server) {
 		Name:        "get_architecture",
 		Description: "Get high-level architecture overview — packages, services, dependencies, and project structure at a glance. Includes Leiden community detection clusters over the call/import graph. Use `aspects` to select subsets: kindDistribution, edgeDistribution, hotspots, fileTree, packageDeps. Default (empty aspects) returns all.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getArchitectureArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleGetArchitecture(args), nil, nil
+		return s.handleGetArchitecture(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleGetArchitecture(args getArchitectureArgs) *mcp.CallToolResult {
+func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitectureArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "get_architecture")
+	defer span.Finish()
+	span.LogKV("event", "get_architecture", "project", args.Project)
+
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
@@ -156,6 +171,7 @@ func (s *Server) handleGetArchitecture(args getArchitectureArgs) *mcp.CallToolRe
 	// Query project info
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 
@@ -164,7 +180,6 @@ func (s *Server) handleGetArchitecture(args getArchitectureArgs) *mcp.CallToolRe
 	}
 
 	// Determine which aspects to include.
-	// If no aspects specified, return all for backward compatibility.
 	include := func(name string) bool {
 		if len(args.Aspects) == 0 {
 			return true
@@ -228,6 +243,7 @@ func (s *Server) handleGetArchitecture(args getArchitectureArgs) *mcp.CallToolRe
 		}
 	}
 
+	span.LogKV("event", "get_architecture_result", "aspects", len(result))
 	return jsonResult(result)
 }
 
@@ -238,11 +254,15 @@ func registerGetCodeSnippet(srv *mcp.Server, s *Server) {
 		Name:        "get_code_snippet",
 		Description: "Read source code for a function/class/symbol. Accepts full qualified_name or short function name (returns suggestions if ambiguous).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getCodeSnippetArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleGetCodeSnippet(args), nil, nil
+		return s.handleGetCodeSnippet(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleGetCodeSnippet(args getCodeSnippetArgs) *mcp.CallToolResult {
+func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "get_code_snippet")
+	defer span.Finish()
+	span.LogKV("event", "get_code_snippet", "qualifiedName", args.QualifiedName, "project", args.Project)
+
 	if args.QualifiedName == "" {
 		return errorResult(fmt.Errorf("qualifiedName is required"))
 	}
@@ -252,6 +272,7 @@ func (s *Server) handleGetCodeSnippet(args getCodeSnippetArgs) *mcp.CallToolResu
 
 	node, err := s.store.GetNodeByQN(args.QualifiedName, args.Project)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get node: %w", err))
 	}
 
@@ -268,6 +289,7 @@ func (s *Server) handleGetCodeSnippet(args getCodeSnippetArgs) *mcp.CallToolResu
 		}
 	}
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("read source file %q: %w", filePath, err))
 	}
 
@@ -299,6 +321,7 @@ func (s *Server) handleGetCodeSnippet(args getCodeSnippetArgs) *mcp.CallToolResu
 		result["neighbors"] = edges
 	}
 
+	span.LogKV("event", "get_code_snippet_result", "file", filePath, "lines", endLine-startLine+1)
 	return jsonResult(result)
 }
 
@@ -309,11 +332,15 @@ func registerGetGraphSchema(srv *mcp.Server, s *Server) {
 		Name:        "get_graph_schema",
 		Description: "Get the schema of the knowledge graph — node labels, edge types, and their properties.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getGraphSchemaArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleGetGraphSchema(args), nil, nil
+		return s.handleGetGraphSchema(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleGetGraphSchema(args getGraphSchemaArgs) *mcp.CallToolResult {
+func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "get_graph_schema")
+	defer span.Finish()
+	span.LogKV("event", "get_graph_schema", "project", args.Project)
+
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
@@ -330,6 +357,7 @@ func (s *Server) handleGetGraphSchema(args getGraphSchemaArgs) *mcp.CallToolResu
 
 	kinds, err := s.store.QueryGraph(kindQuery)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("query kinds: %w", err))
 	}
 
@@ -345,9 +373,11 @@ func (s *Server) handleGetGraphSchema(args getGraphSchemaArgs) *mcp.CallToolResu
 
 	edgeTypes, err := s.store.QueryGraph(edgeQuery)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("query edge types: %w", err))
 	}
 
+	span.LogKV("event", "get_graph_schema_result", "nodeLabels", len(kinds), "edgeTypes", len(edgeTypes))
 	return jsonResult(map[string]any{
 		"nodeLabels": kinds,
 		"edgeTypes":  edgeTypes,
@@ -361,11 +391,15 @@ func registerTracePath(srv *mcp.Server, s *Server) {
 		Name:        "trace_path",
 		Description: "Trace paths through the code graph. Modes: calls (callers/callees), data_flow (value propagation with args at each hop), cross_service (through HTTP/async Route nodes). Supports risk_labels (HIGH/MEDIUM/LOW by depth), include_tests (exclude test files by default).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args tracePathArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleTracePath(args), nil, nil
+		return s.handleTracePath(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleTracePath(args tracePathArgs) *mcp.CallToolResult {
+func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "trace_path")
+	defer span.Finish()
+	span.LogKV("event", "trace_path", "functionName", args.FunctionName, "project", args.Project, "direction", args.Direction)
+
 	if args.FunctionName == "" {
 		return errorResult(fmt.Errorf("functionName is required"))
 	}
@@ -422,9 +456,11 @@ func (s *Server) handleTracePath(args tracePathArgs) *mcp.CallToolResult {
 	}
 
 	if len(hops) == 0 && lastErr != nil {
+		span.LogKV("event", "error", "error", lastErr.Error())
 		return errorResult(fmt.Errorf("trace path: %w", lastErr))
 	}
 
+	span.LogKV("event", "trace_path_result", "resolvedQN", resolvedQN, "hops", len(hops))
 	return jsonResult(map[string]any{
 		"hops":       hops,
 		"total":      len(hops),
@@ -440,17 +476,22 @@ func registerDetectChanges(srv *mcp.Server, s *Server) {
 		Name:        "detect_changes",
 		Description: "Detect code changes and their impact. Supports git diff-based change detection with configurable scope and depth. Scope 'impact' also returns impacted symbols via graph propagation.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args detectChangesArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleDetectChanges(args), nil, nil
+		return s.handleDetectChanges(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleDetectChanges(args detectChangesArgs) *mcp.CallToolResult {
+func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "detect_changes")
+	defer span.Finish()
+	span.LogKV("event", "detect_changes", "project", args.Project, "baseBranch", args.BaseBranch, "scope", args.Scope)
+
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
 
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 
@@ -473,6 +514,7 @@ func (s *Server) handleDetectChanges(args detectChangesArgs) *mcp.CallToolResult
 	// Run git diff --name-status to get changed files
 	changedFiles, err := gitDiffNameStatus(rootDir, baseBranch)
 	if err != nil {
+		span.LogKV("event", "git_diff_error", "error", err.Error())
 		return jsonResult(map[string]any{
 			"project":    args.Project,
 			"baseBranch": baseBranch,
@@ -515,6 +557,7 @@ func (s *Server) handleDetectChanges(args detectChangesArgs) *mcp.CallToolResult
 		}
 	}
 
+	span.LogKV("event", "detect_changes_result", "changedFiles", len(changedFiles))
 	return jsonResult(result)
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nanjj/clog"
 	"github.com/fatih/color"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
@@ -139,8 +140,8 @@ Flags:
 
 	return cmd
 }
-
 func (c *cmdCodeServe) run(ctx context.Context) error {
+	
 	opts := c.opts
 
 	// 1. Logger
@@ -148,6 +149,14 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 		Level: parseLogLevel(opts.logLevel),
 	}))
 	slog.SetDefault(logger)
+
+	// Log server initialization to the trace
+	if span := clog.SpanFromContext(ctx); span != nil {
+		span.LogKV("event", "code_serve_init",
+			"projectRoot", opts.projectRoot,
+			"dbPath", opts.dbPath,
+			"logLevel", opts.logLevel)
+	}
 
 	// 2. Ensure DB directory exists
 	dbDir := filepath.Dir(opts.dbPath)
@@ -158,9 +167,15 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 	// 3. Open store
 	store, err := base.OpenStore(opts.dbPath)
 	if err != nil {
+		if span := clog.SpanFromContext(ctx); span != nil {
+			span.LogKV("event", "open_store", "error", err.Error())
+		}
 		return fmt.Errorf("open store: %w", err)
 	}
 	defer store.Close()
+	if span := clog.SpanFromContext(ctx); span != nil {
+		span.LogKV("event", "open_store", "status", "ok", "dbPath", opts.dbPath)
+	}
 
 	// 4. Create analyzer
 	analyzer := lsp.NewAnalyzer()
@@ -179,8 +194,17 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 		Logger: logger,
 	})
 
-	// 6. Register all tools
+	// Register tracing middleware for cross-process span propagation.
+	// Extract W3C traceparent from the MCP request's _meta field (set by
+	// the MCP client, e.g. dscli) so that handler spans appear as children
+	// of the caller's spans in Jaeger.
+	srv.AddReceivingMiddleware(codemcp.TracingMiddleware)
+
+	// 6. Register all 27 tools
 	codeServer.RegisterAll(srv)
+	if span := clog.SpanFromContext(ctx); span != nil {
+		span.LogKV("event", "register_tools", "count", 27)
+	}
 
 	// 7. Connect stdio transport
 	logger.Info("code MCP server starting",
@@ -188,6 +212,9 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 		"dbPath", opts.dbPath,
 		"logLevel", opts.logLevel,
 	)
+	if span := clog.SpanFromContext(ctx); span != nil {
+		span.LogKV("event", "server_listening", "transport", "stdio")
+	}
 	session, err := srv.Connect(ctx, &mcp.StdioTransport{}, nil)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
