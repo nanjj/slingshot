@@ -1,3 +1,4 @@
+// Package base implements SQLite-backed code graph storage and project indexing.
 package base
 
 import (
@@ -116,7 +117,7 @@ func (s *Store) IndexProject(root, name string, mode IndexMode) (*IndexResult, e
 	return result, nil
 }
 
-// indexFile processes a single file: parse → extract symbols → compute metrics.
+// indexFile processes a single file: parse → extract metadata → build graph.
 func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, error) {
 	source, err := os.ReadFile(filePath)
 	if err != nil {
@@ -143,13 +144,44 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 	defer tree.Release()
 
 	relPath := toRelPath(filePath)
+	root := tree.RootNode()
+	baseName := filepath.Base(relPath)
 
-	// Extract definitions via Tagger API
-	tags := extractTags(tree, entry, lang)
+	// ── Extract file-level metadata ──
+	meta := extractFileMeta(root, lang, source)
 
+	// ── Build nodes ──
 	var nodes []Node
+
+	// 1. File node
+	fileQN := relPath
+	nodes = append(nodes, Node{
+		ProjectID:     projectID,
+		QualifiedName: fileQN,
+		Kind:          "file",
+		Name:          baseName,
+		FilePath:      relPath,
+	})
+
+	// 2. Package / Module node (if package name detected)
+	var packageQN string
+	if meta.packageName != "" {
+		packageQN = "package:" + meta.packageName
+		nodes = append(nodes, Node{
+			ProjectID:     projectID,
+			QualifiedName: packageQN,
+			Kind:          "package",
+			Name:          meta.packageName,
+			FilePath:      relPath,
+		})
+	}
+
+	// 3. Extract definitions via Tagger API
+	tags := extractTags(tree, entry, lang)
+	var defQNs []string
 	for _, tag := range tags {
-		qn := tag.Name // short name; qualified name can be extended later
+		qn := tag.Name
+		defQNs = append(defQNs, qn)
 		n := Node{
 			ProjectID:     projectID,
 			QualifiedName: qn,
@@ -164,7 +196,7 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 
 		// Compute complexity for functions/methods
 		if n.Kind == "function" || n.Kind == "method" {
-			bodyNode := findFunctionBody(tree.RootNode(), tag.Range, lang)
+			bodyNode := findFunctionBody(root, tag.Range, lang)
 			if bodyNode != nil {
 				n.Complexity = cyclomaticComplexity(bodyNode, lang, source)
 				n.Cognitive = cognitiveComplexity(bodyNode, lang, 0)
@@ -179,11 +211,66 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		nodes = append(nodes, n)
 	}
 
-	// Extract edges: call relationships
+	// ── Build edges ──
 	var edges []Edge
+
+	// 1. DEFINES edges: file → each definition in this file
+	for _, defQN := range defQNs {
+		edges = append(edges, Edge{
+			ProjectID: projectID,
+			SourceQN:  fileQN,
+			TargetQN:  defQN,
+			EdgeType:  "DEFINES",
+		})
+	}
+
+	// 2. CONTAINS edges: package → file
+	if packageQN != "" {
+		edges = append(edges, Edge{
+			ProjectID: projectID,
+			SourceQN:  packageQN,
+			TargetQN:  fileQN,
+			EdgeType:  "CONTAINS",
+		})
+	}
+
+	// 3. IMPORTS edges: file → imported package (using import path as QN)
+	for _, imp := range meta.importPaths {
+		impQN := "import:" + imp
+		edges = append(edges, Edge{
+			ProjectID: projectID,
+			SourceQN:  fileQN,
+			TargetQN:  impQN,
+			EdgeType:  "IMPORTS",
+		})
+	}
+
+	// 4. INHERITS edges: struct → embedded type, class → superclass
+	for childType, parentTypes := range meta.inherits {
+		for _, parentType := range parentTypes {
+			edges = append(edges, Edge{
+				ProjectID: projectID,
+				SourceQN:  childType,
+				TargetQN:  parentType,
+				EdgeType:  "IMPLEMENTS",
+			})
+		}
+	}
+
+	// 5. CONTAINS edges from struct/class → method
+	for methodName, parentStruct := range meta.methodParents {
+		edges = append(edges, Edge{
+			ProjectID: projectID,
+			SourceQN:  parentStruct,
+			TargetQN:  methodName,
+			EdgeType:  "CONTAINS",
+		})
+	}
+
+	// 6. CALLS edges: extracted from function/method bodies
 	for _, tag := range tags {
 		if tag.Kind == "definition.function" || tag.Kind == "definition.method" {
-			bodyNode := findFunctionBody(tree.RootNode(), tag.Range, lang)
+			bodyNode := findFunctionBody(root, tag.Range, lang)
 			if bodyNode != nil {
 				calls := extractCalls(bodyNode, lang, source)
 				for _, callee := range calls {
@@ -199,6 +286,321 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 	}
 
 	return nodes, edges, nil
+}
+
+// ─── File Metadata Extraction ─────────────────────────────────────────────────
+
+// fileMeta holds per-file metadata extracted from the AST.
+type fileMeta struct {
+	packageName   string              // package/module name (e.g. "main", "fmt")
+	importPaths   []string            // import paths (e.g. "fmt", "strings")
+	methodParents map[string]string   // method QN → parent struct QN
+	inherits      map[string][]string // type QN → list of embedded/extends QNs
+}
+
+// extractFileMeta extracts package name, imports, and structural relationships.
+func extractFileMeta(root *gotreesitter.Node, lang *gotreesitter.Language, source []byte) fileMeta {
+	meta := fileMeta{
+		methodParents: make(map[string]string),
+		inherits:      make(map[string][]string),
+	}
+
+	var walk func(node *gotreesitter.Node)
+	walk = func(node *gotreesitter.Node) {
+		if node == nil {
+			return
+		}
+		typ := node.Type(lang)
+
+		switch {
+		case typ == "package_clause":
+			// Go: package <identifier>
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child != nil && (child.Type(lang) == "identifier" || child.Type(lang) == "package_identifier") {
+					meta.packageName = nodeText(child, lang, source)
+				}
+			}
+
+		case typ == "module_declaration" || typ == "module":
+			// Python/Ruby/Elixir module declaration
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child != nil && (child.Type(lang) == "identifier" || child.Type(lang) == "constant") {
+					meta.packageName = nodeText(child, lang, source)
+				}
+			}
+
+		case typ == "package_declaration":
+			// Java/Kotlin package
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child == nil {
+					continue
+				}
+				ct := child.Type(lang)
+				if ct == "identifier" && meta.packageName == "" {
+					meta.packageName = nodeText(child, lang, source)
+				}
+				if ct == "scoped_identifier" {
+					meta.packageName = nodeText(child, lang, source)
+				}
+			}
+
+		case typ == "import_declaration":
+			// Go: import ( "fmt" "strings" )
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child != nil && child.Type(lang) == "import_spec" {
+					extractImportSpec(child, lang, source, &meta)
+				}
+			}
+
+		case typ == "import_statement":
+			// JS/TS/Python/Java import statement
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child != nil {
+					extractImportPaths(child, lang, source, &meta)
+				}
+			}
+
+		case typ == "method_declaration":
+			// Go: func (r *Receiver) Name(...) { ... }
+			extractGoMethodParent(node, lang, source, &meta)
+
+		case typ == "type_declaration":
+			// Go: type Foo struct { ... }
+			extractGoTypeInfo(node, lang, source, &meta)
+
+		case typ == "class_declaration" || typ == "class_definition":
+			// Java/TypeScript/Python class
+			extractClassParent(node, lang, source, &meta)
+		}
+		for i := 0; i < int(node.ChildCount()); i++ {
+			walk(node.Child(i))
+		}
+	}
+	walk(root)
+	return meta
+}
+
+// extractImportSpec extracts import path from a Go import_spec.
+func extractImportSpec(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		ct := child.Type(lang)
+		if ct == "interpreted_string_literal" || ct == "string" {
+			path := nodeText(child, lang, source)
+			path = strings.Trim(path, "\"'")
+			if path != "" {
+				meta.importPaths = append(meta.importPaths, path)
+			}
+		}
+		// Aliased import: import alias "path" — the string is a sibling
+		if ct == "identifier" {
+			for j := i + 1; j < int(node.ChildCount()); j++ {
+				sib := node.Child(j)
+				if sib != nil && (sib.Type(lang) == "interpreted_string_literal" || sib.Type(lang) == "string") {
+					path := nodeText(sib, lang, source)
+					path = strings.Trim(path, "\"'")
+					if path != "" {
+						meta.importPaths = append(meta.importPaths, path)
+					}
+				}
+			}
+		}
+	}
+}
+
+// extractImportPaths attempts to find import path strings from generic nodes.
+func extractImportPaths(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	typ := node.Type(lang)
+	switch typ {
+	case "string", "interpreted_string_literal", "string_literal":
+		path := nodeText(node, lang, source)
+		path = strings.Trim(path, "\"'")
+		if path != "" {
+			meta.importPaths = append(meta.importPaths, path)
+		}
+	case "import_spec", "import_clause":
+		for i := 0; i < int(node.ChildCount()); i++ {
+			extractImportPaths(node.Child(i), lang, source, meta)
+		}
+	}
+}
+
+// extractGoMethodParent resolves the parent struct for a Go method.
+func extractGoMethodParent(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	var methodName, receiverType string
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		ct := child.Type(lang)
+		if ct == "receiver" {
+			receiverType = findReceiverType(child, lang, source)
+		}
+		if ct == "identifier" && methodName == "" {
+			methodName = nodeText(child, lang, source)
+		}
+		if ct == "field_identifier" && methodName == "" {
+			methodName = nodeText(child, lang, source)
+		}
+	}
+	if methodName != "" && receiverType != "" {
+		meta.methodParents[methodName] = receiverType
+	}
+}
+
+// findReceiverType walks a receiver node to find the type name.
+func findReceiverType(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		ct := child.Type(lang)
+		switch ct {
+		case "type_identifier", "identifier":
+			return nodeText(child, lang, source)
+		case "parameter_list", "parameter_declaration":
+			return findReceiverType(child, lang, source)
+		case "pointer_type":
+			for j := 0; j < int(child.ChildCount()); j++ {
+				gc := child.Child(j)
+				if gc != nil && (gc.Type(lang) == "type_identifier" || gc.Type(lang) == "identifier") {
+					return nodeText(gc, lang, source)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// extractGoTypeInfo extracts struct embedding and interface info from Go type declarations.
+func extractGoTypeInfo(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil || child.Type(lang) != "type_spec" {
+			continue
+		}
+		var typeName string
+		var embedded []string
+		for j := 0; j < int(child.ChildCount()); j++ {
+			inner := child.Child(j)
+			if inner == nil {
+				continue
+			}
+			it := inner.Type(lang)
+			if it == "type_identifier" && typeName == "" {
+				typeName = nodeText(inner, lang, source)
+			}
+			if it == "struct_type" {
+				embedded = append(embedded, findEmbeddedTypes(inner, lang, source)...)
+			}
+		}
+		if typeName != "" && len(embedded) > 0 {
+			meta.inherits[typeName] = embedded
+		}
+	}
+}
+
+// findEmbeddedTypes walks a struct body to find embedded field type names.
+func findEmbeddedTypes(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) []string {
+	var types []string
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil {
+			return
+		}
+		nt := n.Type(lang)
+		if nt == "field_declaration" {
+			hasFieldName := false
+			var typeID string
+			for i := 0; i < int(n.ChildCount()); i++ {
+				c := n.Child(i)
+				if c == nil {
+					continue
+				}
+				ct := c.Type(lang)
+				if ct == "identifier" || ct == "field_identifier" {
+					hasFieldName = true
+				}
+				if ct == "type_identifier" {
+					typeID = nodeText(c, lang, source)
+				}
+			}
+			if !hasFieldName && typeID != "" {
+				types = append(types, typeID)
+			}
+			return
+		}
+		if nt == "extends_clause" || nt == "implements_clause" {
+			for i := 0; i < int(n.ChildCount()); i++ {
+				c := n.Child(i)
+				if c != nil && (c.Type(lang) == "type_identifier" || c.Type(lang) == "identifier" || c.Type(lang) == "scoped_type_identifier") {
+					types = append(types, nodeText(c, lang, source))
+				}
+			}
+			return
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(node)
+	return types
+}
+
+// extractClassParent extracts parent class/interface from class declarations.
+func extractClassParent(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	var className string
+	var inheritsFrom []string
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		ct := child.Type(lang)
+		if ct == "identifier" && className == "" {
+			className = nodeText(child, lang, source)
+		}
+		if ct == "name" {
+			for j := 0; j < int(child.ChildCount()); j++ {
+				nc := child.Child(j)
+				if nc != nil && nc.Type(lang) == "identifier" && className == "" {
+					className = nodeText(nc, lang, source)
+				}
+			}
+		}
+		if ct == "extends_clause" || ct == "implements_clause" || ct == "superclass" || ct == "base_class" {
+			inheritsFrom = append(inheritsFrom, findClassRefs(child, lang, source)...)
+		}
+	}
+	if className != "" && len(inheritsFrom) > 0 {
+		meta.inherits[className] = inheritsFrom
+	}
+}
+
+// findClassRefs extracts type references from extends/implements clauses.
+func findClassRefs(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) []string {
+	var refs []string
+	for i := 0; i < int(node.ChildCount()); i++ {
+		c := node.Child(i)
+		if c == nil {
+			continue
+		}
+		ct := c.Type(lang)
+		if ct == "identifier" || ct == "type_identifier" || ct == "scoped_identifier" || ct == "scoped_type_identifier" {
+			refs = append(refs, nodeText(c, lang, source))
+		}
+	}
+	return refs
 }
 
 // ─── Tag Extraction ───────────────────────────────────────────────────────────
@@ -467,7 +869,6 @@ func countParams(body *gotreesitter.Node, kind string, lang *gotreesitter.Langua
 		return 0
 	}
 	// Find the parent function declaration and look for parameters
-	// Walk up to find the function/method declaration, then count parameter children
 	parent := body.Parent()
 	for parent != nil {
 		ptype := parent.Type(lang)
@@ -477,7 +878,7 @@ func countParams(body *gotreesitter.Node, kind string, lang *gotreesitter.Langua
 			// Find parameters node
 			for i := 0; i < int(parent.ChildCount()); i++ {
 				child := parent.Child(i)
-			if child != nil && (child.Type(lang) == "parameters" || child.Type(lang) == "parameter_list") {
+				if child != nil && (child.Type(lang) == "parameters" || child.Type(lang) == "parameter_list") {
 					// Count parameter_declaration children; each may contain multiple
 					// identifiers (e.g. "a, b int" in Go is a single declaration).
 					params := 0
@@ -526,7 +927,7 @@ func collectCalls(node *gotreesitter.Node, lang *gotreesitter.Language, source [
 		if node.ChildCount() > 0 {
 			fnNode := node.Child(0)
 			if fnNode != nil {
-			fnName := nodeText(fnNode, lang, source)
+				fnName := nodeText(fnNode, lang, source)
 				if fnName != "" && !isBuiltinOrKeyword(fnName) {
 					*calls = append(*calls, fnName)
 				}
@@ -546,9 +947,9 @@ func isBuiltinOrKeyword(name string) bool {
 		"typeof", "instanceof", "void", "sizeof", "assert":
 		return true
 	}
+
 	return false
 }
-
 
 // linearScanInLoop counts linear scan operations (find, contains, indexOf, etc.)
 // that occur inside loop bodies — these are hidden O(n^2) signals.
