@@ -373,29 +373,67 @@ func (s *Server) handleTracePath(args tracePathArgs) *mcp.CallToolResult {
 		return errorResult(fmt.Errorf("project is required"))
 	}
 
-	req := base.TracePathRequest{
-		FunctionName:  args.FunctionName,
-		Project:       args.Project,
-		Direction:     args.Direction,
-		Depth:         args.Depth,
-		Mode:          args.Mode,
-		IncludeTests:  args.IncludeTests,
-		ParameterName: args.ParameterName,
-		RiskLabels:    args.RiskLabels,
+	// Build a list of QN candidates. The user may provide a short name
+	// (e.g. "handleSearchGraph") while the graph stores edges with a
+	// receiver prefix (e.g. "s.handleSearchGraph" for method calls).
+	candidates := []string{args.FunctionName}
+
+	// Add prefix variants for method calls
+	if !strings.HasPrefix(args.FunctionName, "s.") {
+		candidates = append(candidates, "s."+args.FunctionName)
+	}
+	// Try fuzzy match via SearchNodes for the original name
+	nodes, _, searchErr := s.store.SearchNodes(args.FunctionName, args.Project, "", 5, 0)
+	if searchErr == nil && len(nodes) > 0 {
+		for _, n := range nodes {
+			if n.QualifiedName != args.FunctionName {
+				candidates = append(candidates, n.QualifiedName)
+			}
+		}
 	}
 
-	hops, err := s.store.TracePath(req)
-	if err != nil {
-		return errorResult(fmt.Errorf("trace path: %w", err))
+	// Try each candidate until we get non-empty results
+	var hops []base.TraceHop
+	var lastErr error
+	resolvedQN := args.FunctionName
+
+	for _, qn := range candidates {
+		req := base.TracePathRequest{
+			FunctionName:  qn,
+			Project:       args.Project,
+			Direction:     args.Direction,
+			Depth:         args.Depth,
+			Mode:          args.Mode,
+			IncludeTests:  args.IncludeTests,
+			ParameterName: args.ParameterName,
+			RiskLabels:    args.RiskLabels,
+		}
+
+		h, err := s.store.TracePath(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(h) > 0 {
+			hops = h
+			resolvedQN = qn
+			break
+		}
+	}
+
+	if len(hops) == 0 && lastErr != nil {
+		return errorResult(fmt.Errorf("trace path: %w", lastErr))
 	}
 
 	return jsonResult(map[string]any{
-		"hops":  hops,
-		"total": len(hops),
+		"hops":       hops,
+		"total":      len(hops),
+		"resolvedQN": resolvedQN,
+		"originalQN": args.FunctionName,
 	})
 }
 
-// ─── detect_changes ───────────────────────────────────────────────────────────
+// ─── detect_changes ────────────────────────────────────────────────────────
 
 func registerDetectChanges(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{

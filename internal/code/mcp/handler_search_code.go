@@ -1,87 +1,51 @@
+// Package mcp — search_code: graph-augmented code search using native Go file scanning.
+//
+// Replaces the previous ripgrep (rg) subprocess approach with a pure Go
+// file walk + line scan. This eliminates an external binary dependency and
+// a class of hard-to-debug subprocess/JSON-parsing bugs.
+
 package mcp
 
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"os/exec"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ─── Argument struct ──────────────────────────────────────────────────────
+// ─── Argument struct ───────────────────────────────────────────────────────
 
 type searchCodeArgs struct {
 	Pattern     string `json:"pattern"`               // required: search pattern
 	Project     string `json:"project"`               // required: project name
 	FilePattern string `json:"filePattern,omitempty"` // glob filter (e.g. *.go)
-	PathFilter  string `json:"pathFilter,omitempty"`  // regex filter on file path
+	PathFilter  string `json:"pathFilter,omitempty"`  // substring filter on file path
 	Context     int    `json:"context,omitempty"`      // context lines (like grep -C)
 	Mode        string `json:"mode,omitempty"`         // compact (default), full, files
 	Limit       int    `json:"limit,omitempty"`        // max enriched results
 }
 
-// ─── rg JSON output types ─────────────────────────────────────────────────
+// ─── Internal match type (replaces rg JSON types) ──────────────────────────
 
-type rgMatch struct {
-	Type string `json:"type"`
-	Data rgData `json:"data"`
+// lineMatch holds a single pattern match found in a file.
+type lineMatch struct {
+	File        string // absolute file path
+	Line        int    // 1-based line number
+	Column      int    // 1-based column (position of match in line)
+	Text        string // full line text (trimmed of trailing newline)
+	Match       string // the substring that matched
+	ContextPre  string // lines before (context > 0), joined by \n
+	ContextPost string // lines after (context > 0), joined by \n
 }
 
-type rgData struct {
-	Path           rgPath       `json:"path"`
-	Lines          rgLines      `json:"lines"`
-	LineNumber     int          `json:"line_number"`
-	AbsoluteOffset int64        `json:"absolute_offset"`
-	SubMatches     []rgSubMatch `json:"submatches"`
-}
-
-type rgPath struct {
-	Text string `json:"text"`
-}
-
-type rgLines struct {
-	Text string `json:"text"`
-}
-
-type rgSubMatch struct {
-	Match string `json:"match"`
-	Start int    `json:"start"`
-	End   int    `json:"end"`
-}
-
-type rgBegin struct {
-	Type string      `json:"type"`
-	Data rgBeginData `json:"data"`
-}
-
-type rgBeginData struct {
-	Path rgPath `json:"path"`
-}
-
-type rgEnd struct {
-	Type string    `json:"type"`
-	Data rgEndData `json:"data"`
-}
-
-type rgEndData struct {
-	Path  rgPath  `json:"path"`
-	Stats rgStats `json:"stats"`
-}
-
-type rgStats struct {
-	Elapsed rgElapsed `json:"elapsed"`
-}
-
-type rgElapsed struct {
-	Secs float64 `json:"secs"`
-}
-
-// ─── Result types ─────────────────────────────────────────────────────────
+// ─── Result types ──────────────────────────────────────────────────────────
 
 type searchCodeItem struct {
 	FunctionName  string `json:"functionName,omitempty"`
@@ -91,14 +55,16 @@ type searchCodeItem struct {
 	Line          int    `json:"line"`
 	Column        int    `json:"column,omitempty"`
 	MatchLine     string `json:"matchLine,omitempty"`
+	ContextPre    string `json:"contextPre,omitempty"`
+	ContextPost   string `json:"contextPost,omitempty"`
 	Source        string `json:"source,omitempty"` // full mode only
 }
 
 type searchCodeResult struct {
-	Results          []searchCodeItem `json:"results"`
-	TotalGrepMatches int              `json:"totalGrepMatches"`
-	TotalResults     int              `json:"totalResults"`
-	Stats            searchCodeStats  `json:"stats"`
+	Results      []searchCodeItem `json:"results"`
+	TotalMatches int              `json:"totalMatches"`
+	TotalResults int              `json:"totalResults"`
+	Stats        searchCodeStats  `json:"stats"`
 }
 
 type searchCodeStats struct {
@@ -106,21 +72,22 @@ type searchCodeStats struct {
 	ElapsedSecs   string `json:"elapsedSecs"`
 }
 
-// ─── Register ─────────────────────────────────────────────────────────────
+// ─── Register ──────────────────────────────────────────────────────────────
 
 func registerSearchCode(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "search_code",
-		Description: "Graph-augmented code search. Finds text patterns via grep, then enriches " +
-			"results with the knowledge graph: deduplicates matches into containing functions, " +
-			"ranks by structural importance (definitions first, popular functions next, tests last). " +
+		Description: "Graph-augmented code search. Finds text patterns via native " +
+			"file scanning, then enriches results with the knowledge graph: deduplicates " +
+			"matches into containing functions, ranks by structural importance " +
+			"(definitions first, popular functions next, tests last). " +
 			"Modes: compact (default, signatures only), full (with source), files (just file paths).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchCodeArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleSearchCode(args), nil, nil
 	})
 }
 
-// ─── Handler ──────────────────────────────────────────────────────────────
+// ─── Handler ───────────────────────────────────────────────────────────────
 
 func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 	if args.Pattern == "" {
@@ -144,13 +111,13 @@ func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 		limit = 20
 	}
 
-	// Run rg
-	matches, filesSearched, elapsed, err := runRG(rootDir, args.Pattern, args.FilePattern, args.Context)
+	// Run native file scan
+	matches, filesSearched, elapsed, err := scanFiles(rootDir, args.Pattern, args.FilePattern, args.Context)
 	if err != nil {
-		return errorResult(fmt.Errorf("rg search failed: %w", err))
+		return errorResult(fmt.Errorf("file scan failed: %w", err))
 	}
 
-	totalGrep := len(matches)
+	totalMatches := len(matches)
 
 	// Enrich with graph data: deduplicate into containing functions
 	enriched := s.enrichMatches(args.Project, matches, rootDir, args.Mode)
@@ -169,9 +136,9 @@ func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 	totalResults := len(enriched)
 
 	return jsonResult(searchCodeResult{
-		Results:          enriched,
-		TotalGrepMatches: totalGrep,
-		TotalResults:     totalResults,
+		Results:      enriched,
+		TotalMatches: totalMatches,
+		TotalResults: totalResults,
 		Stats: searchCodeStats{
 			FilesSearched: filesSearched,
 			ElapsedSecs:   fmt.Sprintf("%.3fs", elapsed),
@@ -179,98 +146,195 @@ func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 	})
 }
 
-// ─── rg execution ─────────────────────────────────────────────────────────
+// ─── Native file scanning (replaces rg subprocess) ─────────────────────────
 
-func runRG(rootDir, pattern, filePattern string, context int) ([]rgMatch, int, float64, error) {
-	args := []string{"--json", "-n", "--no-heading"}
-	if context > 0 {
-		args = append(args, fmt.Sprintf("-C%d", context))
-	}
-	if filePattern != "" {
-		args = append(args, "--glob", filePattern)
-	}
-	args = append(args, pattern, rootDir)
-
-	cmd := exec.Command("rg", args...)
-	out, err := cmd.Output()
-	if err != nil {
-		// rg returns exit code 1 when no matches — not an error for us
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 1 {
-				return []rgMatch{}, 0, 0, nil
-			}
-		}
-		return nil, 0, 0, fmt.Errorf("exec rg: %w", err)
-	}
-
-	var matches []rgMatch
-	filesSeen := make(map[string]bool)
-	var lastElapsed float64
-
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		var base struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(line, &base); err != nil {
-			continue
-		}
-
-		switch base.Type {
-		case "match":
-			var m rgMatch
-			if err := json.Unmarshal(line, &m); err == nil {
-				matches = append(matches, m)
-				filesSeen[m.Data.Path.Text] = true
-			}
-		case "begin":
-			var b rgBegin
-			if err := json.Unmarshal(line, &b); err == nil {
-				filesSeen[b.Data.Path.Text] = true
-			}
-		case "end":
-			var e rgEnd
-			if err := json.Unmarshal(line, &e); err == nil {
-				lastElapsed = e.Data.Stats.Elapsed.Secs
-			}
-		}
-	}
-
-	return matches, len(filesSeen), lastElapsed, nil
+// defaultSkipDirs lists directories to skip during file walks.
+// These are typically cache, build, or VCS directories that never contain
+// source code the user wants to search.
+var defaultSkipDirs = map[string]bool{
+	".git":         true,
+	".dscli":       true,
+	".svn":         true,
+	".hg":          true,
+	"node_modules": true,
+	"vendor":       true,
+	"__pycache__":  true,
+	".venv":        true,
+	"venv":         true,
+	"env":          true,
+	".tox":         true,
+	".cache":       true,
+	"dist":         true,
+	"build":        true,
+	"_build":       true,
+	".next":        true,
+	".turbo":       true,
+	"target":       true, // Rust
+	"bin":          true, // Go build output
+	"obj":          true, // C# / .NET
 }
 
-// ─── Graph enrichment ─────────────────────────────────────────────────────
+// scanFiles walks rootDir and returns all lines matching pattern.
+// It replaces the previous ripgrep subprocess with pure Go file I/O.
+func scanFiles(rootDir, pattern, filePattern string, context int) ([]lineMatch, int, float64, error) {
+	start := time.Now()
 
-func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string, mode string) []searchCodeItem {
-	type lineMatch struct {
-		Line  int
-		Text  string
-		Match string
-		Col   int
+	var matches []lineMatch
+	filesSeen := make(map[string]bool)
+	patternLower := strings.ToLower(pattern)
+
+	walkFn := func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// Permission denied or similar — skip
+			return nil
+		}
+
+		// Skip directories
+		if d.IsDir() {
+			if defaultSkipDirs[d.Name()] {
+				return fs.SkipDir
+			}
+			// Skip hidden directories (starting with .) except the root
+			if strings.HasPrefix(d.Name(), ".") && path != rootDir {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		// Only regular files
+		if !d.Type().IsRegular() {
+			return nil
+		}
+
+		// Skip binary-like extensions
+		ext := strings.ToLower(filepath.Ext(path))
+		switch ext {
+		case ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a", ".lib",
+			".png", ".jpg", ".jpeg", ".gif", ".bmp",
+			".woff", ".woff2", ".ttf", ".eot",
+			".zip", ".tar", ".gz", ".bz2", ".xz", ".zst",
+			".pdf", ".doc", ".docx", ".xls", ".xlsx", ".pptx",
+			".mp3", ".mp4", ".avi", ".mov", ".wav", ".flac",
+			".db", ".sqlite", ".wal", ".shm",
+			".ico", ".icns":
+			return nil
+		}
+
+		// Skip files with no extension that look like compiled binaries.
+		if ext == "" {
+			f, err := os.Open(path)
+			if err == nil {
+				header := make([]byte, 8)
+				n, _ := f.Read(header)
+				f.Close()
+				if n >= 4 && header[0] == 0x7f && header[1] == 'E' && header[2] == 'L' && header[3] == 'F' {
+					return nil // ELF binary (Linux/macOS)
+				}
+				if n >= 2 && header[0] == 'M' && header[1] == 'Z' {
+					return nil // PE binary (Windows)
+				}
+			}
+		}
+
+		// Apply glob filter
+		if filePattern != "" {
+			matched, err := filepath.Match(filePattern, d.Name())
+			if err != nil || !matched {
+				return nil
+			}
+		}
+
+		filesSeen[path] = true
+
+		// Open and scan file
+		f, err := os.Open(path)
+		if err != nil {
+			return nil // skip unreadable files
+		}
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		// Increase max line length (default 64KB may truncate)
+		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+
+		var lineNum int
+		// Rolling buffer for context lines before a match
+		var preBuffer []string
+		preBufferCap := context
+		if preBufferCap <= 0 {
+			preBufferCap = 0
+		}
+
+		for scanner.Scan() {
+			lineNum++
+			text := scanner.Text()
+
+			if preBufferCap > 0 {
+				preBuffer = append(preBuffer, text)
+				if len(preBuffer) > preBufferCap {
+					preBuffer = preBuffer[1:]
+				}
+			}
+
+			// Check for match (case-insensitive)
+			if !strings.Contains(strings.ToLower(text), patternLower) {
+				continue
+			}
+
+			// Find the match position (case-insensitive search within the line)
+			lowerLine := strings.ToLower(text)
+			idx := strings.Index(lowerLine, patternLower)
+			if idx < 0 {
+				continue
+			}
+
+			col := idx + 1 // 1-based
+			matchText := text[idx : idx+len(pattern)]
+
+			lm := lineMatch{
+				File:   path,
+				Line:   lineNum,
+				Column: col,
+				Text:   text,
+				Match:  matchText,
+			}
+
+			// Capture context lines
+			if preBufferCap > 0 && len(preBuffer) > 0 {
+				// preBuffer contains lines before this match, up to context count
+				startIdx := 0
+				if len(preBuffer) > preBufferCap {
+					startIdx = len(preBuffer) - preBufferCap
+				}
+				lm.ContextPre = strings.Join(preBuffer[startIdx:], "\n")
+			}
+
+			matches = append(matches, lm)
+		}
+
+		// Ignore scan errors (truncated lines, binary content, etc.)
+		return nil
 	}
 
+	err := filepath.WalkDir(rootDir, walkFn)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("walk dir: %w", err)
+	}
+
+	elapsed := time.Since(start).Seconds()
+	return matches, len(filesSeen), elapsed, nil
+}
+
+// ─── Graph enrichment ──────────────────────────────────────────────────────
+
+// enrichMatches groups raw line matches by containing function/method using
+// the code graph, deduplicates, and ranks results.
+func (s *Server) enrichMatches(project string, matches []lineMatch, rootDir string, mode string) []searchCodeItem {
 	// Group matches by file
 	fileMatches := make(map[string][]lineMatch)
 	for _, m := range matches {
-		file := m.Data.Path.Text
-		if !filepath.IsAbs(file) {
-			file = filepath.Join(rootDir, file)
-		}
-
-		col := 0
-		matchText := ""
-		if len(m.Data.SubMatches) > 0 {
-			col = m.Data.SubMatches[0].Start + 1
-			matchText = m.Data.SubMatches[0].Match
-		}
-
-		fileMatches[file] = append(fileMatches[file], lineMatch{
-			Line:  m.Data.LineNumber,
-			Text:  strings.TrimRight(m.Data.Lines.Text, "\n\r"),
-			Match: matchText,
-			Col:   col,
-		})
+		file := m.File
+		fileMatches[file] = append(fileMatches[file], m)
 	}
 
 	// Files mode: just unique files
@@ -298,9 +362,9 @@ func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string
 		relFile := relPath(file, rootDir)
 
 		// Build line set
-		lineSet := make(map[int]string)
+		lineSet := make(map[int]lineMatch)
 		for _, lm := range lms {
-			lineSet[lm.Line] = lm.Text
+			lineSet[lm.Line] = lm
 		}
 
 		// Get graph nodes for this file
@@ -309,10 +373,12 @@ func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string
 			// No graph data — flat per-line results
 			for _, lm := range lms {
 				results = append(results, searchCodeItem{
-					File:      relFile,
-					Line:      lm.Line,
-					Column:    lm.Col,
-					MatchLine: lm.Text,
+					File:        relFile,
+					Line:        lm.Line,
+					Column:      lm.Column,
+					MatchLine:   lm.Text,
+					ContextPre:  lm.ContextPre,
+					ContextPost: lm.ContextPost,
 				})
 			}
 			continue
@@ -324,7 +390,7 @@ func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string
 		})
 
 		// For each line, find containing function
-		remaining := make(map[int]string)
+		remaining := make(map[int]lineMatch)
 		for k, v := range lineSet {
 			remaining[k] = v
 		}
@@ -365,7 +431,9 @@ func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string
 				Kind:          n.Kind,
 				File:          relFile,
 				Line:          firstLine,
-				MatchLine:     lineSet[firstLine],
+				MatchLine:     lineSet[firstLine].Text,
+				ContextPre:    lineSet[firstLine].ContextPre,
+				ContextPost:   lineSet[firstLine].ContextPost,
 			}
 
 			if mode == "full" {
@@ -383,11 +451,14 @@ func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string
 		}
 
 		// Remaining lines not contained in any definition
-		for line, text := range remaining {
+		for line, lm := range remaining {
 			results = append(results, searchCodeItem{
-				File:      relFile,
-				Line:      line,
-				MatchLine: text,
+				File:        relFile,
+				Line:        line,
+				MatchLine:   lm.Text,
+				Column:      lm.Column,
+				ContextPre:  lm.ContextPre,
+				ContextPost: lm.ContextPost,
 			})
 		}
 	}
@@ -396,7 +467,7 @@ func (s *Server) enrichMatches(project string, matches []rgMatch, rootDir string
 	return results
 }
 
-// ─── Ranking ──────────────────────────────────────────────────────────────
+// ─── Ranking ───────────────────────────────────────────────────────────────
 
 func sortSearchCodeResults(items []searchCodeItem) {
 	sort.Slice(items, func(i, j int) bool {
@@ -417,8 +488,8 @@ func sortSearchCodeResults(items []searchCodeItem) {
 		}
 
 		// Test files last
-		iIsTest := strings.Contains(items[i].File, "_test.go") || strings.Contains(items[i].File, "_test.py")
-		jIsTest := strings.Contains(items[j].File, "_test.go") || strings.Contains(items[j].File, "_test.py")
+		iIsTest := testFileSuffix(items[i].File)
+		jIsTest := testFileSuffix(items[j].File)
 		if iIsTest != jIsTest {
 			return jIsTest
 		}
@@ -429,6 +500,15 @@ func sortSearchCodeResults(items []searchCodeItem) {
 		}
 		return items[i].Line < items[j].Line
 	})
+}
+
+func testFileSuffix(file string) bool {
+	return strings.HasSuffix(file, "_test.go") ||
+		strings.HasSuffix(file, "_test.py") ||
+		strings.HasSuffix(file, "_test.rs") ||
+		strings.HasSuffix(file, "_test.js") ||
+		strings.HasSuffix(file, ".test.ts") ||
+		strings.HasSuffix(file, "_test.c")
 }
 
 func kindPriority(k string) int {
@@ -448,7 +528,7 @@ func kindPriority(k string) int {
 	}
 }
 
-// ─── Path helpers ─────────────────────────────────────────────────────────
+// ─── Path helpers ──────────────────────────────────────────────────────────
 
 func relPath(absPath, rootDir string) string {
 	if strings.HasPrefix(absPath, rootDir) {
