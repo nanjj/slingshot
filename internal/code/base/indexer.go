@@ -255,6 +255,13 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 	}
 	nodes = append(nodes, varConstNodes...)
 	varNameMap := buildVarNameMap(varConstNodes)
+	// 5. Extract Go type definitions (struct/interface/type alias) via manual AST walk
+	typeNodes := extractGoTypeDefs(root, lang, source, projectID, relPath, meta.packageName)
+	for i := range typeNodes {
+		defQNs = append(defQNs, typeNodes[i].QualifiedName)
+	}
+	nodes = append(nodes, typeNodes...)
+
 
 	// ── Build edges ──
 	var edges []Edge
@@ -290,13 +297,22 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		})
 	}
 
-	// 4. INHERITS edges: struct → embedded type, class → superclass
+	// 4. IMPLEMENTS edges: struct → embedded type, class → superclass
+	//    Package-qualify QNs to match node naming convention.
 	for childType, parentTypes := range meta.inherits {
+		childQN := childType
+		if meta.packageName != "" && !strings.Contains(childType, ".") {
+			childQN = meta.packageName + "." + childType
+		}
 		for _, parentType := range parentTypes {
+			parentQN := parentType
+			if meta.packageName != "" && !strings.Contains(parentType, ".") {
+				parentQN = meta.packageName + "." + parentType
+			}
 			edges = append(edges, Edge{
 				ProjectID: projectID,
-				SourceQN:  childType,
-				TargetQN:  parentType,
+				SourceQN:  childQN,
+				TargetQN:  parentQN,
 				EdgeType:  "IMPLEMENTS",
 			})
 		}
@@ -499,13 +515,17 @@ func extractImportPaths(node *gotreesitter.Node, lang *gotreesitter.Language, so
 // extractGoMethodParent resolves the parent struct for a Go method.
 func extractGoMethodParent(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
 	var methodName, receiverType string
+	firstParamList := true
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 		if child == nil {
 			continue
 		}
 		ct := child.Type(lang)
-		if ct == "receiver" {
+		// Go grammar uses "parameter_list" for both receiver and parameters.
+		// The first parameter_list child of method_declaration is the receiver.
+		if ct == "receiver" || (ct == "parameter_list" && firstParamList) {
+			firstParamList = false
 			receiverType = findReceiverType(child, lang, source)
 		}
 		if ct == "identifier" && methodName == "" {
@@ -514,13 +534,20 @@ func extractGoMethodParent(node *gotreesitter.Node, lang *gotreesitter.Language,
 		if ct == "field_identifier" && methodName == "" {
 			methodName = nodeText(child, lang, source)
 		}
+		// Skip remaining parameter_list (they're function parameters, not receivers)
+		if ct == "parameter_list" {
+			firstParamList = false
+		}
 	}
 	if methodName != "" && receiverType != "" {
 		meta.methodParents[methodName] = receiverType
 	}
 }
 
+
 // findReceiverType walks a receiver node to find the type name.
+// The receiver can be "(g T)" (value) or "(g *T)" (pointer).
+// We must skip the variable name identifier and return the type name.
 func findReceiverType(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
@@ -529,14 +556,21 @@ func findReceiverType(node *gotreesitter.Node, lang *gotreesitter.Language, sour
 		}
 		ct := child.Type(lang)
 		switch ct {
-		case "type_identifier", "identifier":
+		case "type_identifier":
 			return nodeText(child, lang, source)
-		case "parameter_list", "parameter_declaration":
+		case "parameter_list":
 			return findReceiverType(child, lang, source)
+		case "parameter_declaration":
+			// In parameter_declaration, skip the variable name identifier
+			// and only return the type identifier (e.g., "Greeter" or "*Greeter")
+			typ := findReceiverType(child, lang, source)
+			if typ != "" {
+				return typ
+			}
 		case "pointer_type":
 			for j := 0; j < int(child.ChildCount()); j++ {
 				gc := child.Child(j)
-				if gc != nil && (gc.Type(lang) == "type_identifier" || gc.Type(lang) == "identifier") {
+				if gc != nil && gc.Type(lang) == "type_identifier" {
 					return nodeText(gc, lang, source)
 				}
 			}
@@ -829,6 +863,95 @@ func extractVarConstDefs(root *gotreesitter.Node, lang *gotreesitter.Language, s
 			for i := 0; i < int(node.ChildCount()); i++ {
 				walk(node.Child(i))
 			}
+		}
+	}
+	walk(root)
+	return nodes
+}
+
+// ─── Go Type Definition Extraction (Struct/Interface/Type) ───────────────────
+//
+// extractGoTypeDefs walks the AST to find Go type declarations (struct,
+// interface, and type aliases) and returns them as nodes. The Tagger API
+// only emits definition.function/method for Go, so manual traversal is
+// needed for types.
+//
+// QN format: "<package>.<Name>" (e.g., "main.Greeter") to match the
+// function/method node naming convention, enabling CONTAINS and IMPLEMENTS
+// edges to resolve correctly.
+func extractGoTypeDefs(root *gotreesitter.Node, lang *gotreesitter.Language, source []byte, projectID int64, relPath string, packageName string) []Node {
+	var nodes []Node
+
+	var walk func(node *gotreesitter.Node)
+	walk = func(node *gotreesitter.Node) {
+		if node == nil {
+			return
+		}
+		typ := node.Type(lang)
+
+		if typ == "type_declaration" {
+			// Extract doc comment from the type_declaration node's preceding siblings
+			docComment := lsp.ExtractDocComment(node, lang, source)
+
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child == nil || child.Type(lang) != "type_spec" {
+					continue
+				}
+
+				var typeName string
+				var rhsKind string // "class" for struct, "interface", "type" for alias
+
+				for j := 0; j < int(child.ChildCount()); j++ {
+					inner := child.Child(j)
+					if inner == nil {
+						continue
+					}
+					it := inner.Type(lang)
+					switch it {
+					case "type_identifier":
+						if typeName == "" {
+							typeName = nodeText(inner, lang, source)
+						}
+					case "struct_type":
+						rhsKind = "class"
+					case "interface_type":
+						rhsKind = "interface"
+					}
+				}
+
+				if typeName == "" {
+					continue
+				}
+				// If RHS is neither struct nor interface, it's a type alias
+				if rhsKind == "" {
+					rhsKind = "type"
+				}
+
+				// Build package-qualified QN
+				qn := typeName
+				if packageName != "" && !strings.Contains(typeName, ".") {
+					qn = packageName + "." + typeName
+				}
+
+				nodes = append(nodes, Node{
+					ProjectID:     projectID,
+					QualifiedName: qn,
+					Kind:          rhsKind,
+					Name:          typeName,
+					FilePath:      relPath,
+					Line:          child.StartPoint().Row,
+					Col:           child.StartPoint().Column,
+					EndLine:       child.EndPoint().Row,
+					EndCol:        child.EndPoint().Column,
+					DocComment:    docComment,
+				})
+			}
+			return // don't recurse into type_declaration children
+		}
+
+		for i := 0; i < int(node.ChildCount()); i++ {
+			walk(node.Child(i))
 		}
 	}
 	walk(root)

@@ -351,7 +351,227 @@ func main() {
 	assert.Assert(t, len(refs) >= 2,
 		"expected ≥2 REFERENCES to counter (from increment + main), got %d", len(refs))
 }
+// ─── extractGoTypeDefs ──────────────────────────────────────────────────────
+//
+// extractGoTypeDefs manually walks the AST to find Go type declarations
+// (struct, interface, type alias) since the Tagger API only emits
+// definition.function/method for Go.
 
+func TestExtractGoTypeDefs_Struct(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+type Greeter struct {
+	Name string
+	Age  int
+}
+func main() {}`)
+	root := tree.RootNode()
+	nodes := extractGoTypeDefs(root, lang, src, 1, "test.go", "main")
+	assert.Equal(t, len(nodes), 1, "expected 1 type node")
+	if len(nodes) > 0 {
+		assert.Equal(t, nodes[0].Kind, "class")
+		assert.Equal(t, nodes[0].Name, "Greeter")
+		assert.Equal(t, nodes[0].QualifiedName, "main.Greeter")
+	}
+}
+
+func TestExtractGoTypeDefs_Interface(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+type Reader interface {
+	Read([]byte) (int, error)
+}
+func main() {}`)
+	root := tree.RootNode()
+	nodes := extractGoTypeDefs(root, lang, src, 1, "test.go", "main")
+	assert.Equal(t, len(nodes), 1, "expected 1 type node")
+	if len(nodes) > 0 {
+		assert.Equal(t, nodes[0].Kind, "interface")
+		assert.Equal(t, nodes[0].Name, "Reader")
+		assert.Equal(t, nodes[0].QualifiedName, "main.Reader")
+	}
+}
+
+func TestExtractGoTypeDefs_TypeAlias(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+type MyInt int
+type MySlice []string
+func main() {}`)
+	root := tree.RootNode()
+	nodes := extractGoTypeDefs(root, lang, src, 1, "test.go", "main")
+	assert.Equal(t, len(nodes), 2, "expected 2 type nodes")
+	got := make(map[string]string)
+	for _, n := range nodes {
+		got[n.Name] = n.Kind
+	}
+	assert.Equal(t, got["MyInt"], "type")
+	assert.Equal(t, got["MySlice"], "type")
+}
+
+func TestExtractGoTypeDefs_Grouped(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+type (
+	Greeter struct{ Name string }
+	Reader  interface{ Read([]byte) int }
+	MyInt   int
+)
+func main() {}`)
+	root := tree.RootNode()
+	nodes := extractGoTypeDefs(root, lang, src, 1, "test.go", "main")
+	assert.Equal(t, len(nodes), 3, "expected 3 type nodes in grouped declaration")
+	got := make(map[string]string)
+	for _, n := range nodes {
+		got[n.Name] = n.Kind
+	}
+	assert.Equal(t, got["Greeter"], "class")
+	assert.Equal(t, got["Reader"], "interface")
+	assert.Equal(t, got["MyInt"], "type")
+}
+
+func TestExtractGoTypeDefs_NoTypes(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+func main() {}`)
+	root := tree.RootNode()
+	nodes := extractGoTypeDefs(root, lang, src, 1, "test.go", "main")
+	assert.Equal(t, len(nodes), 0, "expected 0 type nodes")
+}
+
+func TestExtractGoTypeDefs_DocComment(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+// Greeter greets people.
+type Greeter struct{ Name string }
+func main() {}`)
+	root := tree.RootNode()
+	nodes := extractGoTypeDefs(root, lang, src, 1, "test.go", "main")
+	assert.Equal(t, len(nodes), 1, "expected 1 type node")
+	if len(nodes) > 0 {
+		assert.Assert(t, nodes[0].DocComment != "", "expected doc comment on struct")
+		assert.Equal(t, nodes[0].DocComment, "Greeter greets people.")
+	}
+}
+
+// ─── Integration: types in IndexProject ─────────────────────────────────────
+
+func TestIndexProject_GoFileWithTypes(t *testing.T) {
+	dir := t.TempDir()
+	src := `package main
+
+import "fmt"
+
+// Greeter greets people.
+type Greeter struct {
+	Name string
+}
+
+// Hello returns a greeting.
+func (g *Greeter) Hello() string {
+	return "Hello, " + g.Name + "!"
+}
+
+func main() {
+	g := &Greeter{Name: "World"}
+	fmt.Println(g.Hello())
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0644)
+	assert.NilError(t, err)
+
+	dbPath := filepath.Join(t.TempDir(), "test_types.db")
+	store, err := OpenStore(dbPath)
+	assert.NilError(t, err)
+	defer store.Close()
+
+	result, err := store.IndexProject(dir, "test-types-project", IndexModeFull)
+	assert.NilError(t, err)
+	assert.Assert(t, result.FilesParsed >= 1)
+	assert.Equal(t, result.Errors, 0)
+
+	// Verify struct node was stored (package-qualified)
+	greeterNode, err := store.GetNodeByQN("main.Greeter", "test-types-project")
+	assert.NilError(t, err)
+	assert.Equal(t, greeterNode.Kind, "class")
+	assert.Equal(t, greeterNode.Name, "Greeter")
+	assert.Assert(t, greeterNode.DocComment != "", "expected doc comment on Greeter struct")
+
+	// Verify method node exists
+	helloNode, err := store.GetNodeByQN("main.Hello", "test-types-project")
+	assert.NilError(t, err)
+	assert.Equal(t, helloNode.Kind, "method")
+
+	// Verify function node exists
+	_, err = store.GetNodeByQN("main.main", "test-types-project")
+	assert.NilError(t, err)
+
+	// Verify CONTAINS edge: main.Greeter → main.Hello
+	refs, err := store.GetReferences("main.Hello", "test-types-project", "inbound", 1)
+	assert.NilError(t, err)
+	hasContains := false
+	for _, r := range refs {
+		if r.EdgeType == "CONTAINS" && r.SourceQN == "main.Greeter" {
+			hasContains = true
+			break
+		}
+	}
+	assert.Assert(t, hasContains, "expected CONTAINS edge from main.Greeter to main.Hello")
+}
+
+func TestIndexProject_GoTypeImplements(t *testing.T) {
+	dir := t.TempDir()
+	src := `package main
+
+import "fmt"
+
+type Writer interface {
+	Write([]byte) (int, error)
+}
+
+type FileWriter struct {
+	Writer
+	buf []byte
+}
+
+func (fw *FileWriter) Write(p []byte) (int, error) {
+	fw.buf = append(fw.buf, p...)
+	return len(p), nil
+}
+
+func main() {
+	var w Writer = &FileWriter{}
+	fmt.Println(w.Write([]byte("hello")))
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0644)
+	assert.NilError(t, err)
+
+	dbPath := filepath.Join(t.TempDir(), "test_impl.db")
+	store, err := OpenStore(dbPath)
+	assert.NilError(t, err)
+	defer store.Close()
+
+	result, err := store.IndexProject(dir, "test-impl-project", IndexModeFull)
+	assert.NilError(t, err)
+	assert.Equal(t, result.Errors, 0)
+
+	// Verify interface node
+	writerNode, err := store.GetNodeByQN("main.Writer", "test-impl-project")
+	assert.NilError(t, err)
+	assert.Equal(t, writerNode.Kind, "interface")
+
+	// Verify struct node
+	fileWriterNode, err := store.GetNodeByQN("main.FileWriter", "test-impl-project")
+	assert.NilError(t, err)
+	assert.Equal(t, fileWriterNode.Kind, "class")
+
+	// Verify IMPLEMENTS edge: main.FileWriter → main.Writer (via embedding)
+	refs, err := store.GetReferences("main.Writer", "test-impl-project", "inbound", 1)
+	assert.NilError(t, err)
+	hasImplements := false
+	for _, r := range refs {
+		if r.EdgeType == "IMPLEMENTS" && r.SourceQN == "main.FileWriter" {
+			hasImplements = true
+			break
+		}
+	}
+	assert.Assert(t, hasImplements, "expected IMPLEMENTS edge from main.FileWriter to main.Writer")
+}
 
 // ─── isBuiltinOrKeyword ──────────────────────────────────────────────────────
 
