@@ -25,16 +25,16 @@ var supportedExts = map[string]bool{
 //
 // It uses the Tagger API for definition extraction and manual tree traversal
 // for call detection and complexity analysis.
-func (s *Store) IndexProject(root, name string) (*IndexResult, error) {
+func (s *Store) IndexProject(root, name string, mode IndexMode) (*IndexResult, error) {
 	// 1. Create or get project
 	projectID, err := s.UpsertProject(name, root)
 	if err != nil {
 		return nil, fmt.Errorf("upsert project: %w", err)
 	}
-
 	result := &IndexResult{
 		ProjectName: name,
 		ProjectRoot: root,
+		Mode:        mode,
 	}
 
 	// 2. Walk files
@@ -52,9 +52,27 @@ func (s *Store) IndexProject(root, name string) (*IndexResult, error) {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
-		if supportedExts[ext] {
-			files = append(files, path)
+		if !supportedExts[ext] {
+			return nil
 		}
+
+		// Mode-based filtering
+		if mode != IndexModeFull {
+			// Skip large files (>1MB) in non-full modes
+			if fi.Size() > 1<<20 {
+				return nil
+			}
+			// Skip generated files in non-full modes
+			if isGeneratedFile(path) {
+				return nil
+			}
+			// Skip test files in fast mode
+			if mode == IndexModeFast && isTestFile(path) {
+				return nil
+			}
+		}
+
+		files = append(files, path)
 		return nil
 	})
 	if err != nil {
@@ -601,4 +619,42 @@ func toRelPath(absPath string) string {
 	// We don't know the project root here, so return the path
 	// The store layer doesn't normalize — callers should do it
 	return absPath
+}
+
+// isGeneratedFile returns true if the file appears to be auto-generated.
+func isGeneratedFile(path string) bool {
+	name := strings.ToLower(filepath.Base(path))
+	if strings.HasSuffix(name, ".pb.go") || strings.HasSuffix(name, ".pb.swift") || strings.HasSuffix(name, "_pb.js") {
+		return true
+	}
+	if strings.Contains(name, "_generated.") || strings.Contains(name, ".generated.") {
+		return true
+	}
+	if strings.HasSuffix(name, "_mock.go") || strings.HasSuffix(name, "_testify.go") {
+		return true
+	}
+	return false
+}
+
+// isTestFile returns true if the file appears to be a test file.
+func isTestFile(path string) bool {
+	name := filepath.Base(path)
+	ext := strings.ToLower(filepath.Ext(name))
+	baseName := strings.TrimSuffix(name, ext)
+	switch ext {
+	case ".go":
+		return strings.HasSuffix(baseName, "_test")
+	case ".js", ".ts", ".jsx", ".tsx":
+		return strings.HasSuffix(baseName, ".test") || strings.HasSuffix(baseName, ".spec")
+	case ".py":
+		return strings.HasPrefix(baseName, "test_") || strings.HasSuffix(baseName, "_test")
+	case ".rs":
+		return strings.HasSuffix(baseName, "_test")
+	case ".java":
+		return strings.HasSuffix(baseName, "Test") || strings.HasSuffix(baseName, "Tests")
+	case ".kt":
+		return strings.HasSuffix(baseName, "Test") || strings.HasSuffix(baseName, "Spec")
+	default:
+		return false
+	}
 }

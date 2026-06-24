@@ -54,7 +54,16 @@ func (s *Server) handleIndexRepository(args indexRepositoryArgs) *mcp.CallToolRe
 	// Derive project name from repo path
 	projectName := filepath.Base(args.RepoPath)
 
-	result, err := s.store.IndexProject(args.RepoPath, projectName)
+	// Resolve index mode
+	mode := base.IndexModeFull
+	switch args.Mode {
+	case "moderate":
+		mode = base.IndexModeModerate
+	case "fast":
+		mode = base.IndexModeFast
+	}
+
+	result, err := s.store.IndexProject(args.RepoPath, projectName, mode)
 	if err != nil {
 		return errorResult(fmt.Errorf("index repository: %w", err))
 	}

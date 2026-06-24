@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -105,6 +106,21 @@ func (s *Server) handleSearchGraph(args searchGraphArgs) *mcp.CallToolResult {
 		return jsonResult(map[string]any{
 			"results": nodes,
 			"total":   len(nodes),
+		})
+	}
+
+	// Semantic query mode: BM25 fallback (true vector search requires embeddings)
+	if len(args.Semantic) > 0 {
+		query := strings.Join(args.Semantic, " ")
+		nodes, err := s.store.SearchNodes(query, project, args.PathFilter, limit, args.Offset)
+		if err != nil {
+			return errorResult(fmt.Errorf("semantic search: %w", err))
+		}
+		return jsonResult(map[string]any{
+			"results":     nodes,
+			"total":       len(nodes),
+			"mode":        "semantic",
+			"note":        "BM25 fallback — true vector semantic search requires embedding infrastructure",
 		})
 	}
 
@@ -365,10 +381,72 @@ func (s *Server) handleDetectChanges(args detectChangesArgs) *mcp.CallToolResult
 		return errorResult(fmt.Errorf("project root not found"))
 	}
 
+	scope := args.Scope
+	depth := args.Depth
+	if depth <= 0 {
+		depth = 2
+	}
+
+	// Run git diff --name-status to get changed files
+	changedFiles, err := gitDiffNameStatus(rootDir, baseBranch)
+	if err != nil {
+		return jsonResult(map[string]any{
+			"project":    args.Project,
+			"baseBranch": baseBranch,
+			"root":       rootDir,
+			"error":      fmt.Sprintf("git diff failed: %v", err),
+			"note":       "Ensure the project is a git repository with the base branch available",
+		})
+	}
+
+	// Run git diff --stat for summary
+	statOutput, _ := gitDiffStat(rootDir, baseBranch)
+
 	return jsonResult(map[string]any{
-		"project":    args.Project,
-		"baseBranch": baseBranch,
-		"root":       rootDir,
-		"note":       "Change detection via git diff — full implementation pending",
+		"project":      args.Project,
+		"baseBranch":   baseBranch,
+		"root":         rootDir,
+		"changedFiles": changedFiles,
+		"stat":         statOutput,
+		"total":        len(changedFiles),
+		"scope":        scope,
+		"depth":        depth,
 	})
+}
+
+// gitDiffNameStatus returns a list of changed files with their status.
+func gitDiffNameStatus(repoDir, baseBranch string) ([]map[string]string, error) {
+	cmd := exec.Command("git", "diff", "--name-status", baseBranch+"...HEAD")
+	cmd.Dir = repoDir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []map[string]string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		files = append(files, map[string]string{
+			"status": parts[0],
+			"file":   parts[1],
+		})
+	}
+	if files == nil {
+		files = []map[string]string{}
+	}
+	return files, nil
+}
+
+// gitDiffStat returns a human-readable diff stat summary.
+func gitDiffStat(repoDir, baseBranch string) (string, error) {
+	cmd := exec.Command("git", "diff", "--stat", baseBranch+"...HEAD")
+	cmd.Dir = repoDir
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
 }

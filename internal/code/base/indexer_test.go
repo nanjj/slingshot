@@ -525,7 +525,7 @@ func main() {
 	defer store.Close()
 
 	// Index the project
-	result, err := store.IndexProject(dir, "test-project")
+	result, err := store.IndexProject(dir, "test-project", IndexModeFull)
 	assert.NilError(t, err)
 	assert.Assert(t, result.FilesParsed >= 1)
 	// Go tags query: only functions and methods are tagged, not structs.
@@ -589,7 +589,7 @@ func add(a, b int) int {
 	assert.NilError(t, err)
 	defer store.Close()
 
-	result, err := store.IndexProject(dir, "multi-project")
+	result, err := store.IndexProject(dir, "multi-project", IndexModeFull)
 	assert.NilError(t, err)
 	assert.Equal(t, result.FilesParsed, 2)
 	assert.Assert(t, result.NodesStored >= 3) // main, helper, add
@@ -612,7 +612,7 @@ func TestIndexProject_UnsupportedFile(t *testing.T) {
 	assert.NilError(t, err)
 	defer store.Close()
 
-	result, err := store.IndexProject(dir, "unsupported")
+	result, err := store.IndexProject(dir, "unsupported", IndexModeFull)
 	assert.NilError(t, err)
 	assert.Equal(t, result.FilesParsed, 0) // no supported files
 	assert.Equal(t, result.Errors, 0)

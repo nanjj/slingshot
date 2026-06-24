@@ -1,28 +1,36 @@
 # Slingshot code intelligence — 开发追踪
 
-## 最新状态 (42df68b)
+## 最新状态 (08a98ef)
 
-✅ **Phase 1+2 合并提交** (07d48d8) — 22 files, 3712 lines
-✅ **Curie 集成测试** (7aefe4b) — 10/10 pass, SQL bug fix in graph.go
-✅ **indexer_test.go + 4 bug fixes** (42df68b) — 32 tests, base 包从 0→32 tests
+✅ **Phase 1** (a23b482) — code_edit, code_edit_body, code_locate (base layer)
+✅ **Phase 2** (08a98ef) — code_find_references, code_analysis, linear_scan_in_loop (6 files, +725/-10)
+  - Curie: indexer + analyzer + MCP handlers + 5 integration tests
+  - 39 tests 全部通过
 
-### 已修复 Bug
-| Bug | 位置 | 影响 |
-|-----|------|------|
-| nodeText nil source | collectCyclomatic/checkRecursive/collectCalls | &&/|| 不计数、递归检测失败、调用提取为空 |
-| collectCognitive 无限递归 | 对 if/for 递归自身 | 栈溢出 |
-| countParams type mismatch | 用了 "parameters" 而非 "parameter_list" | Go 参数计数为 0 |
-| checkRecursive 漏检方法调用 | field_identifier→selector_expression | Go 方法递归检测失败 |
+### 当前工具 (28个)
+
+| 类别 | 工具 | 说明 |
+|------|------|------|
+| 编辑 | code_edit, code_edit_body, code_locate | 基于 tree-sitter 的精确编辑 |
+| 分析 | code_analysis, code_find_references | 复杂度分析 + 引用查找 |
+| 搜索 | search_graph, search_code, get_code_snippet | BM25/语义/正则搜索 |
+| 图 | query_graph, trace_path, get_architecture | Cypher/依赖追踪/架构 |
+| AST | get_structure, get_node, get_text, get_definitions | AST 导航 |
+| 项目 | index_repository, delete_project, list_projects, index_status | 项目管理 |
+| 其他 | detect_changes, ingest_traces, manage_adr, get_graph_schema | 变更/ADR/写入 |
+| 编辑器 | open_project, get_project_root, validate, query_ast | 编辑器基础设施 |
+| 记忆 | save_memo, search_memos | 持久化记忆 |
 
 ### 测试覆盖
 ```
-internal/code/base/  32 tests (was 0)
-internal/code/mcp/   10 tests (unchanged)
-internal/code/lsp/   0 tests  ← 仍需补
+internal/code/base/  32 tests
+internal/code/mcp/   42 tests (Phase 1: 37 + Phase 2: 5)
+internal/code/lsp/    0 tests  ← 仍需补
 ```
 
 ## 待办
 
-- [ ] lsp 包测试（analyzer.go + lsp.go）
-- [ ] 联调 — code serve CLI + codebase-memory-mcp MCP client
+- [ ] lsp 包测试（analyzer.go + lsp.go）→ Phase 3 重点
+- [ ] 联调 — `slingshot code serve` + codebase-memory-mcp MCP client
 - [ ] 更多语言支持验证（Python/JS/Rust/Java 等）
+- [ ] `slingshot code` vs codebase-memory-mcp 差距分析

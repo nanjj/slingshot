@@ -1,6 +1,15 @@
 // Package base implements SQLite-backed code graph storage and project indexing.
 package base
 
+// IndexMode controls how IndexProject processes files.
+type IndexMode string
+
+const (
+	IndexModeFull     IndexMode = "full"     // all files + similarity/semantic edges
+	IndexModeModerate IndexMode = "moderate" // filtered files + similarity
+	IndexModeFast     IndexMode = "fast"     // filtered files, no similarity
+)
+
 // Node represents a code symbol in the knowledge graph.
 type Node struct {
 	ID                  int64  `json:"id"`
@@ -54,12 +63,13 @@ type ProjectInfo struct {
 
 // IndexResult is returned after project indexing.
 type IndexResult struct {
-	ProjectName string `json:"projectName"`
-	ProjectRoot string `json:"projectRoot"`
-	FilesParsed int    `json:"filesParsed"`
-	NodesStored int    `json:"nodesStored"`
-	EdgesStored int    `json:"edgesStored"`
-	Errors      int    `json:"errors,omitempty"`
+	ProjectName string    `json:"projectName"`
+	ProjectRoot string    `json:"projectRoot"`
+	Mode        IndexMode `json:"mode"`
+	FilesParsed int       `json:"filesParsed"`
+	NodesStored int       `json:"nodesStored"`
+	EdgesStored int       `json:"edgesStored"`
+	Errors      int       `json:"errors,omitempty"`
 }
 
 // TraceHop represents a hop in a call chain trace.
