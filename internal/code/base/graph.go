@@ -24,10 +24,10 @@ func (s *Store) GetReferences(qn, project, direction string, depth int) ([]Edge,
 
 	var query string
 	var args []any
-	args = append(args, project, qn, depth)
 
 	switch direction {
 	case "inbound":
+		args = []any{project, qn, project, depth}
 		query = `
 			WITH RECURSIVE refs(id, project_id, source_qn, target_qn, edge_type, metadata, created_at, lvl) AS (
 				SELECT e.id, e.project_id, e.source_qn, e.target_qn, e.edge_type, e.metadata, e.created_at, 1
@@ -46,6 +46,7 @@ func (s *Store) GetReferences(qn, project, direction string, depth int) ([]Edge,
 			ORDER BY lvl, source_qn
 		`
 	case "outbound":
+		args = []any{project, qn, project, depth}
 		query = `
 			WITH RECURSIVE refs(id, project_id, source_qn, target_qn, edge_type, metadata, created_at, lvl) AS (
 				SELECT e.id, e.project_id, e.source_qn, e.target_qn, e.edge_type, e.metadata, e.created_at, 1
@@ -64,6 +65,7 @@ func (s *Store) GetReferences(qn, project, direction string, depth int) ([]Edge,
 			ORDER BY lvl, source_qn
 		`
 	default: // both
+		args = []any{project, qn, qn, project, depth}
 		query = `
 			WITH RECURSIVE refs(id, project_id, source_qn, target_qn, edge_type, metadata, created_at, lvl) AS (
 				SELECT e.id, e.project_id, e.source_qn, e.target_qn, e.edge_type, e.metadata, e.created_at, 1
@@ -107,10 +109,10 @@ func (s *Store) TraceCallChain(qn, project, direction string, depth int) ([]Trac
 
 	var query string
 	var args []any
-	args = append(args, project, qn, depth)
 
 	switch direction {
 	case "inbound":
+		args = []any{project, qn, project, depth}
 		query = `
 			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl) AS (
 				SELECT e.source_qn, e.target_qn, e.edge_type, 1
@@ -131,6 +133,7 @@ func (s *Store) TraceCallChain(qn, project, direction string, depth int) ([]Trac
 			ORDER BY c.lvl, c.source_qn
 		`
 	case "outbound":
+		args = []any{project, qn, project, depth}
 		query = `
 			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl) AS (
 				SELECT e.source_qn, e.target_qn, e.edge_type, 1
@@ -151,6 +154,7 @@ func (s *Store) TraceCallChain(qn, project, direction string, depth int) ([]Trac
 			ORDER BY c.lvl, c.source_qn
 		`
 	default: // both
+		args = []any{project, qn, qn, project, depth}
 		query = `
 			WITH RECURSIVE chain(source_qn, target_qn, edge_type, lvl) AS (
 				SELECT e.source_qn, e.target_qn, e.edge_type, 1
@@ -171,6 +175,7 @@ func (s *Store) TraceCallChain(qn, project, direction string, depth int) ([]Trac
 			ORDER BY c.lvl, c.source_qn
 		`
 	}
+
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
