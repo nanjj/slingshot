@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/nanjj/clog"
 	"github.com/spf13/cobra"
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
@@ -427,7 +428,15 @@ For page-type sites, rsync runs directly from the site directory.`),
 	return cmd
 }
 
-func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
+func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) (err error) {
+	span, _ := clog.StartSpanFromContext(cmd.Context(), "site_rsync")
+	defer func() {
+		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
+		}
+		span.Finish()
+	}()
+
 	parsed, err := c.global.Parse(siteRsyncUsage, cmd, args)
 	if err != nil {
 		return err
@@ -436,6 +445,7 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 		return errors.New(i18n.G("expected a site name argument"))
 	}
 	name := parsed[0].String
+	span.LogKV("event", "site_rsync", "name", name)
 
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -493,6 +503,7 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("Rsync completed successfully."))
+	span.LogKV("event", "site_rsync_result", "name", name)
 	return nil
 }
 

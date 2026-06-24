@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/fatih/color"
+	"github.com/nanjj/clog"
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
@@ -43,7 +44,15 @@ or as a standalone optimization step.`),
 	return cmd
 }
 
-func (c *cmdSiteOptimize) run(cmd *cobra.Command, args []string) error {
+func (c *cmdSiteOptimize) run(cmd *cobra.Command, args []string) (err error) {
+	span, _ := clog.StartSpanFromContext(cmd.Context(), "site_optimize")
+	defer func() {
+		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
+		}
+		span.Finish()
+	}()
+
 	parsed, err := c.global.Parse(siteOptimizeUsage, cmd, args)
 	if err != nil {
 		return err
@@ -52,6 +61,7 @@ func (c *cmdSiteOptimize) run(cmd *cobra.Command, args []string) error {
 		return errors.New(i18n.G("expected a site name argument"))
 	}
 	name := parsed[0].String
+	span.LogKV("event", "site_optimize", "name", name, "force", c.flagForce)
 
 	cfg, _, err := config.Load()
 	if err != nil {
@@ -77,5 +87,6 @@ func (c *cmdSiteOptimize) run(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(color.Output, "%s %s\n", color.CyanString("i"), i18n.G("CSS is already optimized."))
 	}
 
+	span.LogKV("event", "site_optimize_result", "upgraded", upgraded)
 	return nil
 }
