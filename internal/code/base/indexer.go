@@ -154,6 +154,7 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 				n.LoopCount = countLoops(bodyNode, lang)
 				n.Recursive = isRecursive(bodyNode, tag.Name, lang, source)
 				n.ParamCount = countParams(bodyNode, tag.Kind, lang)
+				n.LinearScanInLoop = linearScanInLoop(bodyNode, lang, source, false)
 			}
 		}
 
@@ -528,6 +529,58 @@ func isBuiltinOrKeyword(name string) bool {
 		return true
 	}
 	return false
+}
+
+
+// linearScanInLoop counts linear scan operations (find, contains, indexOf, etc.)
+// that occur inside loop bodies — these are hidden O(n^2) signals.
+// Walks the body node looking for call expressions inside loop constructs.
+func linearScanInLoop(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, inLoop bool) int {
+	if node == nil {
+		return 0
+	}
+	typ := node.Type(lang)
+	isLoop := typ == "for_statement" || typ == "while_statement" || typ == "do_statement"
+
+	currentInLoop := inLoop || isLoop
+
+	count := 0
+	if currentInLoop && typ == "call_expression" {
+		// Get function name
+		if node.ChildCount() > 0 {
+			fnNode := node.Child(0)
+			if fnNode != nil {
+				name := nodeText(fnNode, lang, source)
+				if isLinearScanName(name) {
+					count++
+				}
+			}
+		}
+	}
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		count += linearScanInLoop(node.Child(i), lang, source, currentInLoop)
+	}
+	return count
+}
+
+var linearScanNames = map[string]bool{
+	"find": true, "findFirst": true, "findLast": true, "findAny": true,
+	"contains": true, "indexOf": true, "lastIndexOf": true,
+	"includes": true, "search": true, "searchRange": true,
+	"match": true, "matchAll": true,
+	"Count": true, "Any": true, "All": true,
+	"Filter": true, "Where": true, "First": true, "FirstOrDefault": true,
+	"Single": true, "SingleOrDefault": true,
+}
+
+func isLinearScanName(name string) bool {
+	// Handle method calls like .Find, .Contains, strings.Contains
+	parts := strings.Split(name, ".")
+	if len(parts) > 0 {
+		name = parts[len(parts)-1]
+	}
+	return linearScanNames[name]
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────

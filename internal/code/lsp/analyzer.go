@@ -82,12 +82,34 @@ type SyntaxError struct {
 	EndCol   uint32 `json:"endCol"`
 }
 
-// AnalysisResult holds complexity and structure analysis for a file.
+// FuncAnalysis holds complexity metrics for a single function or method.
+type FuncAnalysis struct {
+	Name             string `json:"name"`
+	Kind             string `json:"kind"`
+	Cyclomatic       int    `json:"cyclomatic"`
+	Cognitive        int    `json:"cognitive"`
+	LoopDepth        int    `json:"loopDepth"`
+	LoopCount        int    `json:"loopCount"`
+	ParamCount       int    `json:"paramCount"`
+	Recursive        bool   `json:"recursive"`
+	LinearScanInLoop int    `json:"linearScanInLoop"`
+	AllocInLoop      int    `json:"allocInLoop"`
+	StartLine        uint32 `json:"startLine"`
+	EndLine          uint32 `json:"endLine"`
+}
+
+// AnalysisSummary holds aggregate metrics for a file.
+type AnalysisSummary struct {
+	TotalFunctions int     `json:"totalFunctions"`
+	AvgCyclomatic  float64 `json:"avgCyclomatic"`
+	MaxComplexity  int     `json:"maxComplexity"`
+	TotalCognitive int     `json:"totalCognitive"`
+}
+
+// AnalysisResult holds the complete analysis for a file.
 type AnalysisResult struct {
-	Cyclomatic int `json:"cyclomatic"`
-	Cognitive  int `json:"cognitive"`
-	LoopDepth  int `json:"loopDepth"`
-	LoopCount  int `json:"loopCount"`
-	ParamCount int `json:"paramCount"`
-	Recursive  bool `json:"recursive"`
+	File      string          `json:"file"`
+	Language  string          `json:"language"`
+	Functions []FuncAnalysis  `json:"functions"`
+	Summary   AnalysisSummary `json:"summary"`
 }

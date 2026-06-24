@@ -1,8 +1,8 @@
 // Package mcp provides MCP tool handlers for code intelligence.
 //
 // It connects the base (storage/graph) and lsp (analysis) packages
-// to the Model Context Protocol, exposing 23 tools for code search,
-// navigation, editing, and project management.
+// to the Model Context Protocol, exposing 25 tools for code search,
+// navigation, editing, referencing, analysis, and project management.
 package mcp
 
 import (
@@ -82,4 +82,8 @@ func (s *Server) RegisterAll(srv *mcp.Server) {
 	registerCodeEdit(srv, s)
 	registerCodeEditBody(srv, s)
 	registerCodeLocate(srv, s)
+
+	// ─── Analysis & References (2, Phase 2) ─────────────────────────────
+	registerCodeFindReferences(srv, s)
+	registerCodeAnalysis(srv, s)
 }

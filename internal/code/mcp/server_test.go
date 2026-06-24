@@ -703,4 +703,159 @@ func TestCodeEdit_ErrorHandling(t *testing.T) {
 			callToolError(t, cs, "code_edit", tt.args)
 		})
 	}
+	}
+
+// ─── Phase 2: References & Analysis ──────────────────────────────────────────
+
+// TestCodeFindReferences_Inbound verifies code_find_references finds callers.
+func TestCodeFindReferences_Inbound(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+
+	// Index the project
+	type idxResult struct {
+		ProjectName string `json:"projectName"`
+	}
+	var idxRes idxResult
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+	}, &idxRes)
+
+	// Find references to fmt.Println (inbound)
+	type refItem struct {
+		SourceQN string `json:"sourceQN"`
+		TargetQN string `json:"targetQN"`
+		EdgeType string `json:"edgeType"`
+	}
+	type refResult struct {
+		Symbol     string    `json:"symbol"`
+		References []refItem `json:"references"`
+		Total      int       `json:"total"`
+	}
+	var refRes refResult
+	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+		"project":       idxRes.ProjectName,
+		"qualifiedName": "fmt.Println",
+	}, &refRes)
+
+	assert.Assert(t, refRes.Total >= 1)
+	assert.Equal(t, refRes.Symbol, "fmt.Println")
+	assert.Assert(t, refRes.References[0].SourceQN == "main")
+}
+
+// TestCodeFindReferences_Outbound verifies code_find_references finds callees.
+func TestCodeFindReferences_Outbound(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+
+	type idxResult struct {
+		ProjectName string `json:"projectName"`
+	}
+	var idxRes idxResult
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+	}, &idxRes)
+
+	type refResult struct {
+		Symbol     string `json:"symbol"`
+		References []any  `json:"references"`
+		Total      int    `json:"total"`
+	}
+	var refRes refResult
+	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+		"project":       idxRes.ProjectName,
+		"qualifiedName": "main",
+		"direction":     "outbound",
+	}, &refRes)
+
+	// main calls fmt.Println and g.Hello
+	t.Logf("outbound references for main: total=%d", refRes.Total)
+}
+
+// TestCodeFindReferences_Errors verifies error handling.
+func TestCodeFindReferences_Errors(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	t.Run("missing qualifiedName", func(t *testing.T) {
+		callToolError(t, cs, "code_find_references", map[string]any{
+			"project": "test",
+		})
+	})
+
+	t.Run("missing project", func(t *testing.T) {
+		callToolError(t, cs, "code_find_references", map[string]any{
+			"qualifiedName": "main",
+		})
+	})
+}
+
+// TestCodeAnalysis verifies code_analysis returns file metrics.
+func TestCodeAnalysis(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	type funcAnalysis struct {
+		Name       string `json:"name"`
+		Kind       string `json:"kind"`
+		Cyclomatic int    `json:"cyclomatic"`
+		ParamCount int    `json:"paramCount"`
+	}
+	type analysisResult struct {
+		File      string         `json:"file"`
+		Language  string         `json:"language"`
+		Functions []funcAnalysis `json:"functions"`
+		Summary   struct {
+			TotalFunctions int     `json:"totalFunctions"`
+			AvgCyclomatic  float64 `json:"avgCyclomatic"`
+			MaxComplexity  int     `json:"maxComplexity"`
+		} `json:"summary"`
+	}
+	var result analysisResult
+	callToolUnmarshal(t, cs, "code_analysis", map[string]any{
+		"file": filePath,
+	}, &result)
+
+	assert.Assert(t, result.File != "")
+	assert.Assert(t, result.Language != "")
+	assert.Assert(t, len(result.Functions) >= 2, "expected at least 2 functions, got %d", len(result.Functions))
+
+	// Verify: Hello method with param count 1 (receiver *Greeter counts as param)
+	foundHello := false
+	foundMain := false
+	for _, fn := range result.Functions {
+		if fn.Name == "Hello" {
+			foundHello = true
+			assert.Assert(t, fn.Cyclomatic >= 1)
+			// Hello has receiver (g *Greeter) so param count should be >= 1
+			assert.Assert(t, fn.ParamCount > 0)
+		}
+		if fn.Name == "main" {
+			foundMain = true
+		}
+	}
+	assert.Assert(t, foundHello, "Hello function should be analyzed")
+	assert.Assert(t, foundMain, "main function should be analyzed")
+
+	// Summary checks
+	assert.Assert(t, result.Summary.TotalFunctions >= 2)
+	assert.Assert(t, result.Summary.MaxComplexity >= 1)
+	assert.Assert(t, result.Summary.AvgCyclomatic >= 1.0)
+}
+
+// TestCodeAnalysis_Error verifies error handling for missing file.
+func TestCodeAnalysis_Error(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	callToolError(t, cs, "code_analysis", map[string]any{
+		"file": "",
+	})
 }

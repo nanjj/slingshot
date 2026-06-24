@@ -339,7 +339,341 @@ func (a *Analyzer) GetLine(filePath string, line uint32) (string, error) {
 	return string(lineBytes), nil
 }
 
-// ─── Internal Helpers ─────────────────────────────────────────────────────────
+// ─── Code Analysis ─────────────────────────────────────────────────────────
+
+// AnalyzeFile performs complexity analysis on a file using tree-sitter.
+// Returns per-function metrics and a summary.
+func (a *Analyzer) AnalyzeFile(filePath string) (*AnalysisResult, error) {
+	result, err := a.ParseFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer result.Tree.Release()
+
+	entry := grammars.DetectLanguage(filePath)
+	if entry == nil {
+		return nil, fmt.Errorf("unsupported language: %s", filePath)
+	}
+	lang := getLanguage(entry)
+	root := result.Tree.RootNode()
+
+	tags, err := a.GetDefinitions(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("get definitions: %w", err)
+	}
+
+	var functions []FuncAnalysis
+	maxComplexity := 0
+	totalCyclomatic := 0
+	totalCognitive := 0
+
+	for _, tag := range tags {
+		if tag.Kind != "definition.function" && tag.Kind != "definition.method" {
+			continue
+		}
+		bodyNode := findFuncBody(root, tag, lang)
+		fa := FuncAnalysis{
+			Name:      tag.Name,
+			Kind:      strings.TrimPrefix(tag.Kind, "definition."),
+			StartLine: tag.StartLine,
+			EndLine:   tag.EndLine,
+		}
+		if bodyNode != nil {
+			fa.Cyclomatic = cyclomaticComplex(bodyNode, lang, result.Source)
+			fa.Cognitive = cognitiveComplex(bodyNode, lang, 0)
+			fa.LoopDepth = maxLoopDepth(bodyNode, lang, 0)
+			fa.LoopCount = countLoopsInNode(bodyNode, lang)
+			fa.Recursive = checkRecursiveCall(bodyNode, tag.Name, lang, result.Source)
+			fa.ParamCount = countFuncParams(bodyNode, tag.Kind, lang)
+			fa.LinearScanInLoop = linearScanCount(bodyNode, lang, result.Source, false)
+		}
+		if fa.Cyclomatic > maxComplexity {
+			maxComplexity = fa.Cyclomatic
+		}
+		totalCyclomatic += fa.Cyclomatic
+		totalCognitive += fa.Cognitive
+		functions = append(functions, fa)
+	}
+
+	n := len(functions)
+	avgCyc := 0.0
+	if n > 0 {
+		avgCyc = float64(totalCyclomatic) / float64(n)
+	}
+
+	return &AnalysisResult{
+		File:      filePath,
+		Language:  result.Language,
+		Functions: functions,
+		Summary: AnalysisSummary{
+			TotalFunctions: n,
+			AvgCyclomatic:  avgCyc,
+			MaxComplexity:  maxComplexity,
+			TotalCognitive: totalCognitive,
+		},
+	}, nil
+}
+
+// ─── Complexity Helpers ─────────────────────────────────────────────────────
+
+func findFuncBody(root *gotreesitter.Node, tag Tag, lang *gotreesitter.Language) *gotreesitter.Node {
+	return searchBody(root, tag, lang)
+}
+
+func searchBody(node *gotreesitter.Node, tag Tag, lang *gotreesitter.Language) *gotreesitter.Node {
+	if node == nil {
+		return nil
+	}
+	typ := node.Type(lang)
+	if isBodyBlock(typ) {
+		sb, eb := node.StartByte(), node.EndByte()
+		if sb >= tag.StartByte && eb <= tag.EndByte {
+			return node
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if found := searchBody(node.Child(i), tag, lang); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func isBodyBlock(typ string) bool {
+	switch typ {
+	case "block", "block_statement", "compound_statement",
+		"statement_block", "body", "declaration_list":
+		return true
+	}
+	return false
+}
+
+func cyclomaticComplex(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) int {
+	if node == nil {
+		return 1
+	}
+	c := 1
+	walkCyclomatic(node, lang, source, &c)
+	return c
+}
+
+func walkCyclomatic(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, c *int) {
+	if node == nil {
+		return
+	}
+	switch node.Type(lang) {
+	case "if_statement", "else_clause", "for_statement", "while_statement",
+		"do_statement", "switch_statement", "case_statement", "case",
+		"catch_clause", "conditional_expression", "ternary_expression":
+		*c++
+	case "binary_expression":
+		t := nodeText(node, lang, source)
+		if strings.Contains(t, "&&") || strings.Contains(t, "||") {
+			*c++
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		walkCyclomatic(node.Child(i), lang, source, c)
+	}
+}
+
+func cognitiveComplex(node *gotreesitter.Node, lang *gotreesitter.Language, nesting int) int {
+	if node == nil {
+		return 0
+	}
+	s := 0
+	walkCognitive(node, lang, nesting, &s)
+	return s
+}
+
+func walkCognitive(node *gotreesitter.Node, lang *gotreesitter.Language, nesting int, s *int) {
+	if node == nil {
+		return
+	}
+	switch node.Type(lang) {
+	case "if_statement", "else_clause", "for_statement", "while_statement",
+		"do_statement", "catch_clause":
+		*s += 1 + nesting
+		for i := 0; i < int(node.ChildCount()); i++ {
+			walkCognitive(node.Child(i), lang, nesting+1, s)
+		}
+		return
+	case "switch_statement", "case_statement", "case":
+		*s += 1 + nesting
+		for i := 0; i < int(node.ChildCount()); i++ {
+			walkCognitive(node.Child(i), lang, nesting, s)
+		}
+		return
+	case "conditional_expression", "ternary_expression":
+		*s += 1 + nesting
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		walkCognitive(node.Child(i), lang, nesting, s)
+	}
+}
+
+func maxLoopDepth(node *gotreesitter.Node, lang *gotreesitter.Language, depth int) int {
+	if node == nil {
+		return 0
+	}
+	typ := node.Type(lang)
+	isLoop := typ == "for_statement" || typ == "while_statement" || typ == "do_statement"
+	cur := depth
+	if isLoop {
+		cur++
+	}
+	m := cur
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if cd := maxLoopDepth(node.Child(i), lang, cur); cd > m {
+			m = cd
+		}
+	}
+	return m
+}
+
+func countLoopsInNode(node *gotreesitter.Node, lang *gotreesitter.Language) int {
+	if node == nil {
+		return 0
+	}
+	c := 0
+	walkLoops(node, lang, &c)
+	return c
+}
+
+func walkLoops(node *gotreesitter.Node, lang *gotreesitter.Language, c *int) {
+	if node == nil {
+		return
+	}
+	switch node.Type(lang) {
+	case "for_statement", "while_statement", "do_statement":
+		*c++
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		walkLoops(node.Child(i), lang, c)
+	}
+}
+
+func checkRecursiveCall(body *gotreesitter.Node, name string, lang *gotreesitter.Language, source []byte) bool {
+	if body == nil {
+		return false
+	}
+	found := false
+	walkRecursive(body, name, lang, source, &found)
+	return found
+}
+
+func walkRecursive(node *gotreesitter.Node, name string, lang *gotreesitter.Language, source []byte, found *bool) {
+	if *found || node == nil {
+		return
+	}
+	if node.Type(lang) == "identifier" && nodeText(node, lang, source) == name {
+		if p := node.Parent(); p != nil && p.Type(lang) == "call_expression" {
+			*found = true
+			return
+		}
+	}
+	if node.Type(lang) == "field_identifier" || node.Type(lang) == "property_identifier" {
+		if nodeText(node, lang, source) == name {
+			p := node.Parent()
+			if p != nil && p.Type(lang) == "selector_expression" {
+				p = p.Parent()
+			}
+			if p != nil && p.Type(lang) == "call_expression" {
+				*found = true
+				return
+			}
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		walkRecursive(node.Child(i), name, lang, source, found)
+	}
+}
+
+func countFuncParams(body *gotreesitter.Node, kind string, lang *gotreesitter.Language) int {
+	if body == nil {
+		return 0
+	}
+	parent := body.Parent()
+	for parent != nil {
+		switch parent.Type(lang) {
+		case "function_definition", "method_definition",
+			"function_declaration", "method_declaration", "arrow_function":
+			for i := 0; i < int(parent.ChildCount()); i++ {
+				child := parent.Child(i)
+				if child != nil && (child.Type(lang) == "parameters" || child.Type(lang) == "parameter_list") {
+					params := 0
+					for j := 0; j < int(child.ChildCount()); j++ {
+						gc := child.Child(j)
+						if gc != nil && gc.Type(lang) == "parameter_declaration" {
+							idCount := 0
+							for k := 0; k < int(gc.ChildCount()); k++ {
+								if gc.Child(k) != nil && gc.Child(k).Type(lang) == "identifier" {
+									idCount++
+								}
+							}
+							if idCount > 0 {
+								params += idCount
+							} else {
+								params++
+							}
+						}
+					}
+					return params
+				}
+			}
+		}
+		parent = parent.Parent()
+	}
+	return 0
+}
+
+func linearScanCount(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, inLoop bool) int {
+	if node == nil {
+		return 0
+	}
+	typ := node.Type(lang)
+	isLoop := typ == "for_statement" || typ == "while_statement" || typ == "do_statement"
+	curInLoop := inLoop || isLoop
+	count := 0
+	if curInLoop && typ == "call_expression" && node.ChildCount() > 0 {
+		if fnNode := node.Child(0); fnNode != nil {
+			if isScanName(nodeText(fnNode, lang, source)) {
+				count++
+			}
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		count += linearScanCount(node.Child(i), lang, source, curInLoop)
+	}
+	return count
+}
+
+var scanNames = map[string]bool{
+	"find": true, "findFirst": true, "findLast": true, "findAny": true,
+	"contains": true, "indexOf": true, "lastIndexOf": true,
+	"includes": true, "search": true, "searchRange": true,
+	"match": true, "matchAll": true,
+	"Count": true, "Any": true, "All": true,
+	"Filter": true, "Where": true, "First": true, "FirstOrDefault": true,
+	"Single": true, "SingleOrDefault": true,
+}
+
+func isScanName(name string) bool {
+	parts := strings.Split(name, ".")
+	if len(parts) > 0 {
+		name = parts[len(parts)-1]
+	}
+	return scanNames[name]
+}
+
+// nodeText returns the source text of a tree-sitter node.
+func nodeText(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	if source != nil {
+		return string(node.Text(source))
+	}
+	return ""
+}
+
 
 // buildStructure recursively builds a NodeInfo tree.
 func buildStructure(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, depth, maxDepth, maxWidth int) NodeInfo {
