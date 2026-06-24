@@ -96,9 +96,11 @@ func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp
 	span.LogKV("event", "search_code", "project", args.Project, "pattern", args.Pattern, "filePattern", args.FilePattern, "mode", args.Mode)
 
 	if args.Pattern == "" {
+		span.LogKV("event", "error", "error", "pattern is required")
 		return errorResult(fmt.Errorf("pattern is required"))
 	}
 	if args.Project == "" {
+		span.LogKV("event", "error", "error", "project is required")
 		return errorResult(fmt.Errorf("project is required"))
 	}
 

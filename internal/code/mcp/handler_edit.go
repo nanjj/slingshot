@@ -224,6 +224,7 @@ func (s *Server) handleCodeLocate(ctx context.Context, args codeLocateArgs) *mcp
 	span.LogKV("event", "code_locate", "qualifiedName", args.QualifiedName, "project", args.Project)
 
 	if args.QualifiedName == "" {
+		span.LogKV("event", "error", "error", "qualifiedName is required")
 		return errorResult(fmt.Errorf("qualifiedName is required"))
 	}
 
