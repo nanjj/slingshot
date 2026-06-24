@@ -1,62 +1,28 @@
-[07d48d8] ✅ Phase 1 + Phase 2 合并提交，22 files，3712 lines
-- Curie 完成了 mcp/ 包（8 文件）和 code serve CLI（cmd/code.go）
-- 已回复 Curie 邮件，建议下一步方向：indexer 测试 vs 联调
-在 `internal/code/` 下创建 `base`（图存储）和 `lsp`（AST分析）两个包，为 Phase 2（Curie 的 mcp + CLI）打下基础。
+# Slingshot code intelligence — 开发追踪
 
-## 模块结构
+## 最新状态 (42df68b)
+
+✅ **Phase 1+2 合并提交** (07d48d8) — 22 files, 3712 lines
+✅ **Curie 集成测试** (7aefe4b) — 10/10 pass, SQL bug fix in graph.go
+✅ **indexer_test.go + 4 bug fixes** (42df68b) — 32 tests, base 包从 0→32 tests
+
+### 已修复 Bug
+| Bug | 位置 | 影响 |
+|-----|------|------|
+| nodeText nil source | collectCyclomatic/checkRecursive/collectCalls | &&/|| 不计数、递归检测失败、调用提取为空 |
+| collectCognitive 无限递归 | 对 if/for 递归自身 | 栈溢出 |
+| countParams type mismatch | 用了 "parameters" 而非 "parameter_list" | Go 参数计数为 0 |
+| checkRecursive 漏检方法调用 | field_identifier→selector_expression | Go 方法递归检测失败 |
+
+### 测试覆盖
 ```
-internal/code/
-  base/        SQLite 图存储 + tree-sitter 索引引擎
-    store.go    Store 类型、OpenStore、Close
-    schema.go   DDL（projects/nodes/edges/memos/traces + FTS5）
-    models.go   数据模型（Node, Edge, Project, TraceHop 等）
-    crud.go     Node/Edge CRUD + FTS5 搜索
-    graph.go    图遍历（递归 CTE：trace, references, query_graph）
-    indexer.go  项目索引引擎（walk → parse → extract → store）
-    indexer_test.go
-  lsp/         AST 分析层（从 internal/editor/ 提炼，去掉写/生命周期）
-    analyzer.go Analyzer 类型、NewAnalyzer
-    lsp.go      核心方法：ParseFile, GetStructure, GetNode, GetDefinitions, Validate, QueryAST
-    analysis.go 复杂度分析（cyclomatic, cognitive, loop_depth）
-    analysis_test.go
+internal/code/base/  32 tests (was 0)
+internal/code/mcp/   10 tests (unchanged)
+internal/code/lsp/   0 tests  ← 仍需补
 ```
 
-## 执行路线
+## 待办
 
-### Step 1: base/store.go + schema.go + models.go
-- OpenStore (modernc.org/sqlite)
-- Schema DDL（7张表 + FTS5 + 索引）
-- Node/Edge/ProjectInfo/IndexResult 类型
-
-### Step 2: base/crud.go
-- SaveNode, GetNodeByQN, FindSymbols, SearchNodes
-- SaveEdge
-- ProjectInfo CRUD
-
-### Step 3: base/graph.go
-- GetReferences (递归 CTE)
-- TraceCallChain (双向递归 CTE)
-- QueryGraph (raw SQL)
-
-### Step 4: base/indexer.go
-- Walk project 目录
-- tree-sitter 解析每个文件
-- 提取符号（函数、方法、类、结构体、接口）
-- 计算复杂度
-- 构建调用关系
-- 批量写入 SQLite
-
-### Step 5: lsp/analyzer.go + lsp.go + analysis.go
-- ParseFile: 解析文件，返回 tree
-- GetStructure: 层次化结构
-- GetNode: 按位置获取节点
-- GetDefinitions: 提取定义标签
-- Validate: 语法检查
-- QueryAST: S-表达式查询
-- Analyze: 圈复杂度、认知复杂度、循环深度
-
-- [x] Step 1: base schema + store
-- [x] Step 2: base CRUD
-- [x] Step 3: base graph traversal
-- [ ] Step 4: base indexer
-- [x] Step 5: lsp analyzer
+- [ ] lsp 包测试（analyzer.go + lsp.go）
+- [ ] 联调 — code serve CLI + codebase-memory-mcp MCP client
+- [ ] 更多语言支持验证（Python/JS/Rust/Java 等）
