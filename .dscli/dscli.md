@@ -1,11 +1,15 @@
 # Slingshot code intelligence — 开发追踪
 
-## 最新状态 (08a98ef)
+## 最新状态 (9131975)
 
 ✅ **Phase 1** (a23b482) — code_edit, code_edit_body, code_locate (base layer)
 ✅ **Phase 2** (08a98ef) — code_find_references, code_analysis, linear_scan_in_loop (6 files, +725/-10)
   - Curie: indexer + analyzer + MCP handlers + 5 integration tests
   - 39 tests 全部通过
+✅ **Phase 3 — 3 个 MCP 缺口修复** (9131975) — 张衡
+  - `index_repository.mode` — 支持 full/moderate/fast 三级过滤
+  - `detect_changes` — git diff 真实实现（替代 stub）
+  - `search_graph.semanticQuery` — BM25 保底搜索
 
 ### 当前工具 (28个)
 
@@ -30,7 +34,6 @@ internal/code/lsp/    0 tests  ← 仍需补
 
 ## 待办
 
-- [ ] lsp 包测试（analyzer.go + lsp.go）→ Phase 3 重点
-- [ ] 联调 — `slingshot code serve` + codebase-memory-mcp MCP client
-- [ ] 更多语言支持验证（Python/JS/Rust/Java 等）
-- [ ] `slingshot code` vs codebase-memory-mcp 差距分析
+- [ ] **lsp 包测试**（analyer.go + lsp.go）→ 已分配居里
+- [ ] **联调** — `slingshot code serve` + codebase-memory-mcp MCP client → 居里（lsp 测试之后）
+- [ ] **多语言支持验证**（Python/JS/Rust/Java 等）→ 排期中
