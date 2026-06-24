@@ -6,6 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nanjj/clog"
 	"github.com/nanjj/slingshot/internal/code/base"
 )
 
@@ -42,11 +43,15 @@ func registerSearchMemos(srv *mcp.Server, s *Server) {
 		Name:        "search_memos",
 		Description: "Search persistent memories by keyword, with optional type filter.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchMemosArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleSearchMemos(args), nil, nil
+		return s.handleSearchMemos(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleSearchMemos(args searchMemosArgs) *mcp.CallToolResult {
+func (s *Server) handleSearchMemos(ctx context.Context, args searchMemosArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "search_memos")
+	defer span.Finish()
+	span.LogKV("event", "search_memos", "project", args.Project, "query", args.Query)
+
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
@@ -58,12 +63,14 @@ func (s *Server) handleSearchMemos(args searchMemosArgs) *mcp.CallToolResult {
 
 	memos, err := s.store.SearchMemos(args.Project, args.Query, args.TypeFilter, limit)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("search memos: %w", err))
 	}
 	if memos == nil {
 		memos = []base.Memo{}
 	}
 
+	span.LogKV("event", "search_memos_result", "total", len(memos))
 	return jsonResult(map[string]any{
 		"results": memos,
 		"total":   len(memos),
@@ -77,11 +84,15 @@ func registerSaveMemo(srv *mcp.Server, s *Server) {
 		Name:        "save_memo",
 		Description: "Save a persistent memory entry. Use for recording decisions, patterns, bug fixes, and learnings.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args saveMemoArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleSaveMemo(args), nil, nil
+		return s.handleSaveMemo(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleSaveMemo(args saveMemoArgs) *mcp.CallToolResult {
+func (s *Server) handleSaveMemo(ctx context.Context, args saveMemoArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "save_memo")
+	defer span.Finish()
+	span.LogKV("event", "save_memo", "project", args.Project, "title", args.Title, "type", args.Type)
+
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
@@ -100,9 +111,11 @@ func (s *Server) handleSaveMemo(args saveMemoArgs) *mcp.CallToolResult {
 		Content: args.Content,
 	})
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("save memo: %w", err))
 	}
 
+	span.LogKV("event", "save_memo_result", "id", id)
 	return jsonResult(map[string]any{
 		"id":      id,
 		"success": true,
@@ -116,11 +129,15 @@ func registerManageADR(srv *mcp.Server, s *Server) {
 		Name:        "manage_adr",
 		Description: "Create or update Architecture Decision Records. Actions: get (retrieve), update (modify), list (all ADRs for project).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args manageADRArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleManageADR(args), nil, nil
+		return s.handleManageADR(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleManageADR(args manageADRArgs) *mcp.CallToolResult {
+func (s *Server) handleManageADR(ctx context.Context, args manageADRArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "manage_adr")
+	defer span.Finish()
+	span.LogKV("event", "manage_adr", "project", args.Project, "action", args.Action)
+
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
@@ -129,19 +146,19 @@ func (s *Server) handleManageADR(args manageADRArgs) *mcp.CallToolResult {
 	case "list":
 		adrs, err := s.store.ListADRs(args.Project)
 		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
 			return errorResult(fmt.Errorf("list ADRs: %w", err))
 		}
 		if adrs == nil {
 			adrs = []base.ADR{}
 		}
+		span.LogKV("event", "manage_adr_result", "action", "list", "count", len(adrs))
 		return jsonResult(adrs)
 
 	case "get":
 		if args.ID == 0 {
 			return errorResult(fmt.Errorf("id is required for get action"))
 		}
-		// Get a specific ADR — ListADRs returns all; filter by ID client-side for now
-		// A dedicated GetADR method can be added to store if needed
 		return errorResult(fmt.Errorf("get ADR by ID not implemented yet; use mode=sections approach"))
 
 	case "update", "create":
@@ -158,8 +175,10 @@ func (s *Server) handleManageADR(args manageADRArgs) *mcp.CallToolResult {
 			Status:  status,
 		})
 		if err != nil {
+			span.LogKV("event", "error", "error", err.Error())
 			return errorResult(fmt.Errorf("save ADR: %w", err))
 		}
+		span.LogKV("event", "manage_adr_result", "action", args.Action, "id", id)
 		return jsonResult(map[string]any{
 			"id":      id,
 			"success": true,

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/nanjj/clog"
 )
 
 // ─── Argument structs ──────────────────────────────────────────────────────────
@@ -29,11 +31,15 @@ func registerCodeFindReferences(srv *mcp.Server, s *Server) {
 		Name:        "code_find_references",
 		Description: "Find all references to a symbol in the code graph. Uses the indexed edges table to find callers/consumers of the given symbol. Supports inbound (who calls this), outbound (who this calls), or both. Depth=0 returns direct references only.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeFindReferencesArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleCodeFindReferences(args), nil, nil
+		return s.handleCodeFindReferences(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleCodeFindReferences(args codeFindReferencesArgs) *mcp.CallToolResult {
+func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindReferencesArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "code_find_references")
+	defer span.Finish()
+	span.LogKV("event", "code_find_references", "qualifiedName", args.QualifiedName, "project", args.Project, "direction", args.Direction)
+
 	if args.QualifiedName == "" {
 		return errorResult(fmt.Errorf("qualifiedName is required"))
 	}
@@ -54,6 +60,7 @@ func (s *Server) handleCodeFindReferences(args codeFindReferencesArgs) *mcp.Call
 	// Get references from the store
 	edges, err := s.store.GetReferences(args.QualifiedName, args.Project, direction, depth)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get references: %w", err))
 	}
 
@@ -109,6 +116,7 @@ func (s *Server) handleCodeFindReferences(args codeFindReferencesArgs) *mcp.Call
 		references = []refItem{} // ensure JSON array
 	}
 
+	span.LogKV("event", "code_find_references_result", "total", len(references))
 	return jsonResult(map[string]any{
 		"symbol":     args.QualifiedName,
 		"references": references,
@@ -123,11 +131,15 @@ func registerCodeAnalysis(srv *mcp.Server, s *Server) {
 		Name:        "code_analysis",
 		Description: "Analyze code complexity and quality metrics for a file. Returns per-function breakdown (cyclomatic, cognitive, loop depth, param count, recursion, linear scans in loop) plus summary statistics. Uses tree-sitter for AST parsing.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeAnalysisArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleCodeAnalysis(args), nil, nil
+		return s.handleCodeAnalysis(ctx, args), nil, nil
 	})
 }
 
-func (s *Server) handleCodeAnalysis(args codeAnalysisArgs) *mcp.CallToolResult {
+func (s *Server) handleCodeAnalysis(ctx context.Context, args codeAnalysisArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "code_analysis")
+	defer span.Finish()
+	span.LogKV("event", "code_analysis", "file", args.File)
+
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
 	}
@@ -137,11 +149,25 @@ func (s *Server) handleCodeAnalysis(args codeAnalysisArgs) *mcp.CallToolResult {
 		filePath = s.opts.ProjectRoot + "/" + filePath
 	}
 
-	// Check file exists
 	result, err := s.analyzer.AnalyzeFile(filePath)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("analyze file: %w", err))
 	}
 
+	span.LogKV("event", "code_analysis_result", "functions", countFunctions(result))
 	return jsonResult(result)
+}
+
+// countFunctions returns the number of FunctionAnalysis results.
+func countFunctions(v any) int {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return 0
+	}
+	fns, ok := m["functions"].([]any)
+	if !ok {
+		return 0
+	}
+	return len(fns)
 }
