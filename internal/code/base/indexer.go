@@ -211,6 +211,16 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		nodes = append(nodes, n)
 	}
 
+	// 4. Extract variable/constant definitions via manual AST walk
+	//    The Tagger API (go-specific override) doesn't emit definition.variable
+	//    or definition.constant tags, so we handle them here.
+	varConstNodes := extractVarConstDefs(root, lang, source, projectID, relPath)
+	for _, vc := range varConstNodes {
+		defQNs = append(defQNs, vc.QualifiedName)
+	}
+	nodes = append(nodes, varConstNodes...)
+	varNameMap := buildVarNameMap(varConstNodes)
+
 	// ── Build edges ──
 	var edges []Edge
 
@@ -280,6 +290,11 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 						TargetQN:  callee,
 						EdgeType:  "CALLS",
 					})
+				}
+				// Also extract variable/constant REFERENCES from this function body
+				if len(varNameMap) > 0 {
+					refs := extractVarRefs(bodyNode, lang, source, tag.Name, varNameMap, projectID)
+					edges = append(edges, refs...)
 				}
 			}
 		}
@@ -652,6 +667,204 @@ func kindFromTag(tagKind string) string {
 		return tagKind
 	}
 }
+
+// ─── Variable/Constant Definition Extraction ─────────────────────────────────
+//
+// extractVarConstDefs walks the AST to find variable and constant declarations.
+// The Tagger API only emits definition.function/method for Go, so we need
+// manual traversal for var/const/short_var_declaration patterns.
+//
+// Returns a list of Nodes with kind "variable" or "constant".
+// Qualified names use "variable:<name>" or "constant:<name>" prefix to avoid
+// collision with function/method nodes of the same name.
+func extractVarConstDefs(root *gotreesitter.Node, lang *gotreesitter.Language, source []byte, projectID int64, relPath string) []Node {
+	var nodes []Node
+
+	var walk func(node *gotreesitter.Node)
+	walk = func(node *gotreesitter.Node) {
+		if node == nil {
+			return
+		}
+		typ := node.Type(lang)
+
+		switch {
+		case typ == "var_spec" || typ == "const_spec":
+			kind := "variable"
+			if typ == "const_spec" {
+				kind = "constant"
+			}
+			// var_spec: var x int = 5  → children: identifier(s), type, value
+			// const_spec: const x = 5  → children: identifier(s), value
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child == nil {
+					continue
+				}
+				ct := child.Type(lang)
+				if ct == "identifier" || ct == "field_identifier" {
+					name := nodeText(child, lang, source)
+					if name == "" {
+						continue
+					}
+					qn := kind + ":" + name
+					nodes = append(nodes, Node{
+						ProjectID:     projectID,
+						QualifiedName: qn,
+						Kind:          kind,
+						Name:          name,
+						FilePath:      relPath,
+						Line:          child.StartPoint().Row,
+						Col:           child.StartPoint().Column,
+						EndLine:       child.EndPoint().Row,
+						EndCol:        child.EndPoint().Column,
+					})
+				}
+				// Handles "var a, b int" — multiple identifiers in identifier_list
+				if ct == "identifier_list" {
+					for j := 0; j < int(child.ChildCount()); j++ {
+						gc := child.Child(j)
+						if gc != nil && gc.Type(lang) == "identifier" {
+							name := nodeText(gc, lang, source)
+							if name == "" {
+								continue
+							}
+							qn := kind + ":" + name
+							nodes = append(nodes, Node{
+								ProjectID:     projectID,
+								QualifiedName: qn,
+								Kind:          kind,
+								Name:          name,
+								FilePath:      relPath,
+								Line:          gc.StartPoint().Row,
+								Col:           gc.StartPoint().Column,
+								EndLine:       gc.EndPoint().Row,
+								EndCol:        gc.EndPoint().Column,
+							})
+						}
+					}
+				}
+			}
+
+		case typ == "short_var_declaration":
+			// x := 5  → children: identifier(s), ":=", expression
+			for i := 0; i < int(node.ChildCount()); i++ {
+				child := node.Child(i)
+				if child == nil {
+					continue
+				}
+				ct := child.Type(lang)
+				if ct == "identifier" || ct == "field_identifier" {
+					name := nodeText(child, lang, source)
+					if name == "" {
+						continue
+					}
+					qn := "variable:" + name
+					nodes = append(nodes, Node{
+						ProjectID:     projectID,
+						QualifiedName: qn,
+						Kind:          "variable",
+						Name:          name,
+						FilePath:      relPath,
+						Line:          child.StartPoint().Row,
+						Col:           child.StartPoint().Column,
+						EndLine:       child.EndPoint().Row,
+						EndCol:        child.EndPoint().Column,
+					})
+				}
+			}
+		}
+
+		// Recurse children — skip function/method bodies to avoid detecting
+		// local variables inside functions.
+		if typ != "block" && typ != "block_statement" && typ != "compound_statement" &&
+			typ != "statement_block" && typ != "body" {
+			for i := 0; i < int(node.ChildCount()); i++ {
+				walk(node.Child(i))
+			}
+		}
+	}
+	walk(root)
+	return nodes
+}
+
+// ─── Variable/Constant Reference Extraction ──────────────────────────────────
+//
+// extractVarRefs walks a function/method body looking for identifier references
+// that match known variable/constant names. Returns REFERENCES edges from the
+// containing function to the referenced variable/constant.
+//
+// Heuristic approach (no type resolution):
+//   - Identifiers that are call targets are skipped (those produce CALLS edges)
+//   - Only identifiers matching known var/const names in the same file match
+//   - Duplicate references to the same variable from the same function are
+//     collapsed into a single REFERENCES edge
+func extractVarRefs(body *gotreesitter.Node, lang *gotreesitter.Language, source []byte, funcQN string, varNames map[string]string, projectID int64) []Edge {
+	var edges []Edge
+	seen := make(map[string]bool)
+
+	var walk func(node *gotreesitter.Node)
+	walk = func(node *gotreesitter.Node) {
+		if node == nil {
+			return
+		}
+		typ := node.Type(lang)
+
+		// Skip call expressions — the function name is a CALLS target, not REFERENCES
+		if typ == "call_expression" {
+			// Recurse into arguments (which may reference variables)
+			for i := 1; i < int(node.ChildCount()); i++ {
+				walk(node.Child(i))
+			}
+			return
+		}
+
+		// In selector_expression (e.g., obj.field), only the object may be a var ref
+		if typ == "selector_expression" {
+			if node.ChildCount() > 0 {
+				walk(node.Child(0))
+			}
+			return
+		}
+
+		if typ == "identifier" || typ == "field_identifier" {
+			name := nodeText(node, lang, source)
+			if name == "" {
+				return
+			}
+			if targetQN, ok := varNames[name]; ok && !seen[targetQN] {
+				seen[targetQN] = true
+				edges = append(edges, Edge{
+					ProjectID: projectID,
+					SourceQN:  funcQN,
+					TargetQN:  targetQN,
+					EdgeType:  "REFERENCES",
+				})
+			}
+			return
+		}
+
+		for i := 0; i < int(node.ChildCount()); i++ {
+			walk(node.Child(i))
+		}
+	}
+	walk(body)
+	return edges
+}
+
+// buildVarNameMap builds a map from short name → qualified name for all
+// variable and constant nodes in a list.
+func buildVarNameMap(nodes []Node) map[string]string {
+	m := make(map[string]string)
+	for _, n := range nodes {
+		if n.Kind == "variable" || n.Kind == "constant" {
+			if _, ok := m[n.Name]; !ok {
+				m[n.Name] = n.QualifiedName
+			}
+		}
+	}
+	return m
+}
+
 
 // ─── Tree Traversal Helpers ───────────────────────────────────────────────────
 

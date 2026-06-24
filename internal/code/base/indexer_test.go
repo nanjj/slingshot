@@ -90,6 +90,269 @@ func TestKindFromTagUnknown(t *testing.T) {
 	assert.Equal(t, kindFromTag("reference.function"), "reference.function")
 }
 
+// ─── extractVarConstDefs ─────────────────────────────────────────────────────
+
+func TestExtractVarConstDefs_GoVar(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+var x = 5
+func main() { _ = x }`)
+	root := tree.RootNode()
+	nodes := extractVarConstDefs(root, lang, src, 1, "test.go")
+	assert.Equal(t, len(nodes), 1, "expected 1 var node")
+	if len(nodes) > 0 {
+		assert.Equal(t, nodes[0].Kind, "variable")
+		assert.Equal(t, nodes[0].Name, "x")
+		assert.Equal(t, nodes[0].QualifiedName, "variable:x")
+	}
+}
+
+func TestExtractVarConstDefs_GoConst(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+const MAX_SIZE = 100
+func main() { _ = MAX_SIZE }`)
+	root := tree.RootNode()
+	nodes := extractVarConstDefs(root, lang, src, 1, "test.go")
+	assert.Equal(t, len(nodes), 1, "expected 1 const node")
+	if len(nodes) > 0 {
+		assert.Equal(t, nodes[0].Kind, "constant")
+		assert.Equal(t, nodes[0].Name, "MAX_SIZE")
+		assert.Equal(t, nodes[0].QualifiedName, "constant:MAX_SIZE")
+	}
+}
+
+func TestExtractVarConstDefs_GoShortVar(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+func f() {
+	x := 5
+	_ = x
+}`)
+	root := tree.RootNode()
+	nodes := extractVarConstDefs(root, lang, src, 1, "test.go")
+	// short_var_declaration inside a function body should NOT be extracted
+	// because we skip function bodies to avoid local variables
+	assert.Equal(t, len(nodes), 0, "expected 0 variable nodes from local scope")
+}
+
+func TestExtractVarConstDefs_GoMultiVar(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+var a, b = 1, 2
+func main() { _, _ = a, b }`)
+	root := tree.RootNode()
+	nodes := extractVarConstDefs(root, lang, src, 1, "test.go")
+	assert.Equal(t, len(nodes), 2, "expected 2 var nodes for a, b")
+	names := make(map[string]bool)
+	for _, n := range nodes {
+		names[n.Name] = true
+	}
+	assert.Assert(t, names["a"], "expected variable 'a'")
+	assert.Assert(t, names["b"], "expected variable 'b'")
+}
+
+func TestExtractVarConstDefs_PackageLevel(t *testing.T) {
+	tree, lang, src := parseGo(t, `package main
+var debug = false
+const AppName = "test"
+func main() {
+	msg := "hello"
+	_ = msg
+}`)
+	root := tree.RootNode()
+	nodes := extractVarConstDefs(root, lang, src, 1, "test.go")
+	assert.Equal(t, len(nodes), 2, "expected 2 nodes (var debug + const AppName)")
+	got := make(map[string]string)
+	for _, n := range nodes {
+		got[n.Name] = n.Kind
+	}
+	assert.Equal(t, got["debug"], "variable")
+	assert.Equal(t, got["AppName"], "constant")
+}
+
+// ─── extractVarRefs ──────────────────────────────────────────────────────────
+
+func TestExtractVarRefs_Simple(t *testing.T) {
+	body, lang, src, name := findFirstBody(t, `package main
+var count = 0
+func use() {
+	println(count)
+}`)
+	varNameMap := map[string]string{"count": "variable:count"}
+	edges := extractVarRefs(body, lang, src, name, varNameMap, 1)
+	assert.Assert(t, len(edges) >= 1, "expected at least 1 REFERENCES edge for count")
+	if len(edges) > 0 {
+		assert.Equal(t, edges[0].EdgeType, "REFERENCES")
+		assert.Equal(t, edges[0].SourceQN, "use")
+		assert.Equal(t, edges[0].TargetQN, "variable:count")
+	}
+}
+
+func TestExtractVarRefs_NoMatch(t *testing.T) {
+	body, lang, src, name := findFirstBody(t, `package main
+func use() {
+	println("hello")
+}`)
+	varNameMap := map[string]string{"count": "variable:count"}
+	edges := extractVarRefs(body, lang, src, name, varNameMap, 1)
+	assert.Equal(t, len(edges), 0, "expected 0 REFERENCES edges, 'count' not referenced")
+}
+
+func TestExtractVarRefs_MultipleVars(t *testing.T) {
+	body, lang, src, name := findFirstBody(t, `package main
+var x, y = 1, 2
+func use() {
+	println(x + y)
+}`)
+	varNameMap := map[string]string{"x": "variable:x", "y": "variable:y"}
+	edges := extractVarRefs(body, lang, src, name, varNameMap, 1)
+	assert.Assert(t, len(edges) >= 2, "expected ≥2 REFERENCES edges for x and y")
+	found := make(map[string]bool)
+	for _, e := range edges {
+		found[e.TargetQN] = true
+	}
+	assert.Assert(t, found["variable:x"], "expected reference to x")
+	assert.Assert(t, found["variable:y"], "expected reference to y")
+}
+
+func TestExtractVarRefs_CallArgs(t *testing.T) {
+	body, lang, src, name := findFirstBody(t, `package main
+var msg = "hello"
+func use() {
+	fmt.Println(msg)
+}`)
+	varNameMap := map[string]string{"msg": "variable:msg"}
+	edges := extractVarRefs(body, lang, src, name, varNameMap, 1)
+	// msg is a call argument, should still be detected as a reference
+	assert.Assert(t, len(edges) >= 1, "expected REFERENCE to msg in call args")
+}
+
+func TestExtractVarRefs_NotCallTarget(t *testing.T) {
+	body, lang, src, name := findFirstBody(t, `package main
+var println = "shadow"
+func use() {
+	println("hello")  // this 'println' is a call target, not a var ref
+}`)
+	varNameMap := map[string]string{"println": "variable:println"}
+	edges := extractVarRefs(body, lang, src, name, varNameMap, 1)
+	// The 'println' in call position should NOT be treated as a var reference
+	assert.Equal(t, len(edges), 0, "expected 0 REFERENCES edges — call target is not a var ref")
+}
+
+// ─── buildVarNameMap ─────────────────────────────────────────────────────────
+
+func TestBuildVarNameMap(t *testing.T) {
+	nodes := []Node{
+		{Kind: "variable", Name: "x", QualifiedName: "variable:x"},
+		{Kind: "constant", Name: "MAX", QualifiedName: "constant:MAX"},
+		{Kind: "function", Name: "main", QualifiedName: "main"},
+	}
+	m := buildVarNameMap(nodes)
+	assert.Equal(t, len(m), 2, "expected 2 entries (variable + constant)")
+	assert.Equal(t, m["x"], "variable:x")
+	assert.Equal(t, m["MAX"], "constant:MAX")
+	_, ok := m["main"]
+	assert.Assert(t, !ok, "function names should not be in var name map")
+}
+
+// ─── Integration: var/const in IndexProject ──────────────────────────────────
+
+func TestIndexProject_GoFileWithVarConst(t *testing.T) {
+	dir := t.TempDir()
+	src := `package main
+
+import "fmt"
+
+var debug = true
+
+const AppName = "test-app"
+
+func main() {
+	if debug {
+		fmt.Println("debug:", AppName)
+	}
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0644)
+	assert.NilError(t, err)
+
+	dbPath := filepath.Join(t.TempDir(), "test_vc.db")
+	store, err := OpenStore(dbPath)
+	assert.NilError(t, err)
+	defer store.Close()
+
+	result, err := store.IndexProject(dir, "test-vc-project", IndexModeFull)
+	assert.NilError(t, err)
+	assert.Assert(t, result.FilesParsed >= 1)
+	assert.Equal(t, result.Errors, 0)
+
+	// Should have: main (function), debug (variable), AppName (constant) — at least 3
+	assert.Assert(t, result.NodesStored >= 3,
+		"expected ≥3 nodes (main + debug + AppName), got %d", result.NodesStored)
+
+	// Verify variable node was stored
+	debugNode, err := store.GetNodeByQN("variable:debug", "test-vc-project")
+	assert.NilError(t, err)
+	assert.Equal(t, debugNode.Kind, "variable")
+	assert.Equal(t, debugNode.Name, "debug")
+
+	// Verify constant node was stored
+	constNode, err := store.GetNodeByQN("constant:AppName", "test-vc-project")
+	assert.NilError(t, err)
+	assert.Equal(t, constNode.Kind, "constant")
+	assert.Equal(t, constNode.Name, "AppName")
+
+	// Verify REFERENCES edges exist: main → debug, main → AppName
+	refs, err := store.GetReferences("variable:debug", "test-vc-project", "inbound", 1)
+	assert.NilError(t, err)
+	assert.Assert(t, len(refs) > 0, "expected inbound REFERENCES to variable:debug")
+
+	refs, err = store.GetReferences("constant:AppName", "test-vc-project", "inbound", 1)
+	assert.NilError(t, err)
+	assert.Assert(t, len(refs) > 0, "expected inbound REFERENCES to constant:AppName")
+
+	// Verify CALLS still work
+	refs, err = store.GetReferences("fmt.Println", "test-vc-project", "inbound", 1)
+	assert.NilError(t, err)
+	assert.Assert(t, len(refs) > 0, "expected inbound CALLS to fmt.Println")
+}
+
+func TestIndexProject_GoFileVarRefs(t *testing.T) {
+	dir := t.TempDir()
+	src := `package main
+
+var counter = 0
+
+func increment() {
+	counter++
+}
+
+func main() {
+	increment()
+	println(counter)
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0644)
+	assert.NilError(t, err)
+
+	dbPath := filepath.Join(t.TempDir(), "test_refs.db")
+	store, err := OpenStore(dbPath)
+	assert.NilError(t, err)
+	defer store.Close()
+
+	result, err := store.IndexProject(dir, "test-refs-project", IndexModeFull)
+	assert.NilError(t, err)
+	assert.Equal(t, result.Errors, 0)
+
+	// Verify variable node
+	_, err = store.GetNodeByQN("variable:counter", "test-refs-project")
+	assert.NilError(t, err)
+
+	// Verify REFERENCES edges: increment → counter, main → counter
+	refs, err := store.GetReferences("variable:counter", "test-refs-project", "inbound", 1)
+	assert.NilError(t, err)
+	assert.Assert(t, len(refs) >= 2,
+		"expected ≥2 REFERENCES to counter (from increment + main), got %d", len(refs))
+}
+
+
 // ─── isBuiltinOrKeyword ──────────────────────────────────────────────────────
 
 func TestIsBuiltinOrKeyword(t *testing.T) {
