@@ -48,9 +48,9 @@ func registerSearchMemos(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleSearchMemos(ctx context.Context, args searchMemosArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "search_memos")
+	span, ctx := clog.StartSpanFromContext(ctx, "search_memos")
 	defer span.Finish()
-	span.LogKV("event", "search_memos", "project", args.Project, "query", args.Query)
+	clog.Info(ctx, "search_memos", "project", args.Project, "query", args.Query)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -63,14 +63,14 @@ func (s *Server) handleSearchMemos(ctx context.Context, args searchMemosArgs) *m
 
 	memos, err := s.store.SearchMemos(args.Project, args.Query, args.TypeFilter, limit)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("search memos: %w", err))
 	}
 	if memos == nil {
 		memos = []base.Memo{}
 	}
 
-	span.LogKV("event", "search_memos_result", "total", len(memos))
+	clog.Info(ctx, "search_memos_result", "total", len(memos))
 	return jsonResult(map[string]any{
 		"results": memos,
 		"total":   len(memos),
@@ -89,9 +89,9 @@ func registerSaveMemo(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleSaveMemo(ctx context.Context, args saveMemoArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "save_memo")
+	span, ctx := clog.StartSpanFromContext(ctx, "save_memo")
 	defer span.Finish()
-	span.LogKV("event", "save_memo", "project", args.Project, "title", args.Title, "type", args.Type)
+	clog.Info(ctx, "save_memo", "project", args.Project, "title", args.Title, "type", args.Type)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -111,11 +111,11 @@ func (s *Server) handleSaveMemo(ctx context.Context, args saveMemoArgs) *mcp.Cal
 		Content: args.Content,
 	})
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("save memo: %w", err))
 	}
 
-	span.LogKV("event", "save_memo_result", "id", id)
+	clog.Info(ctx, "save_memo_result", "id", id)
 	return jsonResult(map[string]any{
 		"id":      id,
 		"success": true,
@@ -134,9 +134,9 @@ func registerManageADR(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleManageADR(ctx context.Context, args manageADRArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "manage_adr")
+	span, ctx := clog.StartSpanFromContext(ctx, "manage_adr")
 	defer span.Finish()
-	span.LogKV("event", "manage_adr", "project", args.Project, "action", args.Action)
+	clog.Info(ctx, "manage_adr", "project", args.Project, "action", args.Action)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -146,13 +146,13 @@ func (s *Server) handleManageADR(ctx context.Context, args manageADRArgs) *mcp.C
 	case "list":
 		adrs, err := s.store.ListADRs(args.Project)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("list ADRs: %w", err))
 		}
 		if adrs == nil {
 			adrs = []base.ADR{}
 		}
-		span.LogKV("event", "manage_adr_result", "action", "list", "count", len(adrs))
+		clog.Info(ctx, "manage_adr_result", "action", "list", "count", len(adrs))
 		return jsonResult(adrs)
 
 	case "get":
@@ -175,10 +175,10 @@ func (s *Server) handleManageADR(ctx context.Context, args manageADRArgs) *mcp.C
 			Status:  status,
 		})
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("save ADR: %w", err))
 		}
-		span.LogKV("event", "manage_adr_result", "action", args.Action, "id", id)
+		clog.Info(ctx, "manage_adr_result", "action", args.Action, "id", id)
 		return jsonResult(map[string]any{
 			"id":      id,
 			"success": true,

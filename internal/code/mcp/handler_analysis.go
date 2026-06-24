@@ -36,9 +36,9 @@ func registerCodeFindReferences(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindReferencesArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "code_find_references")
+	span, ctx := clog.StartSpanFromContext(ctx, "code_find_references")
 	defer span.Finish()
-	span.LogKV("event", "code_find_references", "qualifiedName", args.QualifiedName, "project", args.Project, "direction", args.Direction)
+	clog.Info(ctx, "code_find_references", "qualifiedName", args.QualifiedName, "project", args.Project, "direction", args.Direction)
 
 	if args.QualifiedName == "" {
 		return errorResult(fmt.Errorf("qualifiedName is required"))
@@ -60,7 +60,7 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 	// Get references from the store
 	edges, err := s.store.GetReferences(args.QualifiedName, args.Project, direction, depth)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get references: %w", err))
 	}
 
@@ -116,7 +116,7 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 		references = []refItem{} // ensure JSON array
 	}
 
-	span.LogKV("event", "code_find_references_result", "total", len(references))
+	clog.Info(ctx, "code_find_references_result", "total", len(references))
 	return jsonResult(map[string]any{
 		"symbol":     args.QualifiedName,
 		"references": references,
@@ -136,9 +136,9 @@ func registerCodeAnalysis(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleCodeAnalysis(ctx context.Context, args codeAnalysisArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "code_analysis")
+	span, ctx := clog.StartSpanFromContext(ctx, "code_analysis")
 	defer span.Finish()
-	span.LogKV("event", "code_analysis", "file", args.File)
+	clog.Info(ctx, "code_analysis", "file", args.File)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -151,11 +151,11 @@ func (s *Server) handleCodeAnalysis(ctx context.Context, args codeAnalysisArgs) 
 
 	result, err := s.analyzer.AnalyzeFile(filePath)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("analyze file: %w", err))
 	}
 
-	span.LogKV("event", "code_analysis_result", "functions", countFunctions(result))
+	clog.Info(ctx, "code_analysis_result", "functions", countFunctions(result))
 	return jsonResult(result)
 }
 

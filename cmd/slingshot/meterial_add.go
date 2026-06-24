@@ -55,10 +55,10 @@ Examples:
 }
 
 func (c *cmdMeterialAdd) run(cmd *cobra.Command, args []string) (err error) {
-	span, _ := clog.StartSpanFromContext(cmd.Context(), "material_add")
+	span, ctx := clog.StartSpanFromContext(cmd.Context(), "material_add")
 	defer func() {
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 		}
 		span.Finish()
 	}()
@@ -71,7 +71,7 @@ func (c *cmdMeterialAdd) run(cmd *cobra.Command, args []string) (err error) {
 		return errors.New(i18n.G("expected a file argument"))
 	}
 	filePath := parsed[0].String
-	span.LogKV("event", "material_add", "file", filePath, "type", c.mtype)
+	clog.Info(ctx, "material_add", "file", filePath, "type", c.mtype)
 
 	// Validate file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -110,6 +110,6 @@ func (c *cmdMeterialAdd) run(cmd *cobra.Command, args []string) (err error) {
 	if resp.URL != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", i18n.G("URL"), resp.URL)
 	}
-	span.LogKV("event", "material_add_result", "mediaID", resp.MediaID)
+	clog.Info(ctx, "material_add_result", "mediaID", resp.MediaID)
 	return nil
 }

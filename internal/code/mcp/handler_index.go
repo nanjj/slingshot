@@ -48,9 +48,9 @@ func registerIndexRepository(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleIndexRepository(ctx context.Context, args indexRepositoryArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "index_repository")
+	span, ctx := clog.StartSpanFromContext(ctx, "index_repository")
 	defer span.Finish()
-	span.LogKV("event", "index_repository", "repoPath", args.RepoPath, "mode", args.Mode, "persistence", args.Persistence)
+	clog.Info(ctx, "index_repository", "repoPath", args.RepoPath, "mode", args.Mode, "persistence", args.Persistence)
 
 	if args.RepoPath == "" {
 		return errorResult(fmt.Errorf("repoPath is required"))
@@ -70,11 +70,11 @@ func (s *Server) handleIndexRepository(ctx context.Context, args indexRepository
 
 	result, err := s.store.IndexProject(args.RepoPath, projectName, mode)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("index repository: %w", err))
 	}
 
-	span.LogKV("event", "index_repository_result", "project", projectName, "mode", args.Mode)
+	clog.Info(ctx, "index_repository_result", "project", projectName, "mode", args.Mode)
 	return jsonResult(result)
 }
 
@@ -90,9 +90,9 @@ func registerIndexStatus(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleIndexStatus(ctx context.Context, args indexStatusArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "index_status")
+	span, ctx := clog.StartSpanFromContext(ctx, "index_status")
 	defer span.Finish()
-	span.LogKV("event", "index_status", "project", args.Project)
+	clog.Info(ctx, "index_status", "project", args.Project)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -100,11 +100,11 @@ func (s *Server) handleIndexStatus(ctx context.Context, args indexStatusArgs) *m
 
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 
-	span.LogKV("event", "index_status_result", "indexed", info.NodeCount > 0)
+	clog.Info(ctx, "index_status_result", "indexed", info.NodeCount > 0)
 	return jsonResult(info)
 }
 
@@ -120,18 +120,18 @@ func registerListProjects(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleListProjects(ctx context.Context) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "list_projects")
+	span, ctx := clog.StartSpanFromContext(ctx, "list_projects")
 	defer span.Finish()
 
 	projects, err := s.store.ListProjects()
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("list projects: %w", err))
 	}
 	if projects == nil {
 		projects = []base.ProjectInfo{}
 	}
-	span.LogKV("event", "list_projects_result", "count", len(projects))
+	clog.Info(ctx, "list_projects_result", "count", len(projects))
 	return jsonResult(projects)
 }
 
@@ -147,20 +147,20 @@ func registerDeleteProject(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleDeleteProject(ctx context.Context, args deleteProjectArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "delete_project")
+	span, ctx := clog.StartSpanFromContext(ctx, "delete_project")
 	defer span.Finish()
-	span.LogKV("event", "delete_project", "project", args.Project)
+	clog.Info(ctx, "delete_project", "project", args.Project)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
 	}
 
 	if err := s.store.DeleteProject(args.Project); err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("delete project: %w", err))
 	}
 
-	span.LogKV("event", "delete_project_result", "success", true)
+	clog.Info(ctx, "delete_project_result", "success", true)
 	return jsonResult(map[string]bool{"success": true})
 }
 
@@ -176,9 +176,9 @@ func registerQueryGraph(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleQueryGraph(ctx context.Context, args queryGraphArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "query_graph")
+	span, ctx := clog.StartSpanFromContext(ctx, "query_graph")
 	defer span.Finish()
-	span.LogKV("event", "query_graph", "project", args.Project, "queryLen", len(args.Query))
+	clog.Info(ctx, "query_graph", "project", args.Project, "queryLen", len(args.Query))
 
 	if args.Query == "" {
 		return errorResult(fmt.Errorf("query is required"))
@@ -186,14 +186,14 @@ func (s *Server) handleQueryGraph(ctx context.Context, args queryGraphArgs) *mcp
 
 	results, err := s.store.QueryGraph(args.Query)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("query graph: %w", err))
 	}
 	if results == nil {
 		results = []map[string]any{}
 	}
 
-	span.LogKV("event", "query_graph_result", "total", len(results))
+	clog.Info(ctx, "query_graph_result", "total", len(results))
 	return jsonResult(map[string]any{
 		"results": results,
 		"total":   len(results),

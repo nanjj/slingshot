@@ -63,10 +63,10 @@ The --index flag specifies which article in a multi-article draft to update
 }
 
 func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
-	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_update")
+	span, ctx := clog.StartSpanFromContext(cmd.Context(), "draft_update")
 	defer func() {
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 		}
 		span.Finish()
 	}()
@@ -80,7 +80,7 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	file := parsed[0].String
-	span.LogKV("event", "draft_update", "file", file)
+	clog.Info(ctx, "draft_update", "file", file)
 
 	// Load config and get token early (needed for ID resolution)
 	cfg, _, err := config.Load()
@@ -249,6 +249,6 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
 	if err := writeSidecarYAML(file, meta); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
 	}
-	span.LogKV("event", "draft_update_result", "mediaID", mediaID)
+	clog.Info(ctx, "draft_update_result", "mediaID", mediaID)
 	return nil
 }

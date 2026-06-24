@@ -56,10 +56,10 @@ include <meta name="thumb_media_id" content="..."> in the HTML.`),
 }
 
 func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) (err error) {
-	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_add")
+	span, ctx := clog.StartSpanFromContext(cmd.Context(), "draft_add")
 	defer func() {
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 		}
 		span.Finish()
 	}()
@@ -72,7 +72,7 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) (err error) {
 		return errors.New(i18n.G("expected a file argument"))
 	}
 	file := parsed[0].String
-	span.LogKV("event", "draft_add", "file", file)
+	clog.Info(ctx, "draft_add", "file", file)
 
 	// Auto-convert .org/.md to .html if needed
 	file, err = ensureHTMLFile(cmd, file)
@@ -227,6 +227,6 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) (err error) {
 	if err := writeSidecarYAML(file, meta); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
 	}
-	span.LogKV("event", "draft_add_result", "mediaID", resp.MediaID)
+	clog.Info(ctx, "draft_add_result", "mediaID", resp.MediaID)
 	return nil
 }

@@ -64,9 +64,9 @@ func registerGetStructure(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetStructure(ctx context.Context, args getStructureArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_structure")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_structure")
 	defer span.Finish()
-	span.LogKV("event", "get_structure", "file", args.File, "maxDepth", args.MaxDepth)
+	clog.Info(ctx, "get_structure", "file", args.File, "maxDepth", args.MaxDepth)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -83,11 +83,11 @@ func (s *Server) handleGetStructure(ctx context.Context, args getStructureArgs) 
 
 	info, err := s.analyzer.GetStructure(args.File, maxDepth, maxChildren)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get structure: %w", err))
 	}
 
-	span.LogKV("event", "get_structure_result", "children", countTopLevel(info))
+	clog.Info(ctx, "get_structure_result", "children", countTopLevel(info))
 	return jsonResult(info)
 }
 
@@ -103,9 +103,9 @@ func registerGetNode(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetNode(ctx context.Context, args editorGetNodeArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_node")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_node")
 	defer span.Finish()
-	span.LogKV("event", "get_node", "file", args.File, "scope", args.Scope)
+	clog.Info(ctx, "get_node", "file", args.File, "scope", args.Scope)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -115,28 +115,28 @@ func (s *Server) handleGetNode(ctx context.Context, args editorGetNodeArgs) *mcp
 	case "point":
 		info, err := s.analyzer.GetNodeAtPoint(args.File, args.Row, args.Col)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("get node at point: %w", err))
 		}
 		return jsonResult(info)
 	case "range":
 		info, err := s.analyzer.GetNodeAtRange(args.File, args.StartByte, args.EndByte)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("get node at range: %w", err))
 		}
 		return jsonResult(info)
 	case "descendants":
 		infos, err := s.analyzer.GetDescendantsAt(args.File, args.Pos)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("get descendants: %w", err))
 		}
 		return jsonResult(infos)
 	default: // "pos"
 		info, err := s.analyzer.GetNode(args.File, args.Pos)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("get node: %w", err))
 		}
 		return jsonResult(info)
@@ -155,9 +155,9 @@ func registerGetDefinitions(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetDefinitions(ctx context.Context, args getDefinitionsArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_definitions")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_definitions")
 	defer span.Finish()
-	span.LogKV("event", "get_definitions", "file", args.File, "pattern", args.Pattern, "kind", args.Kind)
+	clog.Info(ctx, "get_definitions", "file", args.File, "pattern", args.Pattern, "kind", args.Kind)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -165,7 +165,7 @@ func (s *Server) handleGetDefinitions(ctx context.Context, args getDefinitionsAr
 
 	tags, err := s.analyzer.GetDefinitions(args.File)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get definitions: %w", err))
 	}
 	if tags == nil {
@@ -202,9 +202,9 @@ func registerGetText(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetText(ctx context.Context, args editorGetTextArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_text")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_text")
 	defer span.Finish()
-	span.LogKV("event", "get_text", "file", args.File, "by", args.By)
+	clog.Info(ctx, "get_text", "file", args.File, "by", args.By)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -214,7 +214,7 @@ func (s *Server) handleGetText(ctx context.Context, args editorGetTextArgs) *mcp
 	case "line":
 		text, err := s.analyzer.GetLine(args.File, args.Line)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("get line: %w", err))
 		}
 		return jsonResult(map[string]string{"text": text})
@@ -223,7 +223,7 @@ func (s *Server) handleGetText(ctx context.Context, args editorGetTextArgs) *mcp
 			// Read full file
 			result, err := s.analyzer.ParseFile(args.File)
 			if err != nil {
-				span.LogKV("event", "error", "error", err.Error())
+				clog.Error(ctx, "error", "error", err.Error())
 				return errorResult(fmt.Errorf("parse file: %w", err))
 			}
 			result.Tree.Release()
@@ -231,7 +231,7 @@ func (s *Server) handleGetText(ctx context.Context, args editorGetTextArgs) *mcp
 		}
 		text, err := s.analyzer.GetText(args.File, args.StartByte, args.EndByte)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("get text: %w", err))
 		}
 		return jsonResult(map[string]string{"text": text})
@@ -250,9 +250,9 @@ func registerValidate(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleValidate(ctx context.Context, args validateArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "validate")
+	span, ctx := clog.StartSpanFromContext(ctx, "validate")
 	defer span.Finish()
-	span.LogKV("event", "validate", "file", args.File)
+	clog.Info(ctx, "validate", "file", args.File)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -260,11 +260,11 @@ func (s *Server) handleValidate(ctx context.Context, args validateArgs) *mcp.Cal
 
 	result, err := s.analyzer.Validate(args.File)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("validate: %w", err))
 	}
 
-	span.LogKV("event", "validate_result", "errors", len(result.SyntaxErrors))
+	clog.Info(ctx, "validate_result", "errors", len(result.SyntaxErrors))
 	return jsonResult(result)
 }
 
@@ -280,9 +280,9 @@ func registerQueryAST(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleQueryAST(ctx context.Context, args queryASTArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "query_ast")
+	span, ctx := clog.StartSpanFromContext(ctx, "query_ast")
 	defer span.Finish()
-	span.LogKV("event", "query_ast", "file", args.File, "patternLen", len(args.Pattern))
+	clog.Info(ctx, "query_ast", "file", args.File, "patternLen", len(args.Pattern))
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -293,11 +293,11 @@ func (s *Server) handleQueryAST(ctx context.Context, args queryASTArgs) *mcp.Cal
 
 	results, err := s.analyzer.QueryAST(args.File, args.Pattern)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("query AST: %w", err))
 	}
 
-	span.LogKV("event", "query_ast_result", "groupCount", len(results))
+	clog.Info(ctx, "query_ast_result", "groupCount", len(results))
 	return jsonResult(results)
 }
 

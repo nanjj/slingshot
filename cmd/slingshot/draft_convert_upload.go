@@ -20,14 +20,14 @@ import (
 // It uploads local images to WeChat, updates URLs, handles thumbnails, and
 // saves the final HTML file. Standalone so it can be reused by auto-convert.
 func runUploadPipeline(cmd *cobra.Command, result *mdtowx.Result, html []byte, outPath, sourceFile string) (err error) {
-	span, _ := clog.StartSpanFromContext(cmd.Context(), "upload_pipeline")
+	span, ctx := clog.StartSpanFromContext(cmd.Context(), "upload_pipeline")
 	defer func() {
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 		}
 		span.Finish()
 	}()
-	span.LogKV("event", "upload_pipeline", "sourceFile", sourceFile)
+	clog.Info(ctx, "upload_pipeline", "sourceFile", sourceFile)
 
 	baseDir := filepath.Dir(sourceFile)
 
@@ -211,6 +211,6 @@ func runUploadPipeline(cmd *cobra.Command, result *mdtowx.Result, html []byte, o
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Upload complete, written to %s\n"), outPath)
-	span.LogKV("event", "upload_pipeline_result", "outPath", outPath)
+	clog.Info(ctx, "upload_pipeline_result", "outPath", outPath)
 	return nil
 }

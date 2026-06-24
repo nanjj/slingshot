@@ -78,9 +78,9 @@ func registerSearchGraph(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "search_graph")
+	span, ctx := clog.StartSpanFromContext(ctx, "search_graph")
 	defer span.Finish()
-	span.LogKV("event", "search_graph_start", "project", args.Project, "query", args.Query, "namePattern", args.NamePattern)
+	clog.Info(ctx, "search_graph_start", "project", args.Project, "query", args.Query, "namePattern", args.NamePattern)
 
 	project := args.Project
 	if project == "" {
@@ -96,11 +96,11 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 	if args.Query != "" {
 		nodes, total, err := s.store.SearchNodes(args.Query, project, args.PathFilter, limit, args.Offset)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("search nodes: %w", err))
 		}
 		hasMore := args.Offset+len(nodes) < total
-		span.LogKV("event", "search_graph_result", "mode", "bm25", "total", total, "returned", len(nodes))
+		clog.Info(ctx, "search_graph_result", "mode", "bm25", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
 			"results":  nodes,
 			"total":    total,
@@ -113,11 +113,11 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 	if args.NamePattern != "" {
 		nodes, total, err := s.store.FindSymbols(args.NamePattern, project, args.Kind, limit, args.Offset)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("find symbols: %w", err))
 		}
 		hasMore := args.Offset+len(nodes) < total
-		span.LogKV("event", "search_graph_result", "mode", "namePattern", "total", total, "returned", len(nodes))
+		clog.Info(ctx, "search_graph_result", "mode", "namePattern", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
 			"results":  nodes,
 			"total":    total,
@@ -131,11 +131,11 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 		query := strings.Join(args.Semantic, " ")
 		nodes, total, err := s.store.SearchNodes(query, project, args.PathFilter, limit, args.Offset)
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("semantic search: %w", err))
 		}
 		hasMore := args.Offset+len(nodes) < total
-		span.LogKV("event", "search_graph_result", "mode", "semantic", "total", total, "returned", len(nodes))
+		clog.Info(ctx, "search_graph_result", "mode", "semantic", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
 			"results":     nodes,
 			"total":       total,
@@ -160,9 +160,9 @@ func registerGetArchitecture(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitectureArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_architecture")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_architecture")
 	defer span.Finish()
-	span.LogKV("event", "get_architecture", "project", args.Project)
+	clog.Info(ctx, "get_architecture", "project", args.Project)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -171,7 +171,7 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 	// Query project info
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 
@@ -243,7 +243,7 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 		}
 	}
 
-	span.LogKV("event", "get_architecture_result", "aspects", len(result))
+	clog.Info(ctx, "get_architecture_result", "aspects", len(result))
 	return jsonResult(result)
 }
 
@@ -259,9 +259,9 @@ func registerGetCodeSnippet(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_code_snippet")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_code_snippet")
 	defer span.Finish()
-	span.LogKV("event", "get_code_snippet", "qualifiedName", args.QualifiedName, "project", args.Project)
+	clog.Info(ctx, "get_code_snippet", "qualifiedName", args.QualifiedName, "project", args.Project)
 
 	if args.QualifiedName == "" {
 		return errorResult(fmt.Errorf("qualifiedName is required"))
@@ -272,7 +272,7 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 
 	node, err := s.store.GetNodeByQN(args.QualifiedName, args.Project)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get node: %w", err))
 	}
 
@@ -289,7 +289,7 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 		}
 	}
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("read source file %q: %w", filePath, err))
 	}
 
@@ -321,7 +321,7 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 		result["neighbors"] = edges
 	}
 
-	span.LogKV("event", "get_code_snippet_result", "file", filePath, "lines", endLine-startLine+1)
+	clog.Info(ctx, "get_code_snippet_result", "file", filePath, "lines", endLine-startLine+1)
 	return jsonResult(result)
 }
 
@@ -337,9 +337,9 @@ func registerGetGraphSchema(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_graph_schema")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_graph_schema")
 	defer span.Finish()
-	span.LogKV("event", "get_graph_schema", "project", args.Project)
+	clog.Info(ctx, "get_graph_schema", "project", args.Project)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -357,7 +357,7 @@ func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaAr
 
 	kinds, err := s.store.QueryGraph(kindQuery)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("query kinds: %w", err))
 	}
 
@@ -373,11 +373,11 @@ func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaAr
 
 	edgeTypes, err := s.store.QueryGraph(edgeQuery)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("query edge types: %w", err))
 	}
 
-	span.LogKV("event", "get_graph_schema_result", "nodeLabels", len(kinds), "edgeTypes", len(edgeTypes))
+	clog.Info(ctx, "get_graph_schema_result", "nodeLabels", len(kinds), "edgeTypes", len(edgeTypes))
 	return jsonResult(map[string]any{
 		"nodeLabels": kinds,
 		"edgeTypes":  edgeTypes,
@@ -396,9 +396,9 @@ func registerTracePath(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "trace_path")
+	span, ctx := clog.StartSpanFromContext(ctx, "trace_path")
 	defer span.Finish()
-	span.LogKV("event", "trace_path", "functionName", args.FunctionName, "project", args.Project, "direction", args.Direction)
+	clog.Info(ctx, "trace_path", "functionName", args.FunctionName, "project", args.Project, "direction", args.Direction)
 
 	if args.FunctionName == "" {
 		return errorResult(fmt.Errorf("functionName is required"))
@@ -456,11 +456,11 @@ func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.C
 	}
 
 	if len(hops) == 0 && lastErr != nil {
-		span.LogKV("event", "error", "error", lastErr.Error())
+		clog.Error(ctx, "error", "error", lastErr.Error())
 		return errorResult(fmt.Errorf("trace path: %w", lastErr))
 	}
 
-	span.LogKV("event", "trace_path_result", "resolvedQN", resolvedQN, "hops", len(hops))
+	clog.Info(ctx, "trace_path_result", "resolvedQN", resolvedQN, "hops", len(hops))
 	return jsonResult(map[string]any{
 		"hops":       hops,
 		"total":      len(hops),
@@ -481,9 +481,9 @@ func registerDetectChanges(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "detect_changes")
+	span, ctx := clog.StartSpanFromContext(ctx, "detect_changes")
 	defer span.Finish()
-	span.LogKV("event", "detect_changes", "project", args.Project, "baseBranch", args.BaseBranch, "scope", args.Scope)
+	clog.Info(ctx, "detect_changes", "project", args.Project, "baseBranch", args.BaseBranch, "scope", args.Scope)
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -491,7 +491,7 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 
@@ -514,7 +514,7 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 	// Run git diff --name-status to get changed files
 	changedFiles, err := gitDiffNameStatus(rootDir, baseBranch)
 	if err != nil {
-		span.LogKV("event", "git_diff_error", "error", err.Error())
+		clog.Info(ctx, "git_diff_error", "error", err.Error())
 		return jsonResult(map[string]any{
 			"project":    args.Project,
 			"baseBranch": baseBranch,
@@ -557,7 +557,7 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 		}
 	}
 
-	span.LogKV("event", "detect_changes_result", "changedFiles", len(changedFiles))
+	clog.Info(ctx, "detect_changes_result", "changedFiles", len(changedFiles))
 	return jsonResult(result)
 }
 

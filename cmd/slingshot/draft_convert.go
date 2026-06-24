@@ -71,10 +71,10 @@ This command handles all common syntax:
 }
 
 func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) (err error) {
-	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_convert")
+	span, ctx := clog.StartSpanFromContext(cmd.Context(), "draft_convert")
 	defer func() {
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 		}
 		span.Finish()
 	}()
@@ -86,7 +86,7 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) (err error) {
 
 	// parsed[0] = File
 	file := parsed[0]
-	span.LogKV("event", "draft_convert", "file", file.String, "upload", c.upload)
+	clog.Info(ctx, "draft_convert", "file", file.String, "upload", c.upload)
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Converting %s to WeChat HTML...\n"), file.String)
 
@@ -122,7 +122,7 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) (err error) {
 			return fmt.Errorf("writing output %q: %w", outPath, err)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Written to %s\n"), outPath)
-		span.LogKV("event", "draft_convert_result", "outPath", outPath, "upload", false)
+		clog.Info(ctx, "draft_convert_result", "outPath", outPath, "upload", false)
 		return nil
 	}
 

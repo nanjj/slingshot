@@ -34,14 +34,14 @@ func (s *cmdDraftSub) command() *cobra.Command {
 }
 
 func (s *cmdDraftSub) run(cmd *cobra.Command, args []string) (err error) {
-	span, _ := clog.StartSpanFromContext(cmd.Context(), "draft_"+s.name)
+	span, ctx := clog.StartSpanFromContext(cmd.Context(), "draft_"+s.name)
 	defer func() {
 		if err != nil {
-			span.LogKV("event", "error", "error", err.Error())
+			clog.Error(ctx, "error", "error", err.Error())
 		}
 		span.Finish()
 	}()
-	span.LogKV("event", "draft_"+s.name)
+	clog.Info(ctx, "draft_"+s.name)
 
 	parsed, err := s.global.Parse(s.usage, cmd, args)
 	if err != nil {

@@ -54,9 +54,9 @@ func registerCodeEdit(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleCodeEdit(ctx context.Context, args codeEditArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "code_edit")
+	span, ctx := clog.StartSpanFromContext(ctx, "code_edit")
 	defer span.Finish()
-	span.LogKV("event", "code_edit", "file", args.File, "mode", args.Mode)
+	clog.Info(ctx, "code_edit", "file", args.File, "mode", args.Mode)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -166,9 +166,9 @@ func registerCodeEditBody(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleCodeEditBody(ctx context.Context, args codeEditBodyArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "code_edit_body")
+	span, ctx := clog.StartSpanFromContext(ctx, "code_edit_body")
 	defer span.Finish()
-	span.LogKV("event", "code_edit_body", "file", args.File, "selector", args.Selector)
+	clog.Info(ctx, "code_edit_body", "file", args.File, "selector", args.Selector)
 
 	if args.File == "" {
 		return errorResult(fmt.Errorf("file is required"))
@@ -191,7 +191,7 @@ func (s *Server) handleCodeEditBody(ctx context.Context, args codeEditBodyArgs) 
 	// Locate the definition via semantic selector
 	tag, err := s.ed.LocateDef(filePath, args.Selector)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("locate definition: %w", err))
 	}
 	if tag == nil {
@@ -201,7 +201,7 @@ func (s *Server) handleCodeEditBody(ctx context.Context, args codeEditBodyArgs) 
 	// Replace the definition body
 	result, err := s.ed.Replace(filePath, tag.StartByte, tag.EndByte, args.Text)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("replace definition: %w", err))
 	}
 	return jsonResult(editResultToResponse(result))
@@ -219,12 +219,12 @@ func registerCodeLocate(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleCodeLocate(ctx context.Context, args codeLocateArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "code_locate")
+	span, ctx := clog.StartSpanFromContext(ctx, "code_locate")
 	defer span.Finish()
-	span.LogKV("event", "code_locate", "qualifiedName", args.QualifiedName, "project", args.Project)
+	clog.Info(ctx, "code_locate", "qualifiedName", args.QualifiedName, "project", args.Project)
 
 	if args.QualifiedName == "" {
-		span.LogKV("event", "error", "error", "qualifiedName is required")
+		clog.Error(ctx, "error", "error", "qualifiedName is required")
 		return errorResult(fmt.Errorf("qualifiedName is required"))
 	}
 
@@ -232,7 +232,7 @@ func (s *Server) handleCodeLocate(ctx context.Context, args codeLocateArgs) *mcp
 	if args.Project != "" {
 		node, err := s.store.GetNodeByQN(args.QualifiedName, args.Project)
 		if err == nil {
-			span.LogKV("event", "code_locate_result", "source", "sqlite", "file", node.FilePath)
+			clog.Info(ctx, "code_locate_result", "source", "sqlite", "file", node.FilePath)
 			return jsonResult(map[string]any{
 				"found":         true,
 				"source":        "sqlite",

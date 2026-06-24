@@ -91,22 +91,22 @@ func registerSearchCode(srv *mcp.Server, s *Server) {
 // ─── Handler ───────────────────────────────────────────────────────────────
 
 func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "search_code")
+	span, ctx := clog.StartSpanFromContext(ctx, "search_code")
 	defer span.Finish()
-	span.LogKV("event", "search_code", "project", args.Project, "pattern", args.Pattern, "filePattern", args.FilePattern, "mode", args.Mode)
+	clog.Info(ctx, "search_code", "project", args.Project, "pattern", args.Pattern, "filePattern", args.FilePattern, "mode", args.Mode)
 
 	if args.Pattern == "" {
-		span.LogKV("event", "error", "error", "pattern is required")
+		clog.Error(ctx, "error", "error", "pattern is required")
 		return errorResult(fmt.Errorf("pattern is required"))
 	}
 	if args.Project == "" {
-		span.LogKV("event", "error", "error", "project is required")
+		clog.Error(ctx, "error", "error", "project is required")
 		return errorResult(fmt.Errorf("project is required"))
 	}
 
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 	rootDir := info.Root
@@ -122,7 +122,7 @@ func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp
 	// Run native file scan
 	matches, filesSearched, elapsed, err := scanFiles(rootDir, args.Pattern, args.FilePattern, args.Context)
 	if err != nil {
-		span.LogKV("event", "error", "error", err.Error())
+		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("file scan failed: %w", err))
 	}
 
@@ -143,7 +143,7 @@ func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp
 	}
 
 	totalResults := len(enriched)
-	span.LogKV("event", "search_code_result", "totalMatches", totalMatches, "totalResults", totalResults, "filesSearched", filesSearched, "elapsed", fmt.Sprintf("%.3fs", elapsed))
+	clog.Info(ctx, "search_code_result", "totalMatches", totalMatches, "totalResults", totalResults, "filesSearched", filesSearched, "elapsed", fmt.Sprintf("%.3fs", elapsed))
 
 	return jsonResult(searchCodeResult{
 		Results:      enriched,

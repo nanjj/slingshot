@@ -40,9 +40,9 @@ func registerIngestTraces(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleIngestTraces(ctx context.Context, args ingestTracesArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "ingest_traces")
+	span, ctx := clog.StartSpanFromContext(ctx, "ingest_traces")
 	defer span.Finish()
-	span.LogKV("event", "ingest_traces", "project", args.Project, "traceCount", len(args.Traces))
+	clog.Info(ctx, "ingest_traces", "project", args.Project, "traceCount", len(args.Traces))
 
 	if args.Project == "" {
 		return errorResult(fmt.Errorf("project is required"))
@@ -69,7 +69,7 @@ func (s *Server) handleIngestTraces(ctx context.Context, args ingestTracesArgs) 
 		}
 	}
 
-	span.LogKV("event", "ingest_traces_result", "inserted", inserted, "total", len(args.Traces))
+	clog.Info(ctx, "ingest_traces_result", "inserted", inserted, "total", len(args.Traces))
 	return jsonResult(map[string]any{
 		"inserted": inserted,
 		"total":    len(args.Traces),

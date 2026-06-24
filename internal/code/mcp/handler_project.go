@@ -29,9 +29,9 @@ func registerGetProjectRoot(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleGetProjectRoot(ctx context.Context) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "get_project_root")
+	span, ctx := clog.StartSpanFromContext(ctx, "get_project_root")
 	defer span.Finish()
-	span.LogKV("event", "get_project_root", "projectRoot", s.opts.ProjectRoot)
+	clog.Info(ctx, "get_project_root", "projectRoot", s.opts.ProjectRoot)
 
 	return jsonResult(map[string]string{
 		"projectRoot": s.opts.ProjectRoot,
@@ -50,9 +50,9 @@ func registerOpenProject(srv *mcp.Server, s *Server) {
 }
 
 func (s *Server) handleOpenProject(ctx context.Context, args openProjectArgs) *mcp.CallToolResult {
-	span, _ := clog.StartSpanFromContext(ctx, "open_project")
+	span, ctx := clog.StartSpanFromContext(ctx, "open_project")
 	defer span.Finish()
-	span.LogKV("event", "open_project", "path", args.Path)
+	clog.Info(ctx, "open_project", "path", args.Path)
 
 	if args.Path == "" {
 		return errorResult(fmt.Errorf("path is required"))
@@ -61,7 +61,7 @@ func (s *Server) handleOpenProject(ctx context.Context, args openProjectArgs) *m
 	// Update the project root in options
 	s.opts.ProjectRoot = args.Path
 
-	span.LogKV("event", "open_project_result", "projectRoot", args.Path)
+	clog.Info(ctx, "open_project_result", "projectRoot", args.Path)
 	return jsonResult(map[string]string{
 		"projectRoot": args.Path,
 	})
