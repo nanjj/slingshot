@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanjj/clog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -83,13 +84,17 @@ func registerSearchCode(srv *mcp.Server, s *Server) {
 			"(definitions first, popular functions next, tests last). " +
 			"Modes: compact (default, signatures only), full (with source), files (just file paths).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchCodeArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleSearchCode(args), nil, nil
+		return s.handleSearchCode(ctx, args), nil, nil
 	})
 }
 
 // ─── Handler ───────────────────────────────────────────────────────────────
 
-func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
+func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp.CallToolResult {
+	span, _ := clog.StartSpanFromContext(ctx, "search_code")
+	defer span.Finish()
+	span.LogKV("event", "search_code", "project", args.Project, "pattern", args.Pattern, "filePattern", args.FilePattern, "mode", args.Mode)
+
 	if args.Pattern == "" {
 		return errorResult(fmt.Errorf("pattern is required"))
 	}
@@ -99,6 +104,7 @@ func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 
 	info, err := s.store.ProjectStatus(args.Project)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("project status: %w", err))
 	}
 	rootDir := info.Root
@@ -114,6 +120,7 @@ func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 	// Run native file scan
 	matches, filesSearched, elapsed, err := scanFiles(rootDir, args.Pattern, args.FilePattern, args.Context)
 	if err != nil {
+		span.LogKV("event", "error", "error", err.Error())
 		return errorResult(fmt.Errorf("file scan failed: %w", err))
 	}
 
@@ -134,6 +141,7 @@ func (s *Server) handleSearchCode(args searchCodeArgs) *mcp.CallToolResult {
 	}
 
 	totalResults := len(enriched)
+	span.LogKV("event", "search_code_result", "totalMatches", totalMatches, "totalResults", totalResults, "filesSearched", filesSearched, "elapsed", fmt.Sprintf("%.3fs", elapsed))
 
 	return jsonResult(searchCodeResult{
 		Results:      enriched,
