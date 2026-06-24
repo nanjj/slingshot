@@ -776,6 +776,88 @@ func TestCodeFindReferences_Outbound(t *testing.T) {
 	t.Logf("outbound references for main: total=%d", refRes.Total)
 }
 
+// TestCodeFindReferences_CrossFile verifies cross-file CALLS linking works
+// when functions in different files call each other.
+func TestCodeFindReferences_CrossFile(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	dir := t.TempDir()
+
+	// File 1: helper package
+	helperContent := `package helper
+
+// Greet returns a greeting.
+func Greet(name string) string {
+	return "Hello, " + name
+}
+`
+	err := os.WriteFile(filepath.Join(dir, "helper.go"), []byte(helperContent), 0644)
+	assert.NilError(t, err)
+
+	// File 2: main package that calls helper.Greet
+	mainContent := `package main
+
+import "helper"
+import "fmt"
+
+func main() {
+	msg := helper.Greet("World")
+	fmt.Println(msg)
+}
+`
+	err = os.WriteFile(filepath.Join(dir, "main.go"), []byte(mainContent), 0644)
+	assert.NilError(t, err)
+
+	// File 3: another file in main package that calls helper.Greet too
+	secondContent := `package main
+
+import "helper"
+
+func run() {
+	helper.Greet("Test")
+}
+`
+	err = os.WriteFile(filepath.Join(dir, "run.go"), []byte(secondContent), 0644)
+	assert.NilError(t, err)
+
+	type idxResult struct {
+		ProjectName string `json:"projectName"`
+	}
+	var idxRes idxResult
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": dir,
+	}, &idxRes)
+
+	// Find inbound references to helper.Greet from all files
+	type refItem struct {
+		SourceQN string `json:"sourceQN"`
+		TargetQN string `json:"targetQN"`
+		EdgeType string `json:"edgeType"`
+	}
+	type refResult struct {
+		Symbol     string    `json:"symbol"`
+		References []refItem `json:"references"`
+		Total      int       `json:"total"`
+	}
+	var refRes refResult
+	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+		"project":       idxRes.ProjectName,
+		"qualifiedName": "helper.Greet",
+	}, &refRes)
+
+	t.Logf("callers of helper.Greet: total=%d", refRes.Total)
+	assert.Assert(t, refRes.Total >= 2, "expected at least 2 callers of helper.Greet, got %d", refRes.Total)
+
+	// Verify both callers have correct package-qualified SourceQNs
+	callers := make(map[string]bool)
+	for _, ref := range refRes.References {
+		callers[ref.SourceQN] = true
+	}
+	assert.Assert(t, callers["main.main"], "expected main.main to call helper.Greet")
+	assert.Assert(t, callers["main.run"], "expected main.run to call helper.Greet")
+}
+
 // TestCodeFindReferences_Errors verifies error handling.
 func TestCodeFindReferences_Errors(t *testing.T) {
 	cs, cleanup := testFixture(t)

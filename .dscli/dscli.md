@@ -123,42 +123,40 @@ P6d is independent graphs computation.
 - **2026-06-24**: Reviewed CBM pass_definitions.c + pass_usages.c as reference — CBM uses registry-based resolution, slingshot will use in-memory varName→QN map for A2
 - **2026-06-24**: Waiting for Zhang Heng confirmation on using "REFERENCES" vs "USAGE" naming
 
-## Progress Update — 2026-06-24
+## Progress Update — 2026-06-24 (17:06)
 
-### ✅ Completed: LSP Foundation Enhancements (Zhang Heng)
+### ✅ Completed: LSP Foundation + CALLS SourceQN Fix (Zhang Heng)
 
 **Primary Changes:**
 
 1. **Signature Extraction** (`internal/code/lsp/lsp.go`):
-   - `ExtractSignature()` — extracts full function/method signature (e.g. `func (g *Greeter) Hello() string`)
-   - `ExtractDocComment()` — extracts doc comments from preceding comment nodes
-   - `ExtractDeclName()` — extracts identifier name from declaration nodes
-   - All with comprehensive unit tests (37 tests in lsp, all pass)
+   - `ExtractSignature()`, `ExtractDocComment()`, `ExtractDeclName()` — all with tests
 
 2. **Indexer Enhancement** (`internal/code/base/indexer.go`):
-   - **Package-qualified QNs**: `main.Hello` instead of `Hello` — eliminates collisions
-   - **Node.Signature populated**: previously always empty string
-   - **Node.DocComment populated**: previously always empty string
-   - Doc/sig extracted for: function, method, class, struct, interface, type
-   - CALLS edges now use consistent package-qualified source QNs
-   - `findDeclNode()` — resolves Tagger Tag to AST declaration node
-   - `resolveCallTarget()` — prepares callee strings for cross-file resolution
+   - Package-qualified QNs, Node.Signature/DocComment populated
+   - **Fixed CALLS SourceQN bug**: `tag.Name` → `tagQNMap[tag.Name]` (e.g. `"Hello"` → `"main.Hello"`)
+   - **Fixed REFERENCES SourceQN**: Same fix for variable reference extraction
+   - Each CALLS edge now stores raw callee name in metadata JSON `{"callee":"fmt.Println"}`
+   - Added `tagQNMap` (build during tag traversal, used for CALLS/REFERENCES SourceQN)
 
-3. **Cross-file linking preparation**:
-   - CALLS sources now match definition QNs (e.g., `main.Hello` → `main.Hello`)
-   - Method-parent CONTAINS edges use qualified QNs
-   - `resolveCallTarget()` adds package prefix to unqualified calls
+3. **Test fix** (`internal/code/mcp/server_test.go`):
+   - `SourceQN == "main.main"` instead of `"main"`
 
 ### Impact
 | Metric | Before | After |
 |--------|--------|-------|
-| Nodes with signature | 0 (always "") | **All function/method** |
-| Nodes with doc_comment | 0 (always "") | **All with doc comments** |
-| Test suite | 457 tests pass | 457 tests pass |
-| QN uniqueness | Collision-prone | **Package-qualified** |
-| CALLS cross-file linking | Broken (unqualified) | **Consistent QNs** |
+| Test suite | 457 tests pass | **457 tests pass** |
+| CALLS SourceQN | `"Hello"` (raw) | `"main.Hello"` (qualified) |
+| CALLS metadata | empty | `{"callee":"fmt.Println"}` |
+| Graph traversal | Broken (QN mismatch) | **Works** (consistent QNs) |
 
-### Next Steps for Zhang Heng
+### Division of Labor (Decided)
+- **Zhang Heng → Phase 2b**: Post-index CALLS resolution — find dangling external calls, create placeholder nodes for stdlib/third-party packages
+- **Curie → P6b**: Enhance Class/Interface/Type nodes with proper CONTAINS/IMPLEMENTS edges
+
+## Next Steps
+- Zhang Heng: `ResolveExternalCalls()` post-processor
+- Curie: P6b — struct/class/interface hierarchy edges
 - Phase 2: Resolve CALLS targets to definition nodes via import chain
   - Current: `fmt.Println` → CALLS target `fmt.Println` (no matching node)
   - Goal: Resolve through `import "fmt"` → find `fmt.Println` in stdlib stubs
