@@ -46,7 +46,7 @@ type codeLocateArgs struct {
 
 func registerCodeEdit(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "code_edit",
+		Name:        "edit",
 		Description: "Edit a file with write-through semantics. Modes: insert (pos/point/before/after), replace (range/node), delete (range/node). Opens the file with tree-sitter incremental parsing, applies the edit, and saves to disk atomically. The document is cached for subsequent edits.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeEditArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeEdit(ctx, args), nil, nil
@@ -158,7 +158,7 @@ func (s *Server) handleCodeEditDelete(filePath string, args codeEditArgs) *mcp.C
 
 func registerCodeEditBody(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "code_edit_body",
+		Name:        "edit_body",
 		Description: "Replace the body of a definition identified by a semantic selector. Selector format: 'function:name', 'method:name', 'struct:name', 'class:name', 'interface:name'. Opens the file, locates the definition, replaces its content, and saves to disk atomically.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeEditBodyArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeEditBody(ctx, args), nil, nil
@@ -211,7 +211,7 @@ func (s *Server) handleCodeEditBody(ctx context.Context, args codeEditBodyArgs) 
 
 func registerCodeLocate(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "code_locate",
+		Name:        "locate",
 		Description: "Locate a symbol definition by qualified name. First searches the SQLite code graph for the symbol's file, line, and column. Falls back to tree-sitter definition search in the specified file when the symbol is not indexed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeLocateArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeLocate(ctx, args), nil, nil

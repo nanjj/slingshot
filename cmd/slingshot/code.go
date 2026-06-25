@@ -196,6 +196,12 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 	// of the caller's spans in Jaeger.
 	srv.AddReceivingMiddleware(codemcp.TracingMiddleware)
 
+	// Register JSON fixup middleware to tolerate LLM double-encoded JSON
+	// strings. Some LLMs occasionally send a JSON string where the schema
+	// expects a JSON object (e.g. selector as "\"{\\\"path\\\":...}\"").
+	// This middleware fixes that before schema validation.
+	srv.AddReceivingMiddleware(codemcp.FixDoubleEncodedJSON)
+
 	// 6. Register all tools
 	codeServer.RegisterAll(srv)
 	clog.Info(ctx, "register_tools", "count", 27)

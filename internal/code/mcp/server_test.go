@@ -548,7 +548,7 @@ func TestCodeEdit_Insert(t *testing.T) {
 
 	// Insert a line at the end of package declaration
 	var result map[string]any
-	callToolUnmarshal(t, cs, "code_edit", map[string]any{
+	callToolUnmarshal(t, cs, "edit", map[string]any{
 		"file": filePath,
 		"mode": "insert",
 		"pos":  15,
@@ -568,7 +568,7 @@ func TestCodeEdit_Replace(t *testing.T) {
 
 	// Replace "Greeter" with "Saluter"
 	var result map[string]any
-	callToolUnmarshal(t, cs, "code_edit", map[string]any{
+	callToolUnmarshal(t, cs, "edit", map[string]any{
 		"file":      filePath,
 		"mode":      "replace",
 		"startByte": 52,
@@ -588,7 +588,7 @@ func TestCodeEdit_Delete(t *testing.T) {
 
 	// Delete the Greeter struct
 	var result map[string]any
-	callToolUnmarshal(t, cs, "code_edit", map[string]any{
+	callToolUnmarshal(t, cs, "edit", map[string]any{
 		"file":      filePath,
 		"mode":      "delete",
 		"startByte": 51,
@@ -606,7 +606,7 @@ func TestCodeEditBody(t *testing.T) {
 	filePath := filepath.Join(projectDir, "main.go")
 
 	var result map[string]any
-	callToolUnmarshal(t, cs, "code_edit_body", map[string]any{
+	callToolUnmarshal(t, cs, "edit_body", map[string]any{
 		"file":     filePath,
 		"selector": "function:main",
 		"text":     `fmt.Println("modified")`,
@@ -640,7 +640,7 @@ func TestCodeLocate_Found(t *testing.T) {
 		QualifiedName string `json:"qualifiedName"`
 	}
 	var locRes locateResult
-	callToolUnmarshal(t, cs, "code_locate", map[string]any{
+	callToolUnmarshal(t, cs, "locate", map[string]any{
 		"project":       idxRes.ProjectName,
 		"qualifiedName": "main.Hello",
 	}, &locRes)
@@ -663,7 +663,7 @@ func TestCodeLocate_Fallback(t *testing.T) {
 		QualifiedName string `json:"qualifiedName"`
 	}
 	var locRes locateResult
-	callToolUnmarshal(t, cs, "code_locate", map[string]any{
+	callToolUnmarshal(t, cs, "locate", map[string]any{
 		"file":          filePath,
 		"qualifiedName": "Hello",
 	}, &locRes)
@@ -680,7 +680,7 @@ func TestCodeLocate_NotFound(t *testing.T) {
 		Found bool `json:"found"`
 	}
 	var locRes locateResult
-	callToolUnmarshal(t, cs, "code_locate", map[string]any{
+	callToolUnmarshal(t, cs, "locate", map[string]any{
 		"qualifiedName": "NonExistentSymbol",
 	}, &locRes)
 	assert.Assert(t, !locRes.Found, "NonExistentSymbol should not be found")
@@ -701,7 +701,7 @@ func TestCodeEdit_ErrorHandling(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			callToolError(t, cs, "code_edit", tt.args)
+			callToolError(t, cs, "edit", tt.args)
 		})
 	}
 	}
@@ -736,7 +736,7 @@ func TestCodeFindReferences_Inbound(t *testing.T) {
 		Total      int       `json:"total"`
 	}
 	var refRes refResult
-	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+	callToolUnmarshal(t, cs, "find_references", map[string]any{
 		"project":       idxRes.ProjectName,
 		"qualifiedName": "fmt.Println",
 	}, &refRes)
@@ -767,7 +767,7 @@ func TestCodeFindReferences_Outbound(t *testing.T) {
 		Total      int    `json:"total"`
 	}
 	var refRes refResult
-	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+	callToolUnmarshal(t, cs, "find_references", map[string]any{
 		"project":       idxRes.ProjectName,
 		"qualifiedName": "main",
 		"direction":     "outbound",
@@ -842,7 +842,7 @@ func run() {
 		Total      int       `json:"total"`
 	}
 	var refRes refResult
-	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+	callToolUnmarshal(t, cs, "find_references", map[string]any{
 		"project":       idxRes.ProjectName,
 		"qualifiedName": "helper.Greet",
 	}, &refRes)
@@ -947,7 +947,7 @@ func TestMul(t *testing.T) {
 
 	// Now check via code_find_references
 	var refRes refResult
-	callToolUnmarshal(t, cs, "code_find_references", map[string]any{
+	callToolUnmarshal(t, cs, "find_references", map[string]any{
 		"project":       idxRes.ProjectName,
 		"qualifiedName": "math.Add",
 		"direction":     "inbound",
@@ -974,13 +974,13 @@ func TestCodeFindReferences_Errors(t *testing.T) {
 	defer cleanup()
 
 	t.Run("missing qualifiedName", func(t *testing.T) {
-		callToolError(t, cs, "code_find_references", map[string]any{
+		callToolError(t, cs, "find_references", map[string]any{
 			"project": "test",
 		})
 	})
 
 	t.Run("missing project", func(t *testing.T) {
-		callToolError(t, cs, "code_find_references", map[string]any{
+		callToolError(t, cs, "find_references", map[string]any{
 			"qualifiedName": "main",
 		})
 	})
@@ -1011,7 +1011,7 @@ func TestCodeAnalysis(t *testing.T) {
 		} `json:"summary"`
 	}
 	var result analysisResult
-	callToolUnmarshal(t, cs, "code_analysis", map[string]any{
+	callToolUnmarshal(t, cs, "analysis", map[string]any{
 		"file": filePath,
 	}, &result)
 
@@ -1047,7 +1047,7 @@ func TestCodeAnalysis_Error(t *testing.T) {
 	cs, cleanup := testFixture(t)
 	defer cleanup()
 
-	callToolError(t, cs, "code_analysis", map[string]any{
+	callToolError(t, cs, "analysis", map[string]any{
 		"file": "",
 	})
 }

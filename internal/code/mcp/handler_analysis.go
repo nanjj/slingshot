@@ -28,7 +28,7 @@ type codeAnalysisArgs struct {
 
 func registerCodeFindReferences(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "code_find_references",
+		Name:        "find_references",
 		Description: "Find all references to a symbol in the code graph. Uses the indexed edges table to find callers/consumers of the given symbol. Supports inbound (who calls this), outbound (who this calls), or both. Depth=0 returns direct references only.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeFindReferencesArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeFindReferences(ctx, args), nil, nil
@@ -128,7 +128,7 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 
 func registerCodeAnalysis(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "code_analysis",
+		Name:        "analysis",
 		Description: "Analyze code complexity and quality metrics for a file. Returns per-function breakdown (cyclomatic, cognitive, loop depth, param count, recursion, linear scans in loop) plus summary statistics. Uses tree-sitter for AST parsing.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeAnalysisArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeAnalysis(ctx, args), nil, nil
