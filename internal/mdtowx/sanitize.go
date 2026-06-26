@@ -236,6 +236,19 @@ func stripTags(src []byte) []byte {
 //	"I am an AI"        → "I am an AI"  (unchanged — all ASCII)
 //	"Hello 世界"        → "Hello 世界"  (unchanged — ASCII on one side)
 //	"我们 相信 你"      → "我们相信你"
+// RemoveCJCSpace removes whitespace characters (spaces, newlines, tabs, etc.)
+// that appear between two non-ASCII characters. This is commonly needed for CJK
+// text where whitespace between Chinese/Japanese/Korean characters are artifacts
+// of markdown or org-mode line wrapping, but works for any non-ASCII script
+// (Cyrillic, Greek, etc.).
+//
+// Examples:
+//
+//	"相 信"             → "相信"
+//	"I am an AI"        → "I am an AI"  (unchanged — all ASCII)
+//	"Hello 世界"        → "Hello 世界"  (unchanged — ASCII on one side)
+//	"我们 相信 你"      → "我们相信你"
+//	"有\n多"            → "有多少"      (newline removed)
 func RemoveCJCSpace(src []byte) []byte {
 	s := string(src)
 	runes := []rune(s)
@@ -243,13 +256,13 @@ func RemoveCJCSpace(src []byte) []byte {
 	b.Grow(len(s))
 
 	for i := 0; i < len(runes); i++ {
-		if runes[i] == ' ' && i > 0 && i < len(runes)-1 {
-			// Look ahead past consecutive spaces
+		if unicode.IsSpace(runes[i]) && i > 0 && i < len(runes)-1 {
+			// Look ahead past consecutive whitespace
 			j := i + 1
-			for j < len(runes) && runes[j] == ' ' {
+			for j < len(runes) && unicode.IsSpace(runes[j]) {
 				j++
 			}
-			// Remove the whole space-run if sandwiched between non-ASCII chars
+			// Remove the whole whitespace-run if sandwiched between non-ASCII chars
 			if j < len(runes) && runes[i-1] > unicode.MaxASCII && runes[j] > unicode.MaxASCII {
 				i = j - 1 // loop increment will advance past j
 				continue

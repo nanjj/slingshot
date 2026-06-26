@@ -26,6 +26,26 @@ func TestRemoveCJCSpace(t *testing.T) {
 			want: "相信",
 		},
 		{
+			name: "newline between CJK chars",
+			in:   "有\n多",
+			want: "有多",
+		},
+		{
+			name: "tab between CJK chars",
+			in:   "树\t上",
+			want: "树上",
+		},
+		{
+			name: "carriage return between CJK chars",
+			in:   "信\r息",
+			want: "信息",
+		},
+		{
+			name: "mixed whitespace between CJK chars",
+			in:   "人\t世间\n有 多\r少树",
+			want: "人世间有多少树",
+		},
+		{
 			name: "ASCII text unchanged",
 			in:   "I am an AI",
 			want: "I am an AI",
@@ -39,6 +59,21 @@ func TestRemoveCJCSpace(t *testing.T) {
 			name: "CJK on one side only (right ASCII)",
 			in:   "你好 World",
 			want: "你好 World",
+		},
+		{
+			name: "newline between HTML tags preserved",
+			in:   "</p>\n<p>",
+			want: "</p>\n<p>",
+		},
+		{
+			name: "newline between ASCII and CJK preserved",
+			in:   "Tree\n语言",
+			want: "Tree\n语言",
+		},
+		{
+			name: "newline between CJK and ASCII preserved",
+			in:   "语言\nTree",
+			want: "语言\nTree",
 		},
 		{
 			name: "mixed CJK and ASCII",
@@ -95,6 +130,26 @@ func TestRemoveCJCSpace(t *testing.T) {
 			in:   " ",
 			want: " ",
 		},
+		{
+			name: "newline at start preserved",
+			in:   "\n相 信",
+			want: "\n相信",
+		},
+		{
+			name: "newline at end preserved",
+			in:   "相 信\n",
+			want: "相信\n",
+		},
+		{
+			name: "org source line wrap: 人世间有\\n多少树",
+			in:   "人世间有\n多少树",
+			want: "人世间有多少树",
+		},
+		{
+			name: "org source line wrap: 非得爬到树\\n上",
+			in:   "非得爬到树\n上",
+			want: "非得爬到树上",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -105,6 +160,7 @@ func TestRemoveCJCSpace(t *testing.T) {
 		})
 	}
 }
+
 
 func TestSanitizeHTML_removeCJCSpace(t *testing.T) {
 	// Test that SanitizeHTML removes spaces between CJK chars in text nodes
