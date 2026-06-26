@@ -137,7 +137,14 @@ func (s *sanitizer) handleEnd() {
 		if s.bufDepth == 0 {
 			// <sup> is fully buffered. Decide what to output.
 			if s.supHasIssue {
-				s.out.Write(RemoveCJCSpace(stripTags(s.buf.Bytes())))
+				// Keep <sup> wrapper but strip the <a> inside.
+				// This makes footnote references display as superscript in WeChat.
+				text := RemoveCJCSpace(stripTags(s.buf.Bytes()))
+				if len(bytes.TrimSpace(text)) > 0 {
+					s.out.Write([]byte("<sup>"))
+					s.out.Write(text)
+					s.out.Write([]byte("</sup>"))
+				}
 			} else {
 				s.out.Write(s.buf.Bytes())
 			}

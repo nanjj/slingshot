@@ -253,17 +253,17 @@ func TestSanitizeHTML_footnote(t *testing.T) {
 		{
 			name: "footnote backlink with role",
 			in:   `<sup><a id="fnr.1" href="#fn.1" role="doc-backlink">1</a></sup>`,
-			want: `1`,
+			want: `<sup>1</sup>`,
 		},
 		{
 			name: "footnote backlink with class",
 			in:   `<sup><a class="footref" href="#fn.1">1</a></sup>`,
-			want: `1`,
+			want: `<sup>1</sup>`,
 		},
 		{
 			name: "footnote with both class and role",
 			in:   `<sup><a id="fnr.2" class="footref" href="#fn.2" role="doc-backlink">2</a></sup>`,
-			want: `2`,
+			want: `<sup>2</sup>`,
 		},
 		{
 			name: "regular sup preserved",
@@ -273,7 +273,7 @@ func TestSanitizeHTML_footnote(t *testing.T) {
 		{
 			name: "footnote in paragraph context",
 			in:   `<p>这是正文<sup><a class="footref" href="#fn.1" role="doc-backlink">1</a></sup>继续</p>`,
-			want: `<p>这是正文1继续</p>`,
+			want: `<p>这是正文<sup>1</sup>继续</p>`,
 		},
 	}
 
@@ -289,7 +289,7 @@ func TestSanitizeHTML_footnote(t *testing.T) {
 
 func TestSanitizeHTML_mixed(t *testing.T) {
 	input := `<p>本文参考了相关文献<sup><a class="footref" href="#fn.1" role="doc-backlink">1</a></sup>。如需联系请发邮件至 <a href="mailto:author@example.com">作者</a>。</p>`
-	want := `<p>本文参考了相关文献1。如需联系请发邮件至 作者。</p>`
+	want := `<p>本文参考了相关文献<sup>1</sup>。如需联系请发邮件至 作者。</p>`
 
 	got := string(SanitizeHTML([]byte(input)))
 	if got != want {
