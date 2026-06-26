@@ -21,6 +21,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nanjj/slingshot/internal/highlight"
+
+
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -324,6 +327,19 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 	// because the caller unconditionally writes </section> on exit.
 	// An early return here would produce an orphaned closing tag.
 
+	// Collect all lines into a single source buffer for tree-sitter highlighting.
+	var fullSrc []byte
+	for i := 0; i < nLines; i++ {
+		seg := lines.At(i)
+		fullSrc = append(fullSrc, seg.Value(source)...)
+	}
+
+	// Apply tree-sitter syntax highlighting if we have a language.
+	var highlighted []byte
+	if lang != "" && len(fullSrc) > 0 {
+		highlighted = highlight.Highlight(fullSrc, lang)
+	}
+
 	// <section class="code-snippet__fix code-snippet__LANG">
 	_, _ = w.WriteString(`<section class="code-snippet__fix code-snippet__`)
 	_, _ = w.WriteString(suffix)
@@ -336,20 +352,34 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 	_, _ = w.WriteString(html.EscapeString(lang))
 	_, _ = w.WriteString(`">`)
 
-	// <code><span class="code-snippet_outer">line</span></code> per line
-	for i := 0; i < nLines; i++ {
-		line := lines.At(i)
-		_, _ = w.WriteString("<code><span class=\"code-snippet_outer\">")
-		// HTML-escape and strip trailing newline
-		content := bytes.TrimRight(line.Value(source), "\n\r")
-		_, _ = w.WriteString(html.EscapeString(string(content)))
-		_, _ = w.WriteString("</span></code>\n")
+	if len(highlighted) > 0 {
+		// Split the highlighted HTML by newlines into per-line <code> elements.
+		// Tree-sitter spans may cross line boundaries (e.g. multi-line comments);
+		// splitting can produce technically unbalanced HTML per line, but WeChat
+		// renders each <code> block independently and the visual result is correct.
+		hlLines := bytes.Split(highlighted, []byte{'\n'})
+		for i, hlLine := range hlLines {
+			if i == len(hlLines)-1 && len(hlLine) == 0 {
+				break // skip trailing newline
+			}
+			_, _ = w.WriteString("<code><span class=\"code-snippet_outer\">")
+			_, _ = w.Write(hlLine)
+			_, _ = w.WriteString("</span></code>\n")
+		}
+	} else {
+		// Fallback: plain HTML-escaped output per line (no highlighting).
+		for i := 0; i < nLines; i++ {
+			line := lines.At(i)
+			_, _ = w.WriteString("<code><span class=\"code-snippet_outer\">")
+			content := bytes.TrimRight(line.Value(source), "\n\r")
+			_, _ = w.WriteString(html.EscapeString(string(content)))
+			_, _ = w.WriteString("</span></code>\n")
+		}
 	}
 
 	_, _ = w.WriteString("</pre>")
 	// </section> is written by the caller on exiting
 }
-
 // --- Custom list renderer ---
 //
 // WeChat does not support nested <ol>/<li>. All list items must be rendered

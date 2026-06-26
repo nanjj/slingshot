@@ -72,12 +72,12 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<section class="code-snippet__fix code-snippet__go">`,
 				`<pre class="code-snippet__go" data-lang="go">`,
-				`<span class="code-snippet_outer">func main() {}</span>`,
+				`<span style="color:#d73a49">func</span>`,
 				`</section>`,
 			},
 			not: []string{
-				`class="language-`,       // custom renderer doesn't emit language class
-				`style="background:#f5f5`, // no longer uses inline styles
+				`class="language-`,
+				`style="background:#f5f5`,
 			},
 		},
 		{
@@ -104,7 +104,7 @@ func TestConvertMarkdown(t *testing.T) {
 			name:  "code_block_with_html_entities",
 			input: "```html\n<div> & \"quotes\"\n```\n",
 			want: []string{
-				`<span class="code-snippet_outer">&lt;div&gt; &amp; &#34;quotes&#34;</span>`,
+				`<span class="code-snippet_outer"><span style="color:#24292e">&lt;</span>div<span style="color:#24292e">&gt;</span>`,
 			},
 			not: []string{
 				`<div>`,

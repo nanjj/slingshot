@@ -188,7 +188,6 @@ func main() {}
 		if err != nil {
 			t.Fatalf("ConvertOrgFile error = %v", err)
 		}
-
 		html := string(result.HTML)
 		if !strings.Contains(html, `code-snippet__go`) {
 			t.Errorf("HTML should contain Go code block class, got: %s", html)
@@ -196,8 +195,8 @@ func main() {}
 		if !strings.Contains(html, `data-lang="go"`) {
 			t.Errorf("HTML should contain data-lang='go', got: %s", html)
 		}
-		if !strings.Contains(html, `package main`) {
-			t.Errorf("HTML should contain code content, got: %s", html)
+		if !strings.Contains(html, `<span style="color:#d73a49">package</span>`) {
+			t.Errorf("HTML should contain highlighted code content, got: %s", html)
 		}
 	})
 
