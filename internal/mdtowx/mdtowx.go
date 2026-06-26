@@ -33,6 +33,23 @@ import (
 	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
 )
+
+// imgWithTitleRe matches <img ... title="CAPTION" ...> and captures the title value.
+// The title attribute is rendered by goldmark from Markdown's ![alt](src "title") syntax.
+// In WeChat, the HTML title attribute is invisible (no hover on mobile), so we need
+// to make it visible as caption text below the image.
+var imgWithTitleRe = regexp.MustCompile(`<img([^>]*)title="([^"]+)"([^>]*>)`)
+
+// injectImageCaptions makes image title attributes visible as caption text below each image.
+// Standard HTML renders title only as a tooltip on hover, which is invisible on mobile.
+// This function adds a <span> with the caption text after each <img> that has a title.
+func injectImageCaptions(html []byte) []byte {
+	captionSpan := `<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">${2}</span>`
+	repl := []byte(`<img${1}title="${2}"${3}` + captionSpan)
+	return imgWithTitleRe.ReplaceAll(html, repl)
+}
+
+
 // --- WeChat API limits ---
 
 const (
@@ -571,8 +588,14 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 		return nil, fmt.Errorf("rendering markdown: %w", err)
 	}
 
+	// 6.5 Inject visible captions for images that have title attributes.
+	// The title attribute (from Markdown ![alt](src "caption")) is invisible
+	// on mobile — WeChat doesn't display hover tooltips. We add a visible
+	// caption <span> after each such image.
+	html := injectImageCaptions(buf.Bytes())
+
 	return &Result{
-		HTML:         buf.Bytes(),
+		HTML:         html,
 		Title:        fm.Title,
 		Author:       author,
 		ThumbMediaID: fm.ThumbMediaID,

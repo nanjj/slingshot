@@ -147,10 +147,21 @@ func TestConvertMarkdown(t *testing.T) {
 			},
 		},
 		{
-			name:  "image",
-			input: `![alt](img.png "title")`,
+			name:  "image_with_caption",
+			input: `![alt](img.png "Italo Calvino")`,
 			want: []string{
-				`<img src="img.png" alt="alt" title="title" style="max-width:100%;height:auto;display:block;margin:0.8em 0"`,
+				`<img src="img.png" alt="alt" title="Italo Calvino" style="max-width:100%;height:auto;display:block;margin:0.8em 0"`,
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">Italo Calvino</span>`,
+			},
+		},
+		{
+			name:  "image_without_caption",
+			input: `![alt](img.png)`,
+			want: []string{
+				`<img src="img.png" alt="alt" style="max-width:100%;height:auto;display:block;margin:0.8em 0"`,
+			},
+			not: []string{
+				`<span style="display:block;text-align:center;color:#888`,
 			},
 		},
 		{
