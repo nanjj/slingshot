@@ -314,14 +314,41 @@ func htmlUnescape(src []byte) []byte {
 
 // --- HTML parsing helpers ---
 
-// preClassPrefix is the marker we look for to identify Org-mode code blocks.
-const preClassPrefix = `<pre class="src-`
+// preClassPrefix is the start of a <pre> tag with a class attribute.
+// We search for this and then verify a "src-" token exists in the class,
+// supporting both <pre class="src-go"> and <pre class="src src-go"> (Emacs format).
+const preClassPrefix = `<pre class="`
 
-// indexPreClassSrc finds the first occurrence of <pre class="src- in data.
+// indexPreClassSrc finds the first <pre> whose class attribute contains a
+// "src-" token (e.g., class="src-go" or class="src src-go").
 func indexPreClassSrc(data []byte) int {
-	return bytes.Index(data, []byte(preClassPrefix))
-}
+	idx := 0
+	for {
+		preIdx := bytes.Index(data[idx:], []byte(preClassPrefix))
+		if preIdx < 0 {
+			return -1
+		}
+		pos := idx + preIdx
+		rest := data[pos+len(preClassPrefix):]
 
+		// Read the class value (up to closing ").
+		end := bytes.IndexByte(rest, '"')
+		if end < 0 {
+			return -1
+		}
+		classValue := string(rest[:end])
+
+		// Check if any class token starts with "src-".
+		for _, token := range strings.Fields(classValue) {
+			if strings.HasPrefix(token, "src-") {
+				return pos
+			}
+		}
+
+		// Not a code block — keep searching.
+		idx = pos + 1
+	}
+}
 // findClosingTag finds the closing tag </tag> in src, handling self-closing
 // tags and simple nesting of the same tag type. Returns the index of the
 // byte right after </tag> (i.e., the end of the closing tag).

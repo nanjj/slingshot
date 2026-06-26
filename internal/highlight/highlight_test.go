@@ -183,6 +183,31 @@ func TestHighlightPageSimple(t *testing.T) {
 	}
 }
 
+func TestHighlightPageEmacsFormat(t *testing.T) {
+	// Emacs org-mode HTML export produces class="src src-XXX" (two classes).
+	html := []byte(`<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+<h1>Test Page</h1>
+<pre class="src src-go"><code>func main() {}</code></pre>
+</body>
+</html>`)
+
+	got, count, err := HighlightPage(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 block highlighted, got %d", count)
+	}
+
+	out := string(got)
+	if !strings.Contains(out, `<span style="color:#d73a49">func</span>`) {
+		t.Errorf("expected highlighted func keyword in output, got:\n%s", out)
+	}
+}
+
 func TestHighlightPageMultipleBlocks(t *testing.T) {
 	html := []byte(`<body>
 <pre class="src-go"><code>func main() {}
