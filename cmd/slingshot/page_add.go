@@ -565,6 +565,9 @@ func orgToHTMLFile(orgPath string) (string, error) {
 		"--eval", "(setq org-html-xml-declaration nil)",
 		"--eval", "(setq org-html-doctype \"html5\")",
 		"--eval", "(setq org-html-head-include-default-style nil)",
+		// Disable sub/superscript conversion -- _ in filenames like sample_2.d2
+		// must not become <sub> during HTML export.
+		"--eval", "(setq org-export-with-sub-superscripts nil)",
 		"--eval", "(org-html-export-to-html)",
 	)
 	cmd.Stderr = &stderr

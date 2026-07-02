@@ -302,4 +302,32 @@ Some text.
 			t.Errorf("HTML should contain link text, got: %s", html)
 		}
 	})
+
+	t.Run("underscore_not_subscript", func(t *testing.T) {
+		orgContent := `#+TITLE: Underscore Test
+
+sample_2.d2 should not become subscript, and sample_2_tala.png should stay as-is.
+`
+		dir := t.TempDir()
+		path := dir + "/underscore.org"
+		if err := os.WriteFile(path, []byte(orgContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := ConvertOrgFile(path)
+		if err != nil {
+			t.Fatalf("ConvertOrgFile error = %v", err)
+		}
+
+		html := string(result.HTML)
+		if strings.Contains(html, "<sub>") {
+			t.Errorf("HTML should NOT contain <sub> tags (underscore in sample_2.d2 converted to subscript), got: %s", html)
+		}
+		if !strings.Contains(html, "sample_2.d2") {
+			t.Errorf("HTML should contain literal 'sample_2.d2', got: %s", html)
+		}
+		if !strings.Contains(html, "sample_2_tala.png") {
+			t.Errorf("HTML should contain literal 'sample_2_tala.png', got: %s", html)
+		}
+	})
 }

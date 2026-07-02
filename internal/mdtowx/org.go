@@ -208,8 +208,11 @@ const orgToMarkdownElisp = `(progn
 
   ;; Export current buffer (loaded via --visit) as Markdown string.
   ;; TOC is suppressed -- WeChat articles never need a table of contents.
+  ;; Sub/superscript is disabled -- _ in filenames like sample_2.d2 must not
+  ;; become subscript (<sub>) during export.
   (let ((org-export-with-toc nil)
-        (org-export-with-section-numbers nil))
+        (org-export-with-section-numbers nil)
+        (org-export-with-sub-superscripts nil))
     (princ (org-export-as 'my-md nil nil t))))
 `
 
