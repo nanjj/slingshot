@@ -568,6 +568,10 @@ func orgToHTMLFile(orgPath string) (string, error) {
 		// Disable sub/superscript conversion -- _ in filenames like sample_2.d2
 		// must not become <sub> during HTML export.
 		"--eval", "(setq org-export-with-sub-superscripts nil)",
+		// Disable htmlize syntax highlighting — tree-sitter (HighlightPage)
+		// handles all code blocks. htmlize outputs <span style="color:...">
+		// that conflicts with subsequent tree-sitter highlighting.
+		"--eval", "(setq org-html-htmlize-output-type nil)",
 		"--eval", "(org-html-export-to-html)",
 	)
 	cmd.Stderr = &stderr
