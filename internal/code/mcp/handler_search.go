@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,39 +19,42 @@ import (
 // ─── Argument structs ──────────────────────────────────────────────────────────
 
 type searchGraphArgs struct {
-	Query        string   `json:"query,omitempty"`
-	NamePattern  string   `json:"namePattern,omitempty"`
-	Semantic     []string `json:"semanticQuery,omitempty"`
-	Project      string   `json:"project,omitempty"`
-	PathFilter   string   `json:"pathFilter,omitempty"`
-	FilePattern  string   `json:"filePattern,omitempty"`
-	Label        string   `json:"label,omitempty"`
-	Kind         string   `json:"kind,omitempty"`
-	MinDegree    int      `json:"minDegree,omitempty"`
-	MaxDegree    int      `json:"maxDegree,omitempty"`
-	Relationship string   `json:"relationship,omitempty"`
-	Limit        int      `json:"limit,omitempty"`
-	Offset       int      `json:"offset,omitempty"`
+	Query            string   `json:"query,omitempty"`
+	Regex            string   `json:"regex,omitempty"` // alias for query
+	NamePattern      string   `json:"namePattern,omitempty"`
+	Semantic         []string `json:"semanticQuery,omitempty"`
+	Project          string   `json:"project,omitempty"` // optional once open_project is bound
+	PathFilter       string   `json:"pathFilter,omitempty"`
+	FilePattern      string   `json:"filePattern,omitempty"`
+	FilePatternSnake string   `json:"file_pattern,omitempty"` // alias for filePattern
+	Label            string   `json:"label,omitempty"`
+	Kind             string   `json:"kind,omitempty"`
+	MinDegree        int      `json:"minDegree,omitempty"`
+	MaxDegree        int      `json:"maxDegree,omitempty"`
+	Relationship     string   `json:"relationship,omitempty"`
+	Limit            int      `json:"limit,omitempty"`
+	Offset           int      `json:"offset,omitempty"`
 }
 
 type getArchitectureArgs struct {
-	Project string   `json:"project"`
-	Aspects  []string `json:"aspects,omitempty"`
+	Project string   `json:"project,omitempty"` // optional once open_project is bound
+	Aspects []string `json:"aspects,omitempty"`
 }
 
 type getCodeSnippetArgs struct {
 	QualifiedName    string `json:"qualifiedName"`
-	Project          string `json:"project"`
+	Project          string `json:"project,omitempty"` // optional once open_project is bound
 	IncludeNeighbors bool   `json:"includeNeighbors,omitempty"`
 }
 
 type getGraphSchemaArgs struct {
-	Project string `json:"project"`
+	Project string `json:"project,omitempty"` // optional once open_project is bound
 }
 
 type tracePathArgs struct {
 	FunctionName  string `json:"functionName"`
-	Project       string `json:"project"`
+	Function      string `json:"function,omitempty"`  // alias for functionName
+	Project       string `json:"project,omitempty"`   // optional once open_project is bound
 	Direction     string `json:"direction,omitempty"` // inbound, outbound, both
 	Depth         int    `json:"depth,omitempty"`
 	Mode          string `json:"mode,omitempty"` // calls, data_flow, cross_service
@@ -59,7 +64,7 @@ type tracePathArgs struct {
 }
 
 type detectChangesArgs struct {
-	Project    string `json:"project"`
+	Project    string `json:"project,omitempty"` // optional once open_project is bound
 	BaseBranch string `json:"baseBranch,omitempty"`
 	Since      string `json:"since,omitempty"`
 	Scope      string `json:"scope,omitempty"`
@@ -71,7 +76,8 @@ type detectChangesArgs struct {
 func registerSearchGraph(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "search_graph",
-		Description: "Search the code knowledge graph for functions, classes, routes, and variables. Three search modes: (1) query for BM25 ranked full-text search with camelCase splitting — Function/Method/Route nodes are boosted; (2) namePattern for exact pattern matching; (3) semanticQuery for vector cosine search. Supports pagination: use limit/offset, response includes total (full count) and has_more flag.",
+		Description: "Search the code knowledge graph for functions, classes, routes, and variables. Three search modes: (1) query for BM25 ranked full-text search with camelCase splitting — Function/Method/Route nodes are boosted; (2) namePattern for exact pattern matching; (3) semanticQuery for vector cosine search. Supports pagination: use limit/offset, response includes total (full count) and has_more flag. project is optional once open_project has been called. Aliases: regex (query), file_pattern (filePattern).",
+		InputSchema: lenientSchema[searchGraphArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchGraphArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleSearchGraph(ctx, args), nil, nil
 	})
@@ -80,12 +86,17 @@ func registerSearchGraph(srv *mcp.Server, s *Server) {
 func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *mcp.CallToolResult {
 	span, ctx := clog.StartSpanFromContext(ctx, "search_graph")
 	defer span.Finish()
-	clog.Info(ctx, "search_graph_start", "project", args.Project, "query", args.Query, "namePattern", args.NamePattern)
 
-	project := args.Project
-	if project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+	query := firstNonEmpty(args.Query, args.Regex)
+	filePattern := firstNonEmpty(args.FilePattern, args.FilePatternSnake)
+	clog.Info(ctx, "search_graph_start", "project", args.Project, "query", query, "namePattern", args.NamePattern)
+
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
+	project := info.Name
 
 	limit := args.Limit
 	if limit <= 0 {
@@ -93,8 +104,8 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 	}
 
 	// Primary mode: BM25 full-text search via SearchNodes
-	if args.Query != "" {
-		nodes, total, err := s.store.SearchNodes(args.Query, project, args.PathFilter, limit, args.Offset)
+	if query != "" {
+		nodes, total, err := s.store.SearchNodes(query, project, filePattern, limit, args.Offset)
 		if err != nil {
 			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("search nodes: %w", err))
@@ -128,8 +139,8 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 
 	// Semantic query mode: BM25 fallback (true vector search requires embeddings)
 	if len(args.Semantic) > 0 {
-		query := strings.Join(args.Semantic, " ")
-		nodes, total, err := s.store.SearchNodes(query, project, args.PathFilter, limit, args.Offset)
+		semQuery := strings.Join(args.Semantic, " ")
+		nodes, total, err := s.store.SearchNodes(semQuery, project, filePattern, limit, args.Offset)
 		if err != nil {
 			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("semantic search: %w", err))
@@ -137,11 +148,11 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 		hasMore := args.Offset+len(nodes) < total
 		clog.Info(ctx, "search_graph_result", "mode", "semantic", "total", total, "returned", len(nodes))
 		return jsonResult(map[string]any{
-			"results":     nodes,
-			"total":       total,
-			"has_more":    hasMore,
-			"mode":        "semantic",
-			"note":        "BM25 fallback — true vector semantic search requires embedding infrastructure",
+			"results":  nodes,
+			"total":    total,
+			"has_more": hasMore,
+			"mode":     "semantic",
+			"note":     "BM25 fallback — true vector semantic search requires embedding infrastructure",
 		})
 	}
 
@@ -153,7 +164,8 @@ func (s *Server) handleSearchGraph(ctx context.Context, args searchGraphArgs) *m
 func registerGetArchitecture(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_architecture",
-		Description: "Get high-level architecture overview — packages, services, dependencies, and project structure at a glance. Includes Leiden community detection clusters over the call/import graph. Use `aspects` to select subsets: kindDistribution, edgeDistribution, hotspots, fileTree, packageDeps. Default (empty aspects) returns all.",
+		Description: "Get high-level architecture overview — packages, services, dependencies, and project structure at a glance. Includes Leiden community detection clusters over the call/import graph. Use `aspects` to select subsets: kindDistribution, edgeDistribution, hotspots, fileTree, packageDeps. Default (empty aspects) returns all. project is optional once open_project has been called.",
+		InputSchema: lenientSchema[getArchitectureArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getArchitectureArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetArchitecture(ctx, args), nil, nil
 	})
@@ -164,16 +176,12 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 	defer span.Finish()
 	clog.Info(ctx, "get_architecture", "project", args.Project)
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
-	}
-
-	// Query project info
-	info, err := s.store.ProjectStatus(args.Project)
+	info, err := s.resolveProject(args.Project)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
-		return errorResult(fmt.Errorf("project status: %w", err))
+		return errorResult(err)
 	}
+	project := info.Name
 
 	result := map[string]any{
 		"project": info,
@@ -200,7 +208,7 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 			WHERE p.name = '%s'
 			GROUP BY n.kind
 			ORDER BY count DESC
-		`, args.Project)
+		`, project)
 		kindDist, err := s.store.QueryGraph(kindQuery)
 		if err == nil {
 			result["kindDistribution"] = kindDist
@@ -215,7 +223,7 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 			WHERE p.name = '%s'
 			GROUP BY e.edge_type
 			ORDER BY count DESC
-		`, args.Project)
+		`, project)
 		edgeDist, err := s.store.QueryGraph(edgeQuery)
 		if err == nil {
 			result["edgeDistribution"] = edgeDist
@@ -223,21 +231,21 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 	}
 
 	if include("hotspots") {
-		hotspots, err := s.store.Hotspots(args.Project, 20)
+		hotspots, err := s.store.Hotspots(project, 20)
 		if err == nil {
 			result["hotspots"] = hotspots
 		}
 	}
 
 	if include("fileTree") {
-		ft, err := s.store.FileTree(args.Project)
+		ft, err := s.store.FileTree(project)
 		if err == nil {
 			result["fileTree"] = ft
 		}
 	}
 
 	if include("packageDeps") {
-		deps, err := s.store.PackageDeps(args.Project)
+		deps, err := s.store.PackageDeps(project)
 		if err == nil {
 			result["packageDeps"] = deps
 		}
@@ -252,7 +260,8 @@ func (s *Server) handleGetArchitecture(ctx context.Context, args getArchitecture
 func registerGetCodeSnippet(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_code_snippet",
-		Description: "Read source code for a function/class/symbol. Accepts full qualified_name or short function name (returns suggestions if ambiguous).",
+		Description: "Read source code for a function/class/symbol. Accepts full qualified_name or short function name (returns suggestions if ambiguous). project is optional once open_project has been called.",
+		InputSchema: lenientSchema[getCodeSnippetArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getCodeSnippetArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetCodeSnippet(ctx, args), nil, nil
 	})
@@ -266,11 +275,15 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 	if args.QualifiedName == "" {
 		return errorResult(fmt.Errorf("qualifiedName is required"))
 	}
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
-	}
 
-	node, err := s.store.GetNodeByQN(args.QualifiedName, args.Project)
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
+	}
+	project := info.Name
+
+	node, err := s.store.GetNodeByQN(args.QualifiedName, project)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get node: %w", err))
@@ -282,14 +295,16 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 	source, err := os.ReadFile(filePath)
 	if err != nil {
 		// Try relative to the store project root
-		info, pErr := s.store.ProjectStatus(args.Project)
-		if pErr == nil && info.Root != "" {
+		if info.Root != "" {
 			absPath := filepath.Join(info.Root, filePath)
 			source, err = os.ReadFile(absPath)
 		}
 	}
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
+		if errors.Is(err, fs.ErrNotExist) {
+			return errorResult(fmt.Errorf("read source file %q: %w — index may be stale (file moved/deleted); run index_repository to refresh", filePath, err))
+		}
 		return errorResult(fmt.Errorf("read source file %q: %w", filePath, err))
 	}
 
@@ -317,7 +332,7 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 
 	if args.IncludeNeighbors {
 		// Fetch related nodes (inbound/outbound references)
-		edges, _ := s.store.GetReferences(args.QualifiedName, args.Project, "both", 1)
+		edges, _ := s.store.GetReferences(args.QualifiedName, project, "both", 1)
 		result["neighbors"] = edges
 	}
 
@@ -330,7 +345,8 @@ func (s *Server) handleGetCodeSnippet(ctx context.Context, args getCodeSnippetAr
 func registerGetGraphSchema(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_graph_schema",
-		Description: "Get the schema of the knowledge graph — node labels, edge types, and their properties.",
+		Description: "Get the schema of the knowledge graph — node labels, edge types, and their properties. project is optional once open_project has been called.",
+		InputSchema: lenientSchema[getGraphSchemaArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getGraphSchemaArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetGraphSchema(ctx, args), nil, nil
 	})
@@ -341,9 +357,12 @@ func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaAr
 	defer span.Finish()
 	clog.Info(ctx, "get_graph_schema", "project", args.Project)
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
+	project := info.Name
 
 	// Query distinct node kinds
 	kindQuery := fmt.Sprintf(`
@@ -353,7 +372,7 @@ func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaAr
 		WHERE p.name = '%s'
 		GROUP BY n.kind
 		ORDER BY count DESC
-	`, args.Project)
+	`, project)
 
 	kinds, err := s.store.QueryGraph(kindQuery)
 	if err != nil {
@@ -369,7 +388,7 @@ func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaAr
 		WHERE p.name = '%s'
 		GROUP BY e.edge_type
 		ORDER BY count DESC
-	`, args.Project)
+	`, project)
 
 	edgeTypes, err := s.store.QueryGraph(edgeQuery)
 	if err != nil {
@@ -389,7 +408,8 @@ func (s *Server) handleGetGraphSchema(ctx context.Context, args getGraphSchemaAr
 func registerTracePath(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "trace_path",
-		Description: "Trace paths through the code graph. Modes: calls (callers/callees), data_flow (value propagation with args at each hop), cross_service (through HTTP/async Route nodes). Supports risk_labels (HIGH/MEDIUM/LOW by depth), include_tests (exclude test files by default).",
+		Description: "Trace paths through the code graph. Modes: calls (callers/callees), data_flow (value propagation with args at each hop), cross_service (through HTTP/async Route nodes). Supports risk_labels (HIGH/MEDIUM/LOW by depth), include_tests (exclude test files by default). project is optional once open_project has been called. Alias: function (functionName).",
+		InputSchema: lenientSchema[tracePathArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args tracePathArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleTracePath(ctx, args), nil, nil
 	})
@@ -398,29 +418,35 @@ func registerTracePath(srv *mcp.Server, s *Server) {
 func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.CallToolResult {
 	span, ctx := clog.StartSpanFromContext(ctx, "trace_path")
 	defer span.Finish()
-	clog.Info(ctx, "trace_path", "functionName", args.FunctionName, "project", args.Project, "direction", args.Direction)
 
-	if args.FunctionName == "" {
-		return errorResult(fmt.Errorf("functionName is required"))
+	functionName := firstNonEmpty(args.FunctionName, args.Function)
+	clog.Info(ctx, "trace_path", "functionName", functionName, "project", args.Project, "direction", args.Direction)
+
+	if functionName == "" {
+		return errorResult(fmt.Errorf("functionName is required — pass functionName (or function)"))
 	}
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
+	project := info.Name
 
 	// Build a list of QN candidates. The user may provide a short name
 	// (e.g. "handleSearchGraph") while the graph stores edges with a
 	// receiver prefix (e.g. "s.handleSearchGraph" for method calls).
-	candidates := []string{args.FunctionName}
+	candidates := []string{functionName}
 
 	// Add prefix variants for method calls
-	if !strings.HasPrefix(args.FunctionName, "s.") {
-		candidates = append(candidates, "s."+args.FunctionName)
+	if !strings.HasPrefix(functionName, "s.") {
+		candidates = append(candidates, "s."+functionName)
 	}
 	// Try fuzzy match via SearchNodes for the original name
-	nodes, _, searchErr := s.store.SearchNodes(args.FunctionName, args.Project, "", 5, 0)
+	nodes, _, searchErr := s.store.SearchNodes(functionName, project, "", 5, 0)
 	if searchErr == nil && len(nodes) > 0 {
 		for _, n := range nodes {
-			if n.QualifiedName != args.FunctionName {
+			if n.QualifiedName != functionName {
 				candidates = append(candidates, n.QualifiedName)
 			}
 		}
@@ -429,12 +455,12 @@ func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.C
 	// Try each candidate until we get non-empty results
 	var hops []base.TraceHop
 	var lastErr error
-	resolvedQN := args.FunctionName
+	resolvedQN := functionName
 
 	for _, qn := range candidates {
 		req := base.TracePathRequest{
 			FunctionName:  qn,
-			Project:       args.Project,
+			Project:       project,
 			Direction:     args.Direction,
 			Depth:         args.Depth,
 			Mode:          args.Mode,
@@ -465,7 +491,7 @@ func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.C
 		"hops":       hops,
 		"total":      len(hops),
 		"resolvedQN": resolvedQN,
-		"originalQN": args.FunctionName,
+		"originalQN": functionName,
 	})
 }
 
@@ -474,7 +500,8 @@ func (s *Server) handleTracePath(ctx context.Context, args tracePathArgs) *mcp.C
 func registerDetectChanges(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "detect_changes",
-		Description: "Detect code changes and their impact. Supports git diff-based change detection with configurable scope and depth. Scope 'impact' also returns impacted symbols via graph propagation.",
+		Description: "Detect code changes and their impact. Supports git diff-based change detection with configurable scope and depth. Scope 'impact' also returns impacted symbols via graph propagation. project is optional once open_project has been called.",
+		InputSchema: lenientSchema[detectChangesArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args detectChangesArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleDetectChanges(ctx, args), nil, nil
 	})
@@ -485,15 +512,12 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 	defer span.Finish()
 	clog.Info(ctx, "detect_changes", "project", args.Project, "baseBranch", args.BaseBranch, "scope", args.Scope)
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
-	}
-
-	info, err := s.store.ProjectStatus(args.Project)
+	info, err := s.resolveProject(args.Project)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
-		return errorResult(fmt.Errorf("project status: %w", err))
+		return errorResult(err)
 	}
+	project := info.Name
 
 	baseBranch := args.BaseBranch
 	if baseBranch == "" {
@@ -516,7 +540,7 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 	if err != nil {
 		clog.Info(ctx, "git_diff_error", "error", err.Error())
 		return jsonResult(map[string]any{
-			"project":    args.Project,
+			"project":    project,
 			"baseBranch": baseBranch,
 			"root":       rootDir,
 			"error":      fmt.Sprintf("git diff failed: %v", err),
@@ -528,7 +552,7 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 	statOutput, _ := gitDiffStat(rootDir, baseBranch)
 
 	result := map[string]any{
-		"project":      args.Project,
+		"project":      project,
 		"baseBranch":   baseBranch,
 		"root":         rootDir,
 		"changedFiles": changedFiles,
@@ -548,7 +572,7 @@ func (s *Server) handleDetectChanges(ctx context.Context, args detectChangesArgs
 			}
 		}
 
-		impacted, err := s.store.ImpactAnalysis(args.Project, filePaths, depth)
+		impacted, err := s.store.ImpactAnalysis(project, filePaths, depth)
 		if err != nil {
 			result["impactError"] = fmt.Sprintf("impact analysis: %v", err)
 		} else {

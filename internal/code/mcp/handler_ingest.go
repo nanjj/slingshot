@@ -44,8 +44,10 @@ func (s *Server) handleIngestTraces(ctx context.Context, args ingestTracesArgs) 
 	defer span.Finish()
 	clog.Info(ctx, "ingest_traces", "project", args.Project, "traceCount", len(args.Traces))
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
 	if len(args.Traces) == 0 {
 		return errorResult(fmt.Errorf("traces is required"))
@@ -58,7 +60,7 @@ func (s *Server) handleIngestTraces(ctx context.Context, args ingestTracesArgs) 
 		result, err := db.Exec(`
 			INSERT INTO traces (project_id, trace_id, span_id, parent_span_id, service, operation, start_time, duration, status, tags)
 			VALUES ((SELECT id FROM projects WHERE name = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, args.Project, t.TraceID, t.SpanID, t.ParentSpanID, t.Service, t.Operation,
+		`, info.Name, t.TraceID, t.SpanID, t.ParentSpanID, t.Service, t.Operation,
 			t.StartTime, t.Duration, t.Status, t.Tags)
 		if err != nil {
 			continue

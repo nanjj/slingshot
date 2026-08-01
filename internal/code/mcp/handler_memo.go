@@ -28,7 +28,7 @@ type saveMemoArgs struct {
 
 type manageADRArgs struct {
 	Project string `json:"project"`
-	Action  string `json:"action"` // get, update, list
+	Action  string `json:"action"`         // get, update, list
 	Mode    string `json:"mode,omitempty"` // for "get" action: sections
 	ID      int64  `json:"id,omitempty"`
 	Title   string `json:"title,omitempty"`
@@ -52,8 +52,10 @@ func (s *Server) handleSearchMemos(ctx context.Context, args searchMemosArgs) *m
 	defer span.Finish()
 	clog.Info(ctx, "search_memos", "project", args.Project, "query", args.Query)
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
 
 	limit := args.Limit
@@ -61,7 +63,7 @@ func (s *Server) handleSearchMemos(ctx context.Context, args searchMemosArgs) *m
 		limit = 20
 	}
 
-	memos, err := s.store.SearchMemos(args.Project, args.Query, args.TypeFilter, limit)
+	memos, err := s.store.SearchMemos(info.Name, args.Query, args.TypeFilter, limit)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("search memos: %w", err))
@@ -93,8 +95,10 @@ func (s *Server) handleSaveMemo(ctx context.Context, args saveMemoArgs) *mcp.Cal
 	defer span.Finish()
 	clog.Info(ctx, "save_memo", "project", args.Project, "title", args.Title, "type", args.Type)
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
 	if args.Title == "" {
 		return errorResult(fmt.Errorf("title is required"))
@@ -105,7 +109,7 @@ func (s *Server) handleSaveMemo(ctx context.Context, args saveMemoArgs) *mcp.Cal
 		memoType = "learning"
 	}
 
-	id, err := s.store.SaveMemo(args.Project, &base.Memo{
+	id, err := s.store.SaveMemo(info.Name, &base.Memo{
 		Type:    memoType,
 		Title:   args.Title,
 		Content: args.Content,
@@ -138,13 +142,15 @@ func (s *Server) handleManageADR(ctx context.Context, args manageADRArgs) *mcp.C
 	defer span.Finish()
 	clog.Info(ctx, "manage_adr", "project", args.Project, "action", args.Action)
 
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
 
 	switch args.Action {
 	case "list":
-		adrs, err := s.store.ListADRs(args.Project)
+		adrs, err := s.store.ListADRs(info.Name)
 		if err != nil {
 			clog.Error(ctx, "error", "error", err.Error())
 			return errorResult(fmt.Errorf("list ADRs: %w", err))
@@ -169,7 +175,7 @@ func (s *Server) handleManageADR(ctx context.Context, args manageADRArgs) *mcp.C
 		if status == "" {
 			status = "proposed"
 		}
-		id, err := s.store.SaveADR(args.Project, &base.ADR{
+		id, err := s.store.SaveADR(info.Name, &base.ADR{
 			Title:   args.Title,
 			Content: args.Content,
 			Status:  status,

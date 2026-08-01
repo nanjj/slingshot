@@ -17,20 +17,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanjj/clog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nanjj/clog"
 )
 
 // ─── Argument struct ───────────────────────────────────────────────────────
 
 type searchCodeArgs struct {
-	Pattern     string `json:"pattern"`               // required: search pattern
-	Project     string `json:"project"`               // required: project name
-	FilePattern string `json:"filePattern,omitempty"` // glob filter (e.g. *.go)
-	PathFilter  string `json:"pathFilter,omitempty"`  // substring filter on file path
-	Context     int    `json:"context,omitempty"`      // context lines (like grep -C)
-	Mode        string `json:"mode,omitempty"`         // compact (default), full, files
-	Limit       int    `json:"limit,omitempty"`        // max enriched results
+	Pattern          string `json:"pattern"`                // required: search pattern
+	Regex            string `json:"regex,omitempty"`        // alias for pattern
+	Project          string `json:"project,omitempty"`      // project name/path (optional once open_project is bound)
+	FilePattern      string `json:"filePattern,omitempty"`  // glob filter (e.g. *.go)
+	FilePatternSnake string `json:"file_pattern,omitempty"` // alias for filePattern
+	PathFilter       string `json:"pathFilter,omitempty"`   // substring filter on file path
+	PathFilterSnake  string `json:"path_filter,omitempty"`  // alias for pathFilter
+	File             string `json:"file,omitempty"`         // alias for pathFilter (limit search to a file/subtree)
+	Context          int    `json:"context,omitempty"`      // context lines (like grep -C)
+	Mode             string `json:"mode,omitempty"`         // compact (default), full, files
+	Limit            int    `json:"limit,omitempty"`        // max enriched results
 }
 
 // ─── Internal match type (replaces rg JSON types) ──────────────────────────
@@ -74,7 +78,6 @@ type searchCodeStats struct {
 }
 
 // ─── Register ──────────────────────────────────────────────────────────────
-
 func registerSearchCode(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "search_code",
@@ -82,7 +85,9 @@ func registerSearchCode(srv *mcp.Server, s *Server) {
 			"file scanning, then enriches results with the knowledge graph: deduplicates " +
 			"matches into containing functions, ranks by structural importance " +
 			"(definitions first, popular functions next, tests last). " +
-			"Modes: compact (default, signatures only), full (with source), files (just file paths).",
+			"Modes: compact (default, signatures only), full (with source), files (just file paths). " +
+			"project is optional once open_project has been called. Aliases: regex (pattern), file_pattern (filePattern), file (pathFilter).",
+		InputSchema: lenientSchema[searchCodeArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchCodeArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleSearchCode(ctx, args), nil, nil
 	})
@@ -93,25 +98,27 @@ func registerSearchCode(srv *mcp.Server, s *Server) {
 func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp.CallToolResult {
 	span, ctx := clog.StartSpanFromContext(ctx, "search_code")
 	defer span.Finish()
-	clog.Info(ctx, "search_code", "project", args.Project, "pattern", args.Pattern, "filePattern", args.FilePattern, "mode", args.Mode)
 
-	if args.Pattern == "" {
+	// Normalize aliases: LLMs naturally send regex / file_pattern / file.
+	pattern := firstNonEmpty(args.Pattern, args.Regex)
+	filePattern := firstNonEmpty(args.FilePattern, args.FilePatternSnake)
+	pathFilter := firstNonEmpty(args.PathFilter, args.PathFilterSnake, args.File)
+
+	clog.Info(ctx, "search_code", "project", args.Project, "pattern", pattern, "filePattern", filePattern, "mode", args.Mode)
+
+	if pattern == "" {
 		clog.Error(ctx, "error", "error", "pattern is required")
-		return errorResult(fmt.Errorf("pattern is required"))
-	}
-	if args.Project == "" {
-		clog.Error(ctx, "error", "error", "project is required")
-		return errorResult(fmt.Errorf("project is required"))
+		return errorResult(fmt.Errorf("pattern is required — pass pattern (or regex)"))
 	}
 
-	info, err := s.store.ProjectStatus(args.Project)
+	info, err := s.resolveProject(args.Project)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
-		return errorResult(fmt.Errorf("project status: %w", err))
+		return errorResult(err)
 	}
 	rootDir := info.Root
 	if rootDir == "" {
-		return errorResult(fmt.Errorf("project root not found"))
+		return errorResult(fmt.Errorf("project root not found for %q", info.Name))
 	}
 
 	limit := args.Limit
@@ -120,22 +127,22 @@ func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp
 	}
 
 	// Run native file scan
-	matches, filesSearched, elapsed, err := scanFiles(rootDir, args.Pattern, args.FilePattern, args.Context)
+	matches, filesSearched, elapsed, err := scanFiles(rootDir, pattern, filePattern, args.Context)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
-		return errorResult(fmt.Errorf("file scan failed: %w", err))
+		return errorResult(fmt.Errorf("file scan failed (index may be stale — run index_repository to refresh): %w", err))
 	}
 
 	totalMatches := len(matches)
 
 	// Enrich with graph data: deduplicate into containing functions
-	enriched := s.enrichMatches(args.Project, matches, rootDir, args.Mode)
+	enriched := s.enrichMatches(info.Name, matches, rootDir, args.Mode)
 
 	// Apply path filter
-	if args.PathFilter != "" {
+	if pathFilter != "" {
 		var filtered []searchCodeItem
 		for _, item := range enriched {
-			if strings.Contains(item.File, args.PathFilter) {
+			if strings.Contains(item.File, pathFilter) {
 				filtered = append(filtered, item)
 			}
 		}

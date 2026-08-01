@@ -16,9 +16,9 @@ import (
 	_ "github.com/odvcencio/gotreesitter/grammars"
 	"gotest.tools/v3/assert"
 
-	codemcp "github.com/nanjj/slingshot/internal/code/mcp"
 	"github.com/nanjj/slingshot/internal/code/base"
 	"github.com/nanjj/slingshot/internal/code/lsp"
+	codemcp "github.com/nanjj/slingshot/internal/code/mcp"
 )
 
 // ─── Test helpers ──────────────────────────────────────────────────────────────
@@ -406,13 +406,6 @@ func TestEditorTools(t *testing.T) {
 	}, &validateRes)
 	assert.Assert(t, validateRes.Valid, "expected no validation errors")
 
-	// query_ast
-	var qRes []map[string]any
-	callToolUnmarshal(t, cs, "query_ast", map[string]any{
-		"file":    filePath,
-		"pattern": "(function_declaration name: (identifier) @fn)",
-	}, &qRes)
-	t.Logf("query_ast results: %d", len(qRes))
 }
 
 // TestDeleteProject verifies delete_project works.
@@ -512,28 +505,6 @@ func TestOpenProject(t *testing.T) {
 		"path": projectDir,
 	}, &result)
 	assert.Equal(t, result.ProjectRoot, projectDir)
-}
-
-// TestGetNode verifies the get_node tool across all scopes.
-func TestGetNode(t *testing.T) {
-	cs, cleanup := testFixture(t)
-	defer cleanup()
-
-	projectDir := mkProject(t)
-	filePath := filepath.Join(projectDir, "main.go")
-
-	// pos scope — first named node at byte 0
-	type nodeResult struct {
-		Type    string `json:"type"`
-		IsNamed bool   `json:"isNamed"`
-	}
-	var posRes nodeResult
-	callToolUnmarshal(t, cs, "get_node", map[string]any{
-		"file": filePath,
-		"pos":  0,
-	}, &posRes)
-	// At byte 0 in a Go file, we expect a named node (the root or a named descendant)
-	t.Logf("get_node at pos=0: type=%q isNamed=%v", posRes.Type, posRes.IsNamed)
 }
 
 // ─── Phase 1: New tools ────────────────────────────────────────────────────────
@@ -704,7 +675,7 @@ func TestCodeEdit_ErrorHandling(t *testing.T) {
 			callToolError(t, cs, "edit", tt.args)
 		})
 	}
-	}
+}
 
 // ─── Phase 2: References & Analysis ──────────────────────────────────────────
 
@@ -1050,4 +1021,274 @@ func TestCodeAnalysis_Error(t *testing.T) {
 	callToolError(t, cs, "analysis", map[string]any{
 		"file": "",
 	})
+}
+
+// ─── Project binding & lenient schema (Bohr feedback fixes) ─────────────────
+
+// TestSearchCodeProjectNotFound_Hint verifies that a bad project identifier
+// produces an error that lists available projects.
+func TestSearchCodeProjectNotFound_Hint(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+		"mode":     "fast",
+	}, &struct {
+		ProjectName string `json:"projectName"`
+	}{})
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "search_code",
+		Arguments: map[string]any{
+			"pattern": "Greeter",
+			"project": "definitely-not-indexed",
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, result.IsError, "search_code with unknown project should error")
+	msg := textContent(result)
+	assert.Assert(t, strings.Contains(msg, "Available projects"), "error should list available projects, got: %s", msg)
+}
+
+// TestSearchCodeWithoutProject_AfterOpenProject verifies project binding:
+// after open_project, search_code works without a project argument.
+func TestSearchCodeWithoutProject_AfterOpenProject(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	var idxRes struct {
+		ProjectName string `json:"projectName"`
+	}
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+		"mode":     "fast",
+	}, &idxRes)
+
+	// Bind by name
+	var openRes map[string]any
+	callToolUnmarshal(t, cs, "open_project", map[string]any{
+		"project": idxRes.ProjectName,
+	}, &openRes)
+	assert.Equal(t, openRes["indexed"], true)
+
+	// search_code without project argument
+	type searchRes struct {
+		TotalResults int `json:"totalResults"`
+	}
+	var res searchRes
+	callToolUnmarshal(t, cs, "search_code", map[string]any{
+		"pattern": "Greeter",
+	}, &res)
+	assert.Assert(t, res.TotalResults >= 1, "search without project should work after open_project")
+}
+
+// TestOpenProject_ByPathSuffix verifies open_project accepts a path suffix
+// and binds the matching indexed project.
+func TestOpenProject_ByPathSuffix(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	var idxRes struct {
+		ProjectName string `json:"projectName"`
+	}
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+		"mode":     "fast",
+	}, &idxRes)
+
+	base := filepath.Base(projectDir)
+	var openRes map[string]any
+	callToolUnmarshal(t, cs, "open_project", map[string]any{
+		"path": base,
+	}, &openRes)
+	assert.Equal(t, openRes["project"], idxRes.ProjectName)
+}
+
+// TestSearchCodeFilePatternAlias verifies snake_case aliases (file_pattern,
+// regex) are accepted and functional — the LLM-intuitive field names that
+// previously failed with "unexpected additional properties".
+func TestSearchCodeFilePatternAlias(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	var idxRes struct {
+		ProjectName string `json:"projectName"`
+	}
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+		"mode":     "fast",
+	}, &idxRes)
+
+	// regex alias + file_pattern alias in the same call
+	type searchRes struct {
+		TotalResults int `json:"totalResults"`
+	}
+	var res searchRes
+	callToolUnmarshal(t, cs, "search_code", map[string]any{
+		"regex":        "Greeter",
+		"file_pattern": "*.go",
+		"project":      idxRes.ProjectName,
+	}, &res)
+	assert.Assert(t, res.TotalResults >= 1, "aliases regex/file_pattern should work, got %d", res.TotalResults)
+}
+
+// TestSchemaLenient_ExtraField verifies the lenient schema accepts unknown
+// fields instead of rejecting the call with a hard validation error.
+func TestSchemaLenient_ExtraField(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	var idxRes struct {
+		ProjectName string `json:"projectName"`
+	}
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+		"mode":     "fast",
+	}, &idxRes)
+
+	type searchRes struct {
+		TotalResults int `json:"totalResults"`
+	}
+	var res searchRes
+	callToolUnmarshal(t, cs, "search_code", map[string]any{
+		"pattern":    "Greeter",
+		"project":    idxRes.ProjectName,
+		"frobnicate": "llm-noise", // unknown field must not fail validation
+	}, &res)
+	assert.Assert(t, res.TotalResults >= 1)
+}
+
+// ─── Text-based edit (oldText → newText) ─────────────────────────────────────
+
+// TestEditReplaceByText verifies the LLM-friendly replace mode.
+func TestEditReplaceByText(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	var result map[string]any
+	callToolUnmarshal(t, cs, "edit", map[string]any{
+		"file":    filePath,
+		"mode":    "replace",
+		"oldText": "Name string",
+		"newText": "Title string",
+	}, &result)
+	assert.Assert(t, result["success"].(bool))
+
+	// Verify the file changed on disk.
+	content, err := os.ReadFile(filePath)
+	assert.NilError(t, err)
+	assert.Assert(t, strings.Contains(string(content), "Title string"), "file should contain replacement")
+	assert.Assert(t, !strings.Contains(string(content), "Name string"), "file should no longer contain old text")
+}
+
+// TestEditReplaceByText_NotFound verifies a helpful error when oldText is absent.
+func TestEditReplaceByText_NotFound(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "edit",
+		Arguments: map[string]any{
+			"file":    filePath,
+			"mode":    "replace",
+			"oldText": "DoesNotExistAnywhere",
+			"newText": "X",
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, result.IsError, "replace with missing oldText should error")
+	assert.Assert(t, strings.Contains(textContent(result), "not found"), "error should mention not found")
+}
+
+// TestEditReplaceByText_Ambiguous verifies occurrence selection when oldText
+// appears multiple times.
+func TestEditReplaceByText_Ambiguous(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	// "Name" appears in the struct field and in the method — multiple times.
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "edit",
+		Arguments: map[string]any{
+			"file":    filePath,
+			"mode":    "replace",
+			"oldText": "Name",
+			"newText": "Moniker",
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, result.IsError, "ambiguous oldText should error")
+	msg := textContent(result)
+	assert.Assert(t, strings.Contains(msg, "occurrence"), "error should mention occurrence, got: %s", msg)
+
+	// With occurrence=1 it should succeed.
+	var ok map[string]any
+	callToolUnmarshal(t, cs, "edit", map[string]any{
+		"file":       filePath,
+		"mode":       "replace",
+		"oldText":    "Name",
+		"newText":    "Moniker",
+		"occurrence": 1,
+	}, &ok)
+	assert.Assert(t, ok["success"].(bool))
+}
+
+// TestEditReplaceByText_NewTextAlias verifies text (not newText) also works
+// as the replacement when oldText is present.
+func TestEditReplaceByText_TextAlias(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	filePath := filepath.Join(projectDir, "main.go")
+
+	var result map[string]any
+	callToolUnmarshal(t, cs, "edit", map[string]any{
+		"file":    filePath,
+		"mode":    "replace",
+		"oldText": "fmt.Println",
+		"text":    "fmt.Printf",
+	}, &result)
+	assert.Assert(t, result["success"].(bool))
+}
+
+// TestIndexRepository_AutoBind verifies index_repository binds the project so
+// graph tools work without an explicit project argument afterwards.
+func TestIndexRepository_AutoBind(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	projectDir := mkProject(t)
+	var idxRes struct {
+		ProjectName string `json:"projectName"`
+	}
+	callToolUnmarshal(t, cs, "index_repository", map[string]any{
+		"repoPath": projectDir,
+		"mode":     "fast",
+	}, &idxRes)
+
+	// No project argument at all — should resolve via the bound project.
+	type searchRes struct {
+		Total int `json:"total"`
+	}
+	var res searchRes
+	callToolUnmarshal(t, cs, "search_graph", map[string]any{
+		"query": "Hello",
+	}, &res)
+	assert.Assert(t, res.Total >= 1, "search_graph without project should use auto-bound project")
 }

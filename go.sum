@@ -33,8 +33,6 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/modelcontextprotocol/go-sdk v1.6.1 h1:0zOSupjKUxPKSocPT1Wtago+mUHU2/uZ4xSOY0FGReU=
 github.com/modelcontextprotocol/go-sdk v1.6.1/go.mod h1:kzm3kzFL1/+AziGOE0nUs3gvPoNxMCvkxokMkuFapXQ=
-github.com/nanjj/clog v0.1.4 h1:9a0rqQW6bnoOiM0+gkcnTzhlGQQcwEIRBL4BnUWIjD4=
-github.com/nanjj/clog v0.1.4/go.mod h1:NJ8TabwP8398XUE5FQQK8nC0odx4A47QAjQkCRX2Aqw=
 github.com/nanjj/clog v0.3.0 h1:vdUg4bJAFDLJyj5uMTT32UUmYAEYRN/YlFycMEVBNDk=
 github.com/nanjj/clog v0.3.0/go.mod h1:NJ8TabwP8398XUE5FQQK8nC0odx4A47QAjQkCRX2Aqw=
 github.com/nanjj/i18n v0.1.1 h1:c4aH8jbyUbFcKyCYFRSLoie8UwMJKUDdn9QFNzMnLOM=

@@ -1,7 +1,7 @@
 // Package mcp provides MCP tool handlers for code intelligence.
 //
 // It connects the base (storage/graph) and lsp (analysis) packages
-// to the Model Context Protocol, exposing 23 tools for code search,
+// to the Model Context Protocol, exposing 27 tools for code search,
 // navigation, editing, and project management.
 package mcp
 

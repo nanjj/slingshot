@@ -1,3 +1,5 @@
+// Package mcp — file structure & AST tools: get_structure, get_definitions,
+// get_text, validate.
 package mcp
 
 import (
@@ -19,16 +21,6 @@ type getStructureArgs struct {
 	MaxChildren int    `json:"maxChildren,omitempty"`
 }
 
-type editorGetNodeArgs struct {
-	File      string `json:"file"`
-	Scope     string `json:"scope,omitempty"` // pos, point, range, descendants
-	Pos       uint32 `json:"pos,omitempty"`
-	Row       uint32 `json:"row,omitempty"`
-	Col       uint32 `json:"col,omitempty"`
-	StartByte uint32 `json:"startByte,omitempty"`
-	EndByte   uint32 `json:"endByte,omitempty"`
-}
-
 type getDefinitionsArgs struct {
 	File    string `json:"file"`
 	Pattern string `json:"pattern,omitempty"`
@@ -47,17 +39,13 @@ type validateArgs struct {
 	File string `json:"file"`
 }
 
-type queryASTArgs struct {
-	File    string `json:"file"`
-	Pattern string `json:"pattern"`
-}
-
 // ─── get_structure ─────────────────────────────────────────────────────────────
 
 func registerGetStructure(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_structure",
 		Description: "Get the hierarchical code structure (syntax tree) of a file. Returns nested NodeInfo with type, byte range, and child nodes. Use maxDepth and maxChildren to limit output size.",
+		InputSchema: lenientSchema[getStructureArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getStructureArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetStructure(ctx, args), nil, nil
 	})
@@ -91,64 +79,13 @@ func (s *Server) handleGetStructure(ctx context.Context, args getStructureArgs) 
 	return jsonResult(info)
 }
 
-// ─── get_node ──────────────────────────────────────────────────────────────────
-
-func registerGetNode(srv *mcp.Server, s *Server) {
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_node",
-		Description: "Get AST nodes from a file. scope: 'pos' (default) at byte offset, 'point' at row/col, 'range' covering [startByte, endByte), 'descendants' returning all ancestors innermost to root.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorGetNodeArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleGetNode(ctx, args), nil, nil
-	})
-}
-
-func (s *Server) handleGetNode(ctx context.Context, args editorGetNodeArgs) *mcp.CallToolResult {
-	span, ctx := clog.StartSpanFromContext(ctx, "get_node")
-	defer span.Finish()
-	clog.Info(ctx, "get_node", "file", args.File, "scope", args.Scope)
-
-	if args.File == "" {
-		return errorResult(fmt.Errorf("file is required"))
-	}
-
-	switch args.Scope {
-	case "point":
-		info, err := s.analyzer.GetNodeAtPoint(args.File, args.Row, args.Col)
-		if err != nil {
-			clog.Error(ctx, "error", "error", err.Error())
-			return errorResult(fmt.Errorf("get node at point: %w", err))
-		}
-		return jsonResult(info)
-	case "range":
-		info, err := s.analyzer.GetNodeAtRange(args.File, args.StartByte, args.EndByte)
-		if err != nil {
-			clog.Error(ctx, "error", "error", err.Error())
-			return errorResult(fmt.Errorf("get node at range: %w", err))
-		}
-		return jsonResult(info)
-	case "descendants":
-		infos, err := s.analyzer.GetDescendantsAt(args.File, args.Pos)
-		if err != nil {
-			clog.Error(ctx, "error", "error", err.Error())
-			return errorResult(fmt.Errorf("get descendants: %w", err))
-		}
-		return jsonResult(infos)
-	default: // "pos"
-		info, err := s.analyzer.GetNode(args.File, args.Pos)
-		if err != nil {
-			clog.Error(ctx, "error", "error", err.Error())
-			return errorResult(fmt.Errorf("get node: %w", err))
-		}
-		return jsonResult(info)
-	}
-}
-
 // ─── get_definitions ───────────────────────────────────────────────────────────
 
 func registerGetDefinitions(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_definitions",
 		Description: "Get all definition tags from a file. Returns functions, methods, classes, structs, interfaces, etc. Optionally filter by name pattern and kind.",
+		InputSchema: lenientSchema[getDefinitionsArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getDefinitionsArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetDefinitions(ctx, args), nil, nil
 	})
@@ -166,6 +103,9 @@ func (s *Server) handleGetDefinitions(ctx context.Context, args getDefinitionsAr
 	tags, err := s.analyzer.GetDefinitions(args.File)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
+		if strings.Contains(err.Error(), "no tags query") || strings.Contains(err.Error(), "unsupported language") {
+			return errorResult(fmt.Errorf("get definitions: %v — this language has no tree-sitter tags query; use get_structure for the syntax tree or search_code for text search", err))
+		}
 		return errorResult(fmt.Errorf("get definitions: %w", err))
 	}
 	if tags == nil {
@@ -196,6 +136,7 @@ func registerGetText(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_text",
 		Description: "Get source text from a file. by='range' (default) in byte range [startByte, endByte); by='line' for a specific line (0-indexed, trailing newline stripped).",
+		InputSchema: lenientSchema[editorGetTextArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorGetTextArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetText(ctx, args), nil, nil
 	})
@@ -244,6 +185,7 @@ func registerValidate(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "validate",
 		Description: "Validate a file's syntax. Returns syntax errors, line ending style, and trailing newline status.",
+		InputSchema: lenientSchema[validateArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args validateArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleValidate(ctx, args), nil, nil
 	})
@@ -266,39 +208,6 @@ func (s *Server) handleValidate(ctx context.Context, args validateArgs) *mcp.Cal
 
 	clog.Info(ctx, "validate_result", "errors", len(result.SyntaxErrors))
 	return jsonResult(result)
-}
-
-// ─── query_ast ─────────────────────────────────────────────────────────────────
-
-func registerQueryAST(srv *mcp.Server, s *Server) {
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "query_ast",
-		Description: "Execute a tree-sitter S-expression query (.scm pattern) against a file's syntax tree. Returns matching captures grouped by capture name.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args queryASTArgs) (*mcp.CallToolResult, any, error) {
-		return s.handleQueryAST(ctx, args), nil, nil
-	})
-}
-
-func (s *Server) handleQueryAST(ctx context.Context, args queryASTArgs) *mcp.CallToolResult {
-	span, ctx := clog.StartSpanFromContext(ctx, "query_ast")
-	defer span.Finish()
-	clog.Info(ctx, "query_ast", "file", args.File, "patternLen", len(args.Pattern))
-
-	if args.File == "" {
-		return errorResult(fmt.Errorf("file is required"))
-	}
-	if args.Pattern == "" {
-		return errorResult(fmt.Errorf("pattern is required"))
-	}
-
-	results, err := s.analyzer.QueryAST(args.File, args.Pattern)
-	if err != nil {
-		clog.Error(ctx, "error", "error", err.Error())
-		return errorResult(fmt.Errorf("query AST: %w", err))
-	}
-
-	clog.Info(ctx, "query_ast_result", "groupCount", len(results))
-	return jsonResult(results)
 }
 
 // ─── Helper ────────────────────────────────────────────────────────────────────

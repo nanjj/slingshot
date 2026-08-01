@@ -11,8 +11,15 @@ auto_inject: true
 构建代码知识图谱（符号节点 + 调用/导入/包含/实现边），
 支持图搜索、AST 分析、调用追踪、变更检测。
 
-**QN（包限定名称）** 是最重要的概念——多个工具（`code_locate` / `code_find_references` / `trace_path`）
+**QN（包限定名称）** 是最重要的概念——多个工具（`locate` / `find_references` / `trace_path`）
 都基于 QN 定位符号。
+
+## 项目绑定（重要）
+
+- 工具名**没有** `code_`/`codebase_` 前缀：`search_code`、`edit`、`locate`、`find_references` 等
+- **project 参数可选**：先 `open_project`（接受项目名/根路径/路径后缀，如 `dscli`、`/home/me/src/dscli`）或 `index_repository` 绑定后，后续调用可省略 project
+- **not found 时错误会附带可用项目列表**，照抄其中的名字即可
+- 参数别名（LLM 直觉命名也可用）：`regex`=pattern、`file_pattern`=filePattern、`file`=pathFilter（search_code）、`function`=functionName、`symbol`=qualifiedName、`path`=repoPath、`cypher`=query
 
 ## 索引策略
 
@@ -24,20 +31,9 @@ auto_inject: true
 | `cross-repo-intelligence` | 快 | 跨项目 Route/Channel 匹配 | 微服务跨仓库追踪 |
 
 - 所有搜索/追踪工具都依赖索引，首次使用先 `index_repository`
-- 跨仓库需两步：先单独索引各项目，再 `cross-repo-intelligence` 创建 `CROSS_HTTP_CALLS` 等跨项目边
+- `index_repository` 成功后自动绑定该项目
+- 索引过期（文件已删/改名）：报错会提示 `run index_repository to refresh`，重新索引即可
 - `persistence=true` 写入压缩制品，团队可直接加载免重复索引
-
-## 工具概览：两套 API
-
-当前有两套功能基本重叠的工具集。**优先用 `code_*`**（新版，统一命名风格），
-`codebase_*` 是旧版，仅在后备场景使用。核心差异：
-
-- 命名风格：`code_snake_case`（新）vs `codebaseCamelCase`（旧）
-- `code_*` 的参数名是 `qualifiedName`/`project`，`codebase_*` 是 `qualified_name`/`project`
-- 功能完全对应，新版的边界处理稍完善
-
-如果你调用的工具找不到（例如用了 `code_search_graph` 但提示不存在），
-回退到 `codebase_search_graph`。
 
 ## 场景总览
 
@@ -46,9 +42,9 @@ auto_inject: true
 | 1 | 初识项目 | `get_architecture` → `search_graph` → `get_code_snippet` | `aspects` 过滤（`packageDeps`/`hotspots`/`fileTree`）；Leiden 聚类揭示实际模块边界（常与目录不一致）；`includeNeighbors=true` 看函数上下文 |
 | 2 | 调用链追踪 | `trace_path(mode=calls)` | 三模式：`calls`（默认调用链）→ `data_flow`（关注特定参数值传递）→ `cross_service`（跨 HTTP/async 路由）；`riskLabels` 按路径长度标记 CRITICAL~LOW；默认过滤测试文件，`includeTests=true` 包含 |
 | 3 | 搜索代码 | `search_graph` / `search_code` / `query_graph` | BM25 支持 camelCase 分词 + 定义加权；`namePattern` 正则精确匹配；`semanticQuery` 为**数组**（`["send","publish"]`）做语义桥接；`minDegree`/`maxDegree` 按调用热度过滤；检测 `totalResults` 判断截断 |
-| 4 | 引用分析 | `code_find_references` + `trace_path(inbound)` | `depth=0` 直接引用，`depth=1` 传递引用；QN 大小写敏感 |
+| 4 | 引用分析 | `find_references` + `trace_path(inbound)` | `depth=0` 直接引用，`depth=1` 传递引用；QN 大小写敏感 |
 | 5 | 评估变更 | `detect_changes(scope=impact)` | 支持 `since=` / `baseBranch=`；返回变更符号 + 图谱传播影响；基于 git，未 commit 的不检测 |
-| 6 | 代码编辑 | `code_locate` → `code_edit` / `code_edit_body` | AST 感知编辑不破坏语法；selector 格式 `function:<name>`/`method:<name>`/`struct:<name>`；编辑前先定位，小步提交 |
+| 6 | 代码编辑 | `edit`（推荐） / `edit_body` / `locate` | **文本替换**：`{mode:'replace', oldText:'foo()', newText:'bar()'}`，服务端自动定位，重复出现时加 `occurrence=N`；结构化模式用字节偏移 `startByte`/`endByte` 或 selector；`edit_body` 的 selector 格式 `function:<name>`/`method:<name>`/`struct:<name>`；编辑前先 `locate`，小步提交 |
 | 7 | 模式分析 | `query_graph(Cypher)` | 见下方实用模式；有 100k 行硬上限，加 LIMIT；不支持 offset |
 | 8 | 持久化 | `save_memo` / `manage_adr` / `search_memos` | 频繁搜索的知识存为 memo；ADR 记录架构决策；跨会话避免重复劳动 |
 | 9 | 文件浏览 | `get_definitions` / `get_structure` / `validate` / `get_text` | 按需使用，无特殊边界条件 |
@@ -106,11 +102,12 @@ ORDER BY callers DESC LIMIT 20
 ## 关键注意事项
 
 - **QN 大小写敏感**：`myapp.Pkg.Func` ≠ `myapp.pkg.func`. 如果定位不到，试试调整大小写
-- **search_code 截断**：返回 `totalGrepMatches`/`totalResults`，接近 limit 时加 file_pattern 缩小
+- **search_code 截断**：返回 `totalMatches`/`totalResults`，接近 limit 时加 `file_pattern` 缩小
 - **trace_path 默认排除测试文件**：要看测试调用链加 `includeTests=true`
 - **Cypher 100k 行上限**：宽泛查询务必加 `LIMIT`；分页用 `search_graph` 的 offset/limit
 - **变更检测基于 git**：未 commit 的修改不纳入。先 commit 再 detect
-- **首次使用先索引**：搜索/追踪工具都需要已索引的项目
+- **首次使用先索引**：搜索/追踪工具都需要已索引的项目；`index_repository` 后自动绑定
 - **search_graph 分页**：响应有 `has_more` 字段，true 表示结果被截断，递增 offset 继续翻页
-- **code_locate 模糊匹配**：如果 QN 不精确，会返回候选列表——从候选里选对的确切 QN
-- **code_edit 的 selector 大小写敏感**：selector 中的函数名/方法名/结构体名与源码完全一致
+- **locate 模糊匹配**：如果 QN 不精确，会返回候选列表——从候选里选对的确切 QN
+- **edit 优先用文本替换**：`oldText`+`newText`（或 `text`），重复时加 `occurrence`；selector/字节偏移是高级模式
+- **schema 宽容**：未知字段不会报错（宽进严出），但会被忽略——确保用文档中的参数名

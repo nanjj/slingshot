@@ -1,4 +1,4 @@
-// Package mcp provides MCP tool handlers for code intelligence.
+// Package mcp — analysis & references: find_references, analysis.
 package mcp
 
 import (
@@ -15,7 +15,8 @@ import (
 
 type codeFindReferencesArgs struct {
 	QualifiedName string `json:"qualifiedName"`
-	Project       string `json:"project"`
+	Symbol        string `json:"symbol,omitempty"`    // alias for qualifiedName
+	Project       string `json:"project,omitempty"`   // optional once open_project is bound
 	Direction     string `json:"direction,omitempty"` // "inbound" (default), "outbound", "both"
 	Depth         int    `json:"depth,omitempty"`     // 0 = direct references only (default)
 }
@@ -24,12 +25,13 @@ type codeAnalysisArgs struct {
 	File string `json:"file"` // File path (absolute or relative to project root)
 }
 
-// ─── code_find_references ─────────────────────────────────────────────────────
+// ─── find_references ─────────────────────────────────────────────────────────
 
 func registerCodeFindReferences(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "find_references",
-		Description: "Find all references to a symbol in the code graph. Uses the indexed edges table to find callers/consumers of the given symbol. Supports inbound (who calls this), outbound (who this calls), or both. Depth=0 returns direct references only.",
+		Description: "Find all references to a symbol in the code graph. Uses the indexed edges table to find callers/consumers of the given symbol. Supports inbound (who calls this), outbound (who this calls), or both. Depth=0 returns direct references only. project is optional once open_project has been called. Alias: symbol (qualifiedName).",
+		InputSchema: lenientSchema[codeFindReferencesArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeFindReferencesArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeFindReferences(ctx, args), nil, nil
 	})
@@ -38,14 +40,20 @@ func registerCodeFindReferences(srv *mcp.Server, s *Server) {
 func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindReferencesArgs) *mcp.CallToolResult {
 	span, ctx := clog.StartSpanFromContext(ctx, "code_find_references")
 	defer span.Finish()
-	clog.Info(ctx, "code_find_references", "qualifiedName", args.QualifiedName, "project", args.Project, "direction", args.Direction)
 
-	if args.QualifiedName == "" {
-		return errorResult(fmt.Errorf("qualifiedName is required"))
+	qualifiedName := firstNonEmpty(args.QualifiedName, args.Symbol)
+	clog.Info(ctx, "code_find_references", "qualifiedName", qualifiedName, "project", args.Project, "direction", args.Direction)
+
+	if qualifiedName == "" {
+		return errorResult(fmt.Errorf("qualifiedName is required — pass qualifiedName (or symbol)"))
 	}
-	if args.Project == "" {
-		return errorResult(fmt.Errorf("project is required"))
+
+	info, err := s.resolveProject(args.Project)
+	if err != nil {
+		clog.Error(ctx, "error", "error", err.Error())
+		return errorResult(err)
 	}
+	project := info.Name
 
 	direction := args.Direction
 	if direction == "" {
@@ -58,7 +66,7 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 	}
 
 	// Get references from the store
-	edges, err := s.store.GetReferences(args.QualifiedName, args.Project, direction, depth)
+	edges, err := s.store.GetReferences(qualifiedName, project, direction, depth)
 	if err != nil {
 		clog.Error(ctx, "error", "error", err.Error())
 		return errorResult(fmt.Errorf("get references: %w", err))
@@ -66,14 +74,14 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 
 	// Enrich each edge with source node location info
 	type refItem struct {
-		SourceQN    string `json:"sourceQN"`
-		TargetQN    string `json:"targetQN"`
-		EdgeType    string `json:"edgeType"`
-		Depth       int    `json:"depth,omitempty"`
-		File        string `json:"file,omitempty"`
-		Line        uint32 `json:"line,omitempty"`
-		Col         uint32 `json:"col,omitempty"`
-		SourceKind  string `json:"sourceKind,omitempty"`
+		SourceQN   string `json:"sourceQN"`
+		TargetQN   string `json:"targetQN"`
+		EdgeType   string `json:"edgeType"`
+		Depth      int    `json:"depth,omitempty"`
+		File       string `json:"file,omitempty"`
+		Line       uint32 `json:"line,omitempty"`
+		Col        uint32 `json:"col,omitempty"`
+		SourceKind string `json:"sourceKind,omitempty"`
 	}
 
 	var references []refItem
@@ -81,10 +89,10 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 
 	for _, e := range edges {
 		// Only include edges that reference our symbol
-		if direction == "inbound" && e.TargetQN != args.QualifiedName {
+		if direction == "inbound" && e.TargetQN != qualifiedName {
 			continue
 		}
-		if direction == "outbound" && e.SourceQN != args.QualifiedName {
+		if direction == "outbound" && e.SourceQN != qualifiedName {
 			continue
 		}
 
@@ -101,7 +109,7 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 		}
 
 		// Look up source node for file/line info
-		srcNode, err := s.store.GetNodeByQN(e.SourceQN, args.Project)
+		srcNode, err := s.store.GetNodeByQN(e.SourceQN, project)
 		if err == nil {
 			item.File = srcNode.FilePath
 			item.Line = srcNode.Line
@@ -118,18 +126,19 @@ func (s *Server) handleCodeFindReferences(ctx context.Context, args codeFindRefe
 
 	clog.Info(ctx, "code_find_references_result", "total", len(references))
 	return jsonResult(map[string]any{
-		"symbol":     args.QualifiedName,
+		"symbol":     qualifiedName,
 		"references": references,
 		"total":      len(references),
 	})
 }
 
-// ─── code_analysis ────────────────────────────────────────────────────────────
+// ─── analysis ─────────────────────────────────────────────────────────────────
 
 func registerCodeAnalysis(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "analysis",
 		Description: "Analyze code complexity and quality metrics for a file. Returns per-function breakdown (cyclomatic, cognitive, loop depth, param count, recursion, linear scans in loop) plus summary statistics. Uses tree-sitter for AST parsing.",
+		InputSchema: lenientSchema[codeAnalysisArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeAnalysisArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeAnalysis(ctx, args), nil, nil
 	})
@@ -146,7 +155,7 @@ func (s *Server) handleCodeAnalysis(ctx context.Context, args codeAnalysisArgs) 
 
 	filePath := args.File
 	if s.opts != nil && s.opts.ProjectRoot != "" && !strings.HasPrefix(filePath, "/") {
-		filePath = s.opts.ProjectRoot + "/" + filePath
+		filePath = s.currentRoot() + "/" + filePath
 	}
 
 	result, err := s.analyzer.AnalyzeFile(filePath)

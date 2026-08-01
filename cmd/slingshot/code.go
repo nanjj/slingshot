@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanjj/clog"
 	"github.com/fatih/color"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nanjj/clog"
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
@@ -190,10 +190,6 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 		Logger: slog.Default(),
 	})
 
-	// Register tracing middleware for cross-process span propagation.
-	// Extract W3C traceparent from the MCP request's _meta field (set by
-	// the MCP client, e.g. dscli) so that handler spans appear as children
-	// of the caller's spans in Jaeger.
 	srv.AddReceivingMiddleware(codemcp.TracingMiddleware)
 
 	// Register JSON fixup middleware to tolerate LLM double-encoded JSON
@@ -202,12 +198,13 @@ func (c *cmdCodeServe) run(ctx context.Context) error {
 	// This middleware fixes that before schema validation.
 	srv.AddReceivingMiddleware(codemcp.FixDoubleEncodedJSON)
 
+	srv.AddReceivingMiddleware(codemcp.RecoverMiddleware)
+
 	// 6. Register all tools
 	codeServer.RegisterAll(srv)
 	clog.Info(ctx, "register_tools", "count", 27)
 
 	// 7. Connect stdio transport
-	clog.Info(ctx, "server_listening", "transport", "stdio")
 	session, err := srv.Connect(ctx, &mcp.StdioTransport{}, nil)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)

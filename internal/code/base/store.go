@@ -190,29 +190,7 @@ func (s *Store) UpsertProject(name, root string) (int64, error) {
 func (s *Store) ListProjects() ([]ProjectInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	rows, err := s.db.Query(`
-		SELECT p.id, p.name, p.root, p.indexed_at, p.status, p.meta,
-		       (SELECT COUNT(*) FROM nodes WHERE project_id = p.id) AS node_count,
-		       (SELECT COUNT(*) FROM edges WHERE project_id = p.id) AS edge_count
-		FROM projects p
-		ORDER BY p.name
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("list projects: %w", err)
-	}
-	defer rows.Close()
-
-	var projects []ProjectInfo
-	for rows.Next() {
-		var p ProjectInfo
-		if err := rows.Scan(&p.ID, &p.Name, &p.Root, &p.IndexedAt, &p.Status, &p.Meta,
-			&p.NodeCount, &p.EdgeCount); err != nil {
-			return nil, fmt.Errorf("scan project: %w", err)
-		}
-		projects = append(projects, p)
-	}
-	return projects, rows.Err()
+	return s.listProjectsLocked()
 }
 
 // ProjectStatus returns the status of a project.
