@@ -52,6 +52,19 @@ func NewServer(store *base.Store, analyzer *lsp.Analyzer, opts *Options) *Server
 			s.currentProject = info.Name
 		}
 	}
+	// Restore the last-bound project when no workspace root is indexed: a
+	// server restart (panic recovery, client reconnect) should keep the
+	// open_project binding so project-less tool calls keep working
+	// (Archimedes feedback, mail #489).
+	if s.currentProject == "" {
+		if name := store.LoadLastProject(); name != "" {
+			if info, err := store.ResolveProject(name); err == nil {
+				s.currentProject = info.Name
+				s.opts.ProjectRoot = info.Root
+				s.ed = edit.NewEditor(info.Root)
+			}
+		}
+	}
 	return s
 }
 
@@ -129,18 +142,19 @@ func (s *Server) withAvailableProjects(err error) error {
 }
 
 // bindProject switches the active project to an indexed project and points
-// the editor at its root.
+// the editor at its root. The binding is persisted so it survives restarts.
 func (s *Server) bindProject(info *base.ProjectInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.currentProject = info.Name
 	s.opts.ProjectRoot = info.Root
 	s.ed = edit.NewEditor(info.Root)
+	s.store.SaveLastProject(info.Name)
 }
 
 // setProjectRoot switches the workspace root (open_project by path). The
 // editor moves to the new root; the bound project is re-derived if the new
-// root is indexed, otherwise cleared.
+// root is indexed, otherwise cleared. The binding is persisted on success.
 func (s *Server) setProjectRoot(root string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -149,6 +163,7 @@ func (s *Server) setProjectRoot(root string) {
 	s.currentProject = ""
 	if info, err := s.store.ResolveProject(root); err == nil {
 		s.currentProject = info.Name
+		s.store.SaveLastProject(info.Name)
 	}
 }
 

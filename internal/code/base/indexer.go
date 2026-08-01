@@ -2,14 +2,15 @@
 package base
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/nanjj/slingshot/internal/code/lsp"
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
-	"github.com/nanjj/slingshot/internal/code/lsp"
 )
 
 // SupportedExts lists file extensions the indexer recognizes.
@@ -262,7 +263,6 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 	}
 	nodes = append(nodes, typeNodes...)
 
-
 	// ── Build edges ──
 	var edges []Edge
 
@@ -343,16 +343,28 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 		if tag.Kind == "definition.function" || tag.Kind == "definition.method" {
 			bodyNode := findFunctionBody(root, tag.Range, lang)
 			if bodyNode != nil {
+				ctx := callCtx{
+					pkg:           meta.packageName,
+					recvVar:       meta.recvVar[tag.Name],
+					importAliases: meta.importAliases,
+					typeNames:     meta.typeNames,
+					varTypes:      meta.varTypes,
+				}
 				calls := extractCalls(bodyNode, lang, source)
 				for _, callee := range calls {
-					// Resolve call target: try package-qualified first, then raw
-					resolvedCallee := resolveCallTarget(callee, meta.importPaths, meta.packageName)
+					// Resolve method calls with receiver knowledge first
+					// (h.method() → pkg.method); fall back to plain
+					// package-qualified resolution for everything else.
+					resolvedCallee, receiver, method, isPkg := resolveMethodCall(callee, ctx)
+					if resolvedCallee == callee {
+						resolvedCallee = resolveCallTarget(callee, meta.importPaths, meta.packageName)
+					}
 					edges = append(edges, Edge{
 						ProjectID: projectID,
 						SourceQN:  tagQNMap[tag.Name],
 						TargetQN:  resolvedCallee,
 						EdgeType:  "CALLS",
-						Metadata:  fmt.Sprintf(`{"callee":"%s"}`, callee),
+						Metadata:  callMetadata(callee, receiver, method, isPkg),
 					})
 				}
 				// Also extract variable/constant REFERENCES from this function body
@@ -373,6 +385,10 @@ func (s *Store) indexFile(projectID int64, filePath string) ([]Node, []Edge, err
 type fileMeta struct {
 	packageName   string              // package/module name (e.g. "main", "fmt")
 	importPaths   []string            // import paths (e.g. "fmt", "strings")
+	importAliases map[string]bool     // import aliases (default = last path segment)
+	typeNames     map[string]bool     // types defined in this file
+	varTypes      map[string]string   // variable/parameter name → type name (same file)
+	recvVar       map[string]string   // method name → receiver variable name
 	methodParents map[string]string   // method QN → parent struct QN
 	inherits      map[string][]string // type QN → list of embedded/extends QNs
 }
@@ -380,6 +396,10 @@ type fileMeta struct {
 // extractFileMeta extracts package name, imports, and structural relationships.
 func extractFileMeta(root *gotreesitter.Node, lang *gotreesitter.Language, source []byte) fileMeta {
 	meta := fileMeta{
+		importAliases: make(map[string]bool),
+		typeNames:     make(map[string]bool),
+		varTypes:      make(map[string]string),
+		recvVar:       make(map[string]string),
 		methodParents: make(map[string]string),
 		inherits:      make(map[string][]string),
 	}
@@ -455,6 +475,14 @@ func extractFileMeta(root *gotreesitter.Node, lang *gotreesitter.Language, sourc
 		case typ == "class_declaration" || typ == "class_definition":
 			// Java/TypeScript/Python class
 			extractClassParent(node, lang, source, &meta)
+
+		case typ == "parameter_list":
+			// Go function/method parameters: name Type → varTypes
+			extractParamTypes(node, lang, source, &meta)
+
+		case typ == "var_declaration" || typ == "short_var_declaration":
+			// Go: var h Hub / h := &Hub{} / h := Hub{}
+			extractVarTypeDecl(node, lang, source, &meta)
 		}
 		for i := 0; i < int(node.ChildCount()); i++ {
 			walk(node.Child(i))
@@ -464,33 +492,41 @@ func extractFileMeta(root *gotreesitter.Node, lang *gotreesitter.Language, sourc
 	return meta
 }
 
-// extractImportSpec extracts import path from a Go import_spec.
+// extractImportSpec extracts import path from a Go import_spec and records the
+// effective import alias (explicit alias, or the default last path segment) so
+// package-qualified calls (fmt.Println) can be told apart from method calls on
+// local variables (h.dispatchToServer) during CALLS extraction.
 func extractImportSpec(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	var path, alias string
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 		if child == nil {
 			continue
 		}
 		ct := child.Type(lang)
-		if ct == "interpreted_string_literal" || ct == "string" {
-			path := nodeText(child, lang, source)
-			path = strings.Trim(path, "\"'")
-			if path != "" {
-				meta.importPaths = append(meta.importPaths, path)
+		switch ct {
+		case "interpreted_string_literal", "string":
+			p := strings.Trim(nodeText(child, lang, source), "\"'")
+			if p != "" {
+				path = p
 			}
+		case "identifier":
+			// Explicit alias: import f "fmt"
+			if alias == "" {
+				alias = nodeText(child, lang, source)
+			}
+		case "dot":
+			// Dot import: import . "fmt" — no usable alias.
+			alias = "."
 		}
-		// Aliased import: import alias "path" — the string is a sibling
-		if ct == "identifier" {
-			for j := i + 1; j < int(node.ChildCount()); j++ {
-				sib := node.Child(j)
-				if sib != nil && (sib.Type(lang) == "interpreted_string_literal" || sib.Type(lang) == "string") {
-					path := nodeText(sib, lang, source)
-					path = strings.Trim(path, "\"'")
-					if path != "" {
-						meta.importPaths = append(meta.importPaths, path)
-					}
-				}
-			}
+	}
+	if path != "" {
+		meta.importPaths = append(meta.importPaths, path)
+		if alias == "" {
+			alias = filepath.Base(path)
+		}
+		if alias != "" && alias != "." {
+			meta.importAliases[alias] = true
 		}
 	}
 }
@@ -512,9 +548,11 @@ func extractImportPaths(node *gotreesitter.Node, lang *gotreesitter.Language, so
 	}
 }
 
-// extractGoMethodParent resolves the parent struct for a Go method.
+// extractGoMethodParent resolves the parent struct for a Go method and records
+// the receiver variable name (needed to resolve h.method() calls to the
+// enclosing type's methods during CALLS extraction).
 func extractGoMethodParent(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
-	var methodName, receiverType string
+	var methodName, receiverType, receiverVar string
 	firstParamList := true
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
@@ -527,6 +565,7 @@ func extractGoMethodParent(node *gotreesitter.Node, lang *gotreesitter.Language,
 		if ct == "receiver" || (ct == "parameter_list" && firstParamList) {
 			firstParamList = false
 			receiverType = findReceiverType(child, lang, source)
+			receiverVar = findReceiverName(child, lang, source)
 		}
 		if ct == "identifier" && methodName == "" {
 			methodName = nodeText(child, lang, source)
@@ -541,9 +580,202 @@ func extractGoMethodParent(node *gotreesitter.Node, lang *gotreesitter.Language,
 	}
 	if methodName != "" && receiverType != "" {
 		meta.methodParents[methodName] = receiverType
+		meta.typeNames[receiverType] = true
+		if receiverVar != "" {
+			meta.recvVar[methodName] = receiverVar
+		}
 	}
 }
 
+// findReceiverName walks a receiver node to find the receiver variable name
+// (the first plain identifier — e.g. "h" in "func (h *Hub) Ping()").
+func findReceiverName(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		switch child.Type(lang) {
+		case "identifier":
+			return nodeText(child, lang, source)
+		case "receiver", "parameter_declaration", "parameter_list":
+			if n := findReceiverName(child, lang, source); n != "" {
+				return n
+			}
+		}
+	}
+	return ""
+}
+
+// extractParamTypes records parameter name → type mappings (name Type) so that
+// method calls on those parameters (h.method()) can be resolved to the
+// enclosing package's method. Handles pointer/array wrappers around a
+// type_identifier; complex types without a plain type_identifier are skipped.
+func extractParamTypes(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil {
+			return
+		}
+		nt := n.Type(lang)
+		if nt == "parameter_declaration" {
+			var name, typ string
+			for i := 0; i < int(n.ChildCount()); i++ {
+				c := n.Child(i)
+				if c == nil {
+					continue
+				}
+				switch c.Type(lang) {
+				case "identifier":
+					if name == "" {
+						name = nodeText(c, lang, source)
+					}
+				case "type_identifier":
+					typ = nodeText(c, lang, source)
+				case "pointer_type", "array_type", "slice_type", "generic_type":
+					if t := findTypeIdentifier(c, lang, source); t != "" {
+						typ = t
+					}
+				}
+			}
+			if name != "" && typ != "" {
+				meta.varTypes[name] = typ
+			}
+			return
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(node)
+}
+
+// extractVarTypeDecl records variable declarations whose type is derivable
+// from the AST: var h Hub, var h = Hub{}, h := Hub{}, h := &Hub{}.
+func extractVarTypeDecl(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, meta *fileMeta) {
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil {
+			return
+		}
+		nt := n.Type(lang)
+		switch nt {
+		case "var_spec":
+			var name string
+			for i := 0; i < int(n.ChildCount()); i++ {
+				c := n.Child(i)
+				if c == nil {
+					continue
+				}
+				switch c.Type(lang) {
+				case "identifier":
+					if name == "" {
+						name = nodeText(c, lang, source)
+					}
+				case "type_identifier":
+					if name != "" {
+						meta.varTypes[name] = nodeText(c, lang, source)
+					}
+					return
+				}
+			}
+			// var x = <composite literal>
+			if name != "" {
+				if t := compositeTypeOf(n, lang, source); t != "" {
+					meta.varTypes[name] = t
+				}
+			}
+			return
+		case "short_var_declaration":
+			var left, right *gotreesitter.Node
+			for i := 0; i < int(n.ChildCount()); i++ {
+				c := n.Child(i)
+				if c != nil && c.Type(lang) == "expression_list" {
+					if left == nil {
+						left = c
+					} else {
+						right = c
+					}
+				}
+			}
+			if left != nil && right != nil {
+				names := collectIdentifiers(left, lang, source)
+				if len(names) == 1 {
+					if t := compositeTypeOf(right, lang, source); t != "" {
+						meta.varTypes[names[0]] = t
+					}
+				}
+			}
+			return
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(node)
+}
+
+// compositeTypeOf returns the type name of a &Type{} or Type{} expression
+// (the first type_identifier under a composite_literal), or "" if unknown.
+func compositeTypeOf(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	nt := node.Type(lang)
+	switch nt {
+	case "type_identifier":
+		return nodeText(node, lang, source)
+	case "composite_literal":
+		for i := 0; i < int(node.ChildCount()); i++ {
+			c := node.Child(i)
+			if c != nil && c.Type(lang) == "type_identifier" {
+				return nodeText(c, lang, source)
+			}
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if t := compositeTypeOf(node.Child(i), lang, source); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// findTypeIdentifier returns the first type_identifier text under a node.
+func findTypeIdentifier(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) string {
+	if node == nil {
+		return ""
+	}
+	if node.Type(lang) == "type_identifier" {
+		return nodeText(node, lang, source)
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if t := findTypeIdentifier(node.Child(i), lang, source); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// collectIdentifiers returns the identifier texts under an expression list.
+func collectIdentifiers(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte) []string {
+	var names []string
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
+		if n == nil {
+			return
+		}
+		if n.Type(lang) == "identifier" {
+			names = append(names, nodeText(n, lang, source))
+			return
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(node)
+	return names
+}
 
 // findReceiverType walks a receiver node to find the type name.
 // The receiver can be "(g T)" (value) or "(g *T)" (pointer).
@@ -601,8 +833,11 @@ func extractGoTypeInfo(node *gotreesitter.Node, lang *gotreesitter.Language, sou
 				embedded = append(embedded, findEmbeddedTypes(inner, lang, source)...)
 			}
 		}
-		if typeName != "" && len(embedded) > 0 {
-			meta.inherits[typeName] = embedded
+		if typeName != "" {
+			meta.typeNames[typeName] = true
+			if len(embedded) > 0 {
+				meta.inherits[typeName] = embedded
+			}
 		}
 	}
 }
@@ -679,8 +914,11 @@ func extractClassParent(node *gotreesitter.Node, lang *gotreesitter.Language, so
 			inheritsFrom = append(inheritsFrom, findClassRefs(child, lang, source)...)
 		}
 	}
-	if className != "" && len(inheritsFrom) > 0 {
-		meta.inherits[className] = inheritsFrom
+	if className != "" {
+		meta.typeNames[className] = true
+		if len(inheritsFrom) > 0 {
+			meta.inherits[className] = inheritsFrom
+		}
 	}
 }
 
@@ -1035,7 +1273,6 @@ func buildVarNameMap(nodes []Node) map[string]string {
 	}
 	return m
 }
-
 
 // ─── Tree Traversal Helpers ───────────────────────────────────────────────────
 
@@ -1471,6 +1708,94 @@ func findDeclNode(root *gotreesitter.Node, tag gotreesitter.Tag, lang *gotreesit
 }
 
 // ─── Call Target Resolution ────────────────────────────────────────────────
+
+// callCtx carries per-call-site context used to resolve method calls whose
+// receiver is a local variable (h.dispatchToServer → pkg.dispatchToServer).
+type callCtx struct {
+	pkg           string            // package name of the enclosing file
+	recvVar       string            // receiver variable of the enclosing method
+	importAliases map[string]bool   // import aliases visible in this file
+	typeNames     map[string]bool   // types defined in this file
+	varTypes      map[string]string // variable/parameter name → type name
+}
+
+// resolveMethodCall resolves a dotted call target using receiver knowledge:
+//
+//   - "h.dispatchToServer" where h is the enclosing method's receiver →
+//     "pkg.dispatchToServer" (self call, high confidence)
+//   - "h.dispatchToServer" where h is a local variable/parameter of a type
+//     defined in this file → "pkg.dispatchToServer"
+//   - "fmt.Println" (receiver is an import alias) → unchanged, flagged as a
+//     package function call (pkg=true) so query-side receiver-stripped
+//     matching does not treat it as a method call
+//   - anything else (unknown receiver, chained calls) → unchanged; the edge is
+//     kept with raw text and metadata so query-side receiver-stripped matching
+//     can still find it by method name.
+//
+// Returns the resolved QN, the receiver/method split ("" when N/A), and
+// whether the call is a package-qualified function call.
+func resolveMethodCall(callee string, ctx callCtx) (resolved, receiver, method string, isPkg bool) {
+	idx := strings.LastIndex(callee, ".")
+	if idx <= 0 {
+		return callee, "", "", false
+	}
+	receiver, method = callee[:idx], callee[idx+1:]
+	if method == "" || !isSimpleIdent(receiver) {
+		// Chained call (getClient().Close()) or malformed — cannot resolve.
+		return callee, receiver, method, false
+	}
+	if ctx.importAliases[receiver] {
+		// Package-qualified function call (fmt.Println) — keep as-is and flag
+		// it so stripped matching excludes it.
+		return callee, "", "", true
+	}
+	if ctx.pkg != "" {
+		if ctx.recvVar != "" && receiver == ctx.recvVar {
+			return ctx.pkg + "." + method, receiver, method, false
+		}
+		if t, ok := ctx.varTypes[receiver]; ok && ctx.typeNames[t] {
+			return ctx.pkg + "." + method, receiver, method, false
+		}
+	}
+	return callee, receiver, method, false
+}
+
+// isSimpleIdent reports whether s is a plain identifier (no dots, parens, etc.).
+func isSimpleIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			continue
+		}
+		if i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// callMetadata builds the CALLS edge metadata JSON. The "callee" field holds
+// the raw call text (kept for backward compatibility); "receiver" and
+// "method" are set when the target was a method-style call so consumers can
+// disambiguate receiver-stripped matches. "pkg" flags package-qualified
+// function calls (fmt.Println) so stripped matching excludes them.
+func callMetadata(callee, receiver, method string, isPkg bool) string {
+	md := map[string]string{"callee": callee}
+	if isPkg {
+		md["pkg"] = "true"
+	} else if receiver != "" {
+		md["receiver"] = receiver
+		md["method"] = method
+	}
+	b, err := json.Marshal(md)
+	if err != nil {
+		return fmt.Sprintf(`{"callee":%q}`, callee)
+	}
+	return string(b)
+}
 
 // resolveCallTarget attempts to resolve a raw call expression (e.g., "fmt.Println")
 // to a qualified name that can be matched against definition nodes.

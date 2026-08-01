@@ -160,6 +160,32 @@ func (s *Store) Close() error {
 // Path returns the database file path.
 func (s *Store) Path() string { return s.path }
 
+// ─── Cross-session MCP state ─────────────────────────────────────────────────
+
+// SaveLastProject persists the name of the project most recently bound via
+// open_project (or auto-derived), so a server restart (e.g. after a panic or
+// a client reconnect) can restore the binding.
+func (s *Store) SaveLastProject(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`
+		INSERT INTO mcp_state (key, value) VALUES ('last_project', ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, name)
+	return err
+}
+
+// LoadLastProject returns the persisted last-bound project name, or "".
+func (s *Store) LoadLastProject() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var v string
+	err := s.db.QueryRow(`SELECT value FROM mcp_state WHERE key = 'last_project'`).Scan(&v)
+	if err != nil {
+		return ""
+	}
+	return v
+}
+
 // DB returns the underlying *sql.DB for advanced operations.
 // Callers must not close this connection.
 func (s *Store) DB() *sql.DB { return s.db }

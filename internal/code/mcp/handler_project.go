@@ -30,7 +30,7 @@ func registerGetProjectRoot(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_project_root",
 		Description: "Get the active project root directory and the bound indexed project (if any).",
-		InputSchema: lenientSchema[getProjectRootArgs](),
+		InputSchema: strictSchema[getProjectRootArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getProjectRootArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetProjectRoot(ctx), nil, nil
 	})
@@ -57,7 +57,7 @@ func registerOpenProject(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "open_project",
 		Description: "Bind a project for the rest of the session: subsequent tool calls may omit the project argument. Accepts an indexed project name, a root path, or a path suffix (e.g. 'dscli', '/home/me/src/dscli', 'me/src/dscli'). If the path is not indexed yet, the workspace root is switched and you should run index_repository.",
-		InputSchema: lenientSchema[openProjectArgs](),
+		InputSchema: strictSchema[openProjectArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args openProjectArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleOpenProject(ctx, args), nil, nil
 	})

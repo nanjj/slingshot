@@ -48,10 +48,10 @@ type codeEditBodyArgs struct {
 }
 
 type codeLocateArgs struct {
-	QualifiedName string `json:"qualifiedName"`     // Symbol name to locate
-	Name          string `json:"name,omitempty"`    // alias for qualifiedName
-	Project       string `json:"project,omitempty"` // Project name (optional once open_project is bound)
-	File          string `json:"file,omitempty"`    // Fallback file for tree-sitter search
+	QualifiedName string `json:"qualifiedName,omitempty"` // Symbol name to locate
+	Name          string `json:"name,omitempty"`          // alias for qualifiedName
+	Project       string `json:"project,omitempty"`       // Project name (optional once open_project is bound)
+	File          string `json:"file,omitempty"`          // Fallback file for tree-sitter search
 }
 
 // ─── registerEdit ──────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ func registerCodeEdit(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "edit",
 		Description: "Edit a file with write-through semantics (atomic save to disk). Modes: insert (pos/point/before/after), replace (text/range/node), delete (range/node). Recommended: replace with oldText+newText — the server finds the text for you (set occurrence=N when it appears multiple times). Structural modes use byte offsets or node selectors. Example: {file, mode:'replace', oldText:'foo()', newText:'bar()'}.",
-		InputSchema: lenientSchema[codeEditArgs](),
+		InputSchema: strictSchema[codeEditArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeEditArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeEdit(ctx, args), nil, nil
 	})
@@ -252,7 +252,7 @@ func registerCodeEditBody(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "edit_body",
 		Description: "Replace the body of a definition identified by a semantic selector. Selector format: 'function:name', 'method:name', 'struct:name', 'class:name', 'interface:name'. Opens the file, locates the definition, replaces its content, and saves to disk atomically.",
-		InputSchema: lenientSchema[codeEditBodyArgs](),
+		InputSchema: strictSchema[codeEditBodyArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeEditBodyArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeEditBody(ctx, args), nil, nil
 	})
@@ -311,7 +311,7 @@ func registerCodeLocate(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "locate",
 		Description: "Locate a symbol definition by qualified name. First searches the SQLite code graph for the symbol's file, line, and column. Falls back to tree-sitter definition search in the specified file when the symbol is not indexed. Alias: name (qualifiedName).",
-		InputSchema: lenientSchema[codeLocateArgs](),
+		InputSchema: strictSchema[codeLocateArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeLocateArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeLocate(ctx, args), nil, nil
 	})

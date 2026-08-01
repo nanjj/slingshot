@@ -14,7 +14,7 @@ import (
 // ─── Argument structs ──────────────────────────────────────────────────────────
 
 type codeFindReferencesArgs struct {
-	QualifiedName string `json:"qualifiedName"`
+	QualifiedName string `json:"qualifiedName,omitempty"`
 	Symbol        string `json:"symbol,omitempty"`    // alias for qualifiedName
 	Project       string `json:"project,omitempty"`   // optional once open_project is bound
 	Direction     string `json:"direction,omitempty"` // "inbound" (default), "outbound", "both"
@@ -31,7 +31,7 @@ func registerCodeFindReferences(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "find_references",
 		Description: "Find all references to a symbol in the code graph. Uses the indexed edges table to find callers/consumers of the given symbol. Supports inbound (who calls this), outbound (who this calls), or both. Depth=0 returns direct references only. project is optional once open_project has been called. Alias: symbol (qualifiedName).",
-		InputSchema: lenientSchema[codeFindReferencesArgs](),
+		InputSchema: strictSchema[codeFindReferencesArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeFindReferencesArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeFindReferences(ctx, args), nil, nil
 	})
@@ -138,7 +138,7 @@ func registerCodeAnalysis(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "analysis",
 		Description: "Analyze code complexity and quality metrics for a file. Returns per-function breakdown (cyclomatic, cognitive, loop depth, param count, recursion, linear scans in loop) plus summary statistics. Uses tree-sitter for AST parsing.",
-		InputSchema: lenientSchema[codeAnalysisArgs](),
+		InputSchema: strictSchema[codeAnalysisArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args codeAnalysisArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleCodeAnalysis(ctx, args), nil, nil
 	})

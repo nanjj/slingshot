@@ -119,6 +119,14 @@ CREATE TABLE IF NOT EXISTS traces (
 CREATE INDEX IF NOT EXISTS idx_traces_trace ON traces(project_id, trace_id);
 CREATE INDEX IF NOT EXISTS idx_traces_service ON traces(project_id, service);
 
+-- mcp_state: cross-session MCP server state (e.g. the last project bound by
+-- open_project, restored after a server restart / panic so tool calls without
+-- an explicit project keep working).
+CREATE TABLE IF NOT EXISTS mcp_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 -- FTS5 virtual table for full-text search over nodes
 CREATE VIRTUAL TABLE IF NOT EXISTS node_fts USING fts5(
     qualified_name,

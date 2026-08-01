@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nanjj/clog"
@@ -24,7 +25,7 @@ import (
 // ─── Argument struct ───────────────────────────────────────────────────────
 
 type searchCodeArgs struct {
-	Pattern          string `json:"pattern"`                // required: search pattern
+	Pattern          string `json:"pattern,omitempty"`      // required: search pattern
 	Regex            string `json:"regex,omitempty"`        // alias for pattern
 	Project          string `json:"project,omitempty"`      // project name/path (optional once open_project is bound)
 	FilePattern      string `json:"filePattern,omitempty"`  // glob filter (e.g. *.go)
@@ -87,7 +88,7 @@ func registerSearchCode(srv *mcp.Server, s *Server) {
 			"(definitions first, popular functions next, tests last). " +
 			"Modes: compact (default, signatures only), full (with source), files (just file paths). " +
 			"project is optional once open_project has been called. Aliases: regex (pattern), file_pattern (filePattern), file (pathFilter).",
-		InputSchema: lenientSchema[searchCodeArgs](),
+		InputSchema: strictSchema[searchCodeArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchCodeArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleSearchCode(ctx, args), nil, nil
 	})
@@ -167,7 +168,9 @@ func (s *Server) handleSearchCode(ctx context.Context, args searchCodeArgs) *mcp
 
 // defaultSkipDirs lists directories to skip during file walks.
 // These are typically cache, build, or VCS directories that never contain
-// source code the user wants to search.
+// source code the user wants to search. Includes release/output dirs where
+// compiled binaries land (Archimedes feedback: _release binaries were being
+// scanned as text, causing panics and noise).
 var defaultSkipDirs = map[string]bool{
 	".git":         true,
 	".dscli":       true,
@@ -182,13 +185,52 @@ var defaultSkipDirs = map[string]bool{
 	".tox":         true,
 	".cache":       true,
 	"dist":         true,
+	"_dist":        true,
+	"release":      true,
+	"_release":     true,
+	"out":          true,
 	"build":        true,
 	"_build":       true,
+	"coverage":     true,
+	"_coverage":    true,
+	"_artifacts":   true,
 	".next":        true,
 	".turbo":       true,
 	"target":       true, // Rust
 	"bin":          true, // Go build output
 	"obj":          true, // C# / .NET
+}
+
+// isBinaryMagic reports whether the first 4 bytes look like a compiled
+// binary's magic number: ELF, PE (MZ), Mach-O (both byte orders, 32/64-bit,
+// and fat binaries), or Java class files (CAFEBABE — usually with a .class
+// extension, but keep the check for extension-less copies).
+func isBinaryMagic(header []byte) bool {
+	if len(header) < 4 {
+		return false
+	}
+	// ELF: 7f 45 4c 46
+	if header[0] == 0x7f && header[1] == 'E' && header[2] == 'L' && header[3] == 'F' {
+		return true
+	}
+	// PE: MZ
+	if header[0] == 'M' && header[1] == 'Z' {
+		return true
+	}
+	// Mach-O: FE ED FA CE / FE ED FA CF (big-endian),
+	//         CE FA ED FE / CF FA ED FE (little-endian)
+	// Fat Mach-O: CA FE BA BE / BE BA FE CA
+	switch {
+	case header[0] == 0xFE && header[1] == 0xED && header[2] == 0xFA && (header[3] == 0xCE || header[3] == 0xCF):
+		return true
+	case header[0] == 0xCE && header[1] == 0xFA && header[2] == 0xED && (header[3] == 0xFE || header[3] == 0xFF):
+		return true
+	case header[0] == 0xCA && header[1] == 0xFE && header[2] == 0xBA && header[3] == 0xBE:
+		return true
+	case header[0] == 0xBE && header[1] == 0xBA && header[2] == 0xFE && header[3] == 0xCA:
+		return true
+	}
+	return false
 }
 
 // scanFiles walks rootDir and returns all lines matching pattern.
@@ -227,8 +269,9 @@ func scanFiles(rootDir, pattern, filePattern string, context int) ([]lineMatch, 
 		ext := strings.ToLower(filepath.Ext(path))
 		switch ext {
 		case ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a", ".lib",
+			".class", ".jar", ".war", ".ear", ".wasm", ".node", ".pyc", ".pyo",
 			".png", ".jpg", ".jpeg", ".gif", ".bmp",
-			".woff", ".woff2", ".ttf", ".eot",
+			".woff", ".woff2", ".ttf", ".eot", ".otf",
 			".zip", ".tar", ".gz", ".bz2", ".xz", ".zst",
 			".pdf", ".doc", ".docx", ".xls", ".xlsx", ".pptx",
 			".mp3", ".mp4", ".avi", ".mov", ".wav", ".flac",
@@ -244,11 +287,10 @@ func scanFiles(rootDir, pattern, filePattern string, context int) ([]lineMatch, 
 				header := make([]byte, 8)
 				n, _ := f.Read(header)
 				f.Close()
-				if n >= 4 && header[0] == 0x7f && header[1] == 'E' && header[2] == 'L' && header[3] == 'F' {
-					return nil // ELF binary (Linux/macOS)
-				}
-				if n >= 2 && header[0] == 'M' && header[1] == 'Z' {
-					return nil // PE binary (Windows)
+				if n >= 4 {
+					if isBinaryMagic(header) {
+						return nil
+					}
 				}
 			}
 		}
@@ -286,6 +328,15 @@ func scanFiles(rootDir, pattern, filePattern string, context int) ([]lineMatch, 
 			lineNum++
 			text := scanner.Text()
 
+			// Reject lines with invalid UTF-8 (binary content that slipped
+			// past magic/extension checks). ToLower would replace invalid
+			// bytes with 3-byte U+FFFD runes, shifting byte offsets and
+			// causing slice out-of-range panics further down (Archimedes
+			// feedback). This also keeps binary noise out of results.
+			if !utf8.ValidString(text) {
+				continue
+			}
+
 			if preBufferCap > 0 {
 				preBuffer = append(preBuffer, text)
 				if len(preBuffer) > preBufferCap {
@@ -302,6 +353,13 @@ func scanFiles(rootDir, pattern, filePattern string, context int) ([]lineMatch, 
 			lowerLine := strings.ToLower(text)
 			idx := strings.Index(lowerLine, patternLower)
 			if idx < 0 {
+				continue
+			}
+
+			// Defensive bounds check: ToLower can change byte lengths for
+			// some Unicode characters, so the lowercased index may exceed
+			// the original text's length. Skip such lines rather than panic.
+			if idx+len(pattern) > len(text) {
 				continue
 			}
 

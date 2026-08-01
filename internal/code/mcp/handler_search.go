@@ -52,7 +52,7 @@ type getGraphSchemaArgs struct {
 }
 
 type tracePathArgs struct {
-	FunctionName  string `json:"functionName"`
+	FunctionName  string `json:"functionName,omitempty"`
 	Function      string `json:"function,omitempty"`  // alias for functionName
 	Project       string `json:"project,omitempty"`   // optional once open_project is bound
 	Direction     string `json:"direction,omitempty"` // inbound, outbound, both
@@ -77,7 +77,7 @@ func registerSearchGraph(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "search_graph",
 		Description: "Search the code knowledge graph for functions, classes, routes, and variables. Three search modes: (1) query for BM25 ranked full-text search with camelCase splitting — Function/Method/Route nodes are boosted; (2) namePattern for exact pattern matching; (3) semanticQuery for vector cosine search. Supports pagination: use limit/offset, response includes total (full count) and has_more flag. project is optional once open_project has been called. Aliases: regex (query), file_pattern (filePattern).",
-		InputSchema: lenientSchema[searchGraphArgs](),
+		InputSchema: strictSchema[searchGraphArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args searchGraphArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleSearchGraph(ctx, args), nil, nil
 	})
@@ -165,7 +165,7 @@ func registerGetArchitecture(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_architecture",
 		Description: "Get high-level architecture overview — packages, services, dependencies, and project structure at a glance. Includes Leiden community detection clusters over the call/import graph. Use `aspects` to select subsets: kindDistribution, edgeDistribution, hotspots, fileTree, packageDeps. Default (empty aspects) returns all. project is optional once open_project has been called.",
-		InputSchema: lenientSchema[getArchitectureArgs](),
+		InputSchema: strictSchema[getArchitectureArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getArchitectureArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetArchitecture(ctx, args), nil, nil
 	})
@@ -261,7 +261,7 @@ func registerGetCodeSnippet(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_code_snippet",
 		Description: "Read source code for a function/class/symbol. Accepts full qualified_name or short function name (returns suggestions if ambiguous). project is optional once open_project has been called.",
-		InputSchema: lenientSchema[getCodeSnippetArgs](),
+		InputSchema: strictSchema[getCodeSnippetArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getCodeSnippetArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetCodeSnippet(ctx, args), nil, nil
 	})
@@ -346,7 +346,7 @@ func registerGetGraphSchema(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_graph_schema",
 		Description: "Get the schema of the knowledge graph — node labels, edge types, and their properties. project is optional once open_project has been called.",
-		InputSchema: lenientSchema[getGraphSchemaArgs](),
+		InputSchema: strictSchema[getGraphSchemaArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getGraphSchemaArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetGraphSchema(ctx, args), nil, nil
 	})
@@ -409,7 +409,7 @@ func registerTracePath(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "trace_path",
 		Description: "Trace paths through the code graph. Modes: calls (callers/callees), data_flow (value propagation with args at each hop), cross_service (through HTTP/async Route nodes). Supports risk_labels (HIGH/MEDIUM/LOW by depth), include_tests (exclude test files by default). project is optional once open_project has been called. Alias: function (functionName).",
-		InputSchema: lenientSchema[tracePathArgs](),
+		InputSchema: strictSchema[tracePathArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args tracePathArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleTracePath(ctx, args), nil, nil
 	})
@@ -501,7 +501,7 @@ func registerDetectChanges(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "detect_changes",
 		Description: "Detect code changes and their impact. Supports git diff-based change detection with configurable scope and depth. Scope 'impact' also returns impacted symbols via graph propagation. project is optional once open_project has been called.",
-		InputSchema: lenientSchema[detectChangesArgs](),
+		InputSchema: strictSchema[detectChangesArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args detectChangesArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleDetectChanges(ctx, args), nil, nil
 	})

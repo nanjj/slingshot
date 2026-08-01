@@ -45,7 +45,7 @@ func registerGetStructure(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_structure",
 		Description: "Get the hierarchical code structure (syntax tree) of a file. Returns nested NodeInfo with type, byte range, and child nodes. Use maxDepth and maxChildren to limit output size.",
-		InputSchema: lenientSchema[getStructureArgs](),
+		InputSchema: strictSchema[getStructureArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getStructureArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetStructure(ctx, args), nil, nil
 	})
@@ -85,7 +85,7 @@ func registerGetDefinitions(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_definitions",
 		Description: "Get all definition tags from a file. Returns functions, methods, classes, structs, interfaces, etc. Optionally filter by name pattern and kind.",
-		InputSchema: lenientSchema[getDefinitionsArgs](),
+		InputSchema: strictSchema[getDefinitionsArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args getDefinitionsArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetDefinitions(ctx, args), nil, nil
 	})
@@ -136,7 +136,7 @@ func registerGetText(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_text",
 		Description: "Get source text from a file. by='range' (default) in byte range [startByte, endByte); by='line' for a specific line (0-indexed, trailing newline stripped).",
-		InputSchema: lenientSchema[editorGetTextArgs](),
+		InputSchema: strictSchema[editorGetTextArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args editorGetTextArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleGetText(ctx, args), nil, nil
 	})
@@ -185,7 +185,7 @@ func registerValidate(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "validate",
 		Description: "Validate a file's syntax. Returns syntax errors, line ending style, and trailing newline status.",
-		InputSchema: lenientSchema[validateArgs](),
+		InputSchema: strictSchema[validateArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args validateArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleValidate(ctx, args), nil, nil
 	})

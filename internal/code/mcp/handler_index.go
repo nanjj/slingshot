@@ -16,7 +16,7 @@ import (
 // ─── Argument structs ──────────────────────────────────────────────────────────
 
 type indexRepositoryArgs struct {
-	RepoPath       string   `json:"repoPath"`
+	RepoPath       string   `json:"repoPath,omitempty"`
 	Path           string   `json:"path,omitempty"` // alias for repoPath
 	Mode           string   `json:"mode,omitempty"` // full, moderate, fast
 	Persistence    bool     `json:"persistence,omitempty"`
@@ -35,7 +35,7 @@ type deleteProjectArgs struct {
 
 type queryGraphArgs struct {
 	Project string `json:"project,omitempty"` // informational; SQL runs against the whole graph
-	Query   string `json:"query"`
+	Query   string `json:"query,omitempty"`
 	Cypher  string `json:"cypher,omitempty"` // alias for query
 	MaxRows int    `json:"maxRows,omitempty"`
 }
@@ -46,7 +46,7 @@ func registerIndexRepository(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "index_repository",
 		Description: "Index a repository into the knowledge graph. Modes: full (all files + similarity), moderate (filtered + similarity), fast (filtered, no similarity). Cross-repo mode matches routes/channels across projects. After indexing, the project is bound — subsequent tool calls may omit the project argument. Alias: path (repoPath).",
-		InputSchema: lenientSchema[indexRepositoryArgs](),
+		InputSchema: strictSchema[indexRepositoryArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args indexRepositoryArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleIndexRepository(ctx, args), nil, nil
 	})
@@ -96,7 +96,7 @@ func registerIndexStatus(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "index_status",
 		Description: "Get the indexing status of a project. project is optional once open_project has been called.",
-		InputSchema: lenientSchema[indexStatusArgs](),
+		InputSchema: strictSchema[indexStatusArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args indexStatusArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleIndexStatus(ctx, args), nil, nil
 	})
@@ -123,6 +123,9 @@ func registerListProjects(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_projects",
 		Description: "List all indexed projects.",
+		// Empty args struct: strictSchema would emit an object with zero
+		// properties (additionalProperties: false), which some OpenAI-compatible
+		// gateways reject in strict mode. Lenient keeps it a plain open object.
 		InputSchema: lenientSchema[listProjectsArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args listProjectsArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleListProjects(ctx), nil, nil
@@ -151,7 +154,7 @@ func registerDeleteProject(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "delete_project",
 		Description: "Delete a project from the index. Accepts a project name or root path.",
-		InputSchema: lenientSchema[deleteProjectArgs](),
+		InputSchema: strictSchema[deleteProjectArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args deleteProjectArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleDeleteProject(ctx, args), nil, nil
 	})
@@ -192,7 +195,7 @@ func registerQueryGraph(srv *mcp.Server, s *Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "query_graph",
 		Description: "Execute a SQL query against the knowledge graph for complex multi-hop patterns, aggregations, and cross-service analysis. Alias: cypher (query).",
-		InputSchema: lenientSchema[queryGraphArgs](),
+		InputSchema: strictSchema[queryGraphArgs](),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args queryGraphArgs) (*mcp.CallToolResult, any, error) {
 		return s.handleQueryGraph(ctx, args), nil, nil
 	})

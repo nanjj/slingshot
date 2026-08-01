@@ -32,6 +32,7 @@ func (s *Store) GetNodesByFile(filePath, project string) ([]Node, error) {
 
 	return scanNodes(rows)
 }
+
 // ─────────
 
 // SaveNode inserts or updates a node.
@@ -165,6 +166,41 @@ func (s *Store) GetNodeByQN(qn, project string) (*Node, error) {
 	return &n, nil
 }
 
+// expandFTSQuery OR-extends a plain lowercase multi-word query with its
+// space-free (camelCase-merged) form. FTS5's unicode61 tokenizer folds case
+// but does not split camelCase: "RegisterTool" is indexed as the single token
+// "registertool", so the natural-language query "register tool" (two ANDed
+// terms) misses it. The extension `(register AND tool) OR registertool`
+// matches both styles. Queries containing anything but lowercase ASCII
+// letters, digits, spaces, or hyphens are passed through untouched (they may
+// already be FTS5 syntax or case-sensitive input).
+func expandFTSQuery(q string) string {
+	trimmed := strings.TrimSpace(q)
+	if trimmed == "" {
+		return q
+	}
+	for _, r := range trimmed {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == ' ', r == '-':
+		default:
+			return q
+		}
+	}
+	terms := strings.Fields(trimmed)
+	if len(terms) < 2 {
+		return q
+	}
+	merged := strings.ReplaceAll(trimmed, " ", "")
+	if merged == trimmed {
+		return q
+	}
+	quoted := make([]string, len(terms))
+	for i, t := range terms {
+		quoted[i] = `"` + t + `"`
+	}
+	return "(" + strings.Join(quoted, " AND ") + ") OR \"" + merged + "\""
+}
+
 // FindSymbols finds nodes by pattern (qualified name or name substring) and optional kind filter.
 func (s *Store) FindSymbols(pattern, project, kind string, limit, offset int) ([]Node, int, error) {
 	s.mu.RLock()
@@ -248,6 +284,12 @@ func (s *Store) SearchNodes(query, project, pathFilter string, limit, offset int
 	if limit <= 0 {
 		limit = 20
 	}
+
+	// Natural-language queries ("register tool") are OR-extended with the
+	// camelCase-merged form ("registertool") so they match identifiers like
+	// RegisterTool, whose FTS5 token is the folded single word (Archimedes
+	// feedback: BM25 was case/case-sensitive to camelCase boundaries).
+	query = expandFTSQuery(query)
 
 	fromClause := "FROM node_fts f JOIN nodes n ON n.id = f.rowid"
 	var extraJoins string

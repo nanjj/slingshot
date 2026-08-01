@@ -1137,9 +1137,11 @@ func TestSearchCodeFilePatternAlias(t *testing.T) {
 	assert.Assert(t, res.TotalResults >= 1, "aliases regex/file_pattern should work, got %d", res.TotalResults)
 }
 
-// TestSchemaLenient_ExtraField verifies the lenient schema accepts unknown
-// fields instead of rejecting the call with a hard validation error.
-func TestSchemaLenient_ExtraField(t *testing.T) {
+// TestSchemaStrict_RejectsUnknownField verifies the default strict schema
+// (additionalProperties: false + required emitted, Bohr feedback mail #490)
+// rejects hallucinated fields at validation time — schema-level strictness
+// while handlers stay lenient (aliases, defaults, friendly errors).
+func TestSchemaStrict_RejectsUnknownField(t *testing.T) {
 	cs, cleanup := testFixture(t)
 	defer cleanup()
 
@@ -1152,16 +1154,55 @@ func TestSchemaLenient_ExtraField(t *testing.T) {
 		"mode":     "fast",
 	}, &idxRes)
 
-	type searchRes struct {
-		TotalResults int `json:"totalResults"`
-	}
-	var res searchRes
-	callToolUnmarshal(t, cs, "search_code", map[string]any{
-		"pattern":    "Greeter",
-		"project":    idxRes.ProjectName,
-		"frobnicate": "llm-noise", // unknown field must not fail validation
-	}, &res)
-	assert.Assert(t, res.TotalResults >= 1)
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "search_code",
+		Arguments: map[string]any{
+			"pattern":    "Greeter",
+			"project":    idxRes.ProjectName,
+			"frobnicate": "llm-noise",
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, result.IsError, "strict schema should reject unknown fields")
+	msg := textContent(result)
+	assert.Assert(t, strings.Contains(msg, "frobnicate"), "error should name the unknown field, got: %s", msg)
+}
+
+// TestLenientTool_AcceptsUnknownField verifies tools that opt into the
+// lenient schema (list_projects) still accept undeclared fields.
+func TestLenientTool_AcceptsUnknownField(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "list_projects",
+		Arguments: map[string]any{
+			"frobnicate": "llm-noise",
+		},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, !result.IsError, "lenient tool should accept unknown fields: %s", textContent(result))
+}
+
+// TestSchemaStrict_RequiredEmitted verifies the strict schema marks fields
+// without omitempty as required, satisfying OpenAI strict mode.
+func TestSchemaStrict_RequiredEmitted(t *testing.T) {
+	cs, cleanup := testFixture(t)
+	defer cleanup()
+
+	// code_analysis has a single non-omitempty field (file).
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "analysis",
+		Arguments: map[string]any{
+			"file":    "main.go",
+			"project": "definitely-not-indexed",
+		},
+	})
+	assert.NilError(t, err)
+	// The schema accepted the call (validation passed); the handler then
+	// failed on project resolution — proving required "file" was satisfied
+	// without blocking valid calls.
+	assert.Assert(t, strings.Contains(textContent(result), "project"), "handler should report project issue, got: %s", textContent(result))
 }
 
 // ─── Text-based edit (oldText → newText) ─────────────────────────────────────

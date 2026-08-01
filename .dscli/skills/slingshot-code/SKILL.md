@@ -18,6 +18,7 @@ auto_inject: true
 
 - 工具名**没有** `code_`/`codebase_` 前缀：`search_code`、`edit`、`locate`、`find_references` 等
 - **project 参数可选**：先 `open_project`（接受项目名/根路径/路径后缀，如 `dscli`、`/home/me/src/dscli`）或 `index_repository` 绑定后，后续调用可省略 project
+- **绑定跨会话持久**：open_project 的绑定写入状态库，服务重启/panic 后自动恢复——无需重新绑定
 - **not found 时错误会附带可用项目列表**，照抄其中的名字即可
 - 参数别名（LLM 直觉命名也可用）：`regex`=pattern、`file_pattern`=filePattern、`file`=pathFilter（search_code）、`function`=functionName、`symbol`=qualifiedName、`path`=repoPath、`cypher`=query
 
@@ -40,9 +41,9 @@ auto_inject: true
 | # | 场景 | 工具链 | AI agent 需要知道的 |
 |---|------|--------|-------------------|
 | 1 | 初识项目 | `get_architecture` → `search_graph` → `get_code_snippet` | `aspects` 过滤（`packageDeps`/`hotspots`/`fileTree`）；Leiden 聚类揭示实际模块边界（常与目录不一致）；`includeNeighbors=true` 看函数上下文 |
-| 2 | 调用链追踪 | `trace_path(mode=calls)` | 三模式：`calls`（默认调用链）→ `data_flow`（关注特定参数值传递）→ `cross_service`（跨 HTTP/async 路由）；`riskLabels` 按路径长度标记 CRITICAL~LOW；默认过滤测试文件，`includeTests=true` 包含 |
-| 3 | 搜索代码 | `search_graph` / `search_code` / `query_graph` | BM25 支持 camelCase 分词 + 定义加权；`namePattern` 正则精确匹配；`semanticQuery` 为**数组**（`["send","publish"]`）做语义桥接；`minDegree`/`maxDegree` 按调用热度过滤；检测 `totalResults` 判断截断 |
-| 4 | 引用分析 | `find_references` + `trace_path(inbound)` | `depth=0` 直接引用，`depth=1` 传递引用；QN 大小写敏感 |
+| 2 | 调用链追踪 | `trace_path(mode=calls)` | 三模式：`calls`（默认调用链）→ `data_flow`（关注特定参数值传递）→ `cross_service`（跨 HTTP/async 路由）；`riskLabels` 按路径长度标记 CRITICAL~LOW；默认过滤测试文件，`includeTests=true` 包含；**方法调用已解析 receiver**（`h.dispatchToServer` → `pkg.dispatchToServer`），未解析的调用按方法名兜底匹配 |
+| 3 | 搜索代码 | `search_graph` / `search_code` / `query_graph` | BM25 支持 camelCase 分词 + 定义加权，**自然语言查询可用**（`"register tool"` 命中 `RegisterTool`）；`namePattern` 正则精确匹配；`semanticQuery` 为**数组**（`["send","publish"]`）做语义桥接；`minDegree`/`maxDegree` 按调用热度过滤；检测 `totalResults` 判断截断 |
+| 4 | 引用分析 | `find_references` + `trace_path(inbound)` | `depth=0` 直接引用，`depth=1` 传递引用；QN 大小写敏感；**方法引用按方法名聚合**——查 `pkg.method` 也能找到 receiver 无法解析的调用（metadata 含 `receiver`/`method` 可区分） |
 | 5 | 评估变更 | `detect_changes(scope=impact)` | 支持 `since=` / `baseBranch=`；返回变更符号 + 图谱传播影响；基于 git，未 commit 的不检测 |
 | 6 | 代码编辑 | `edit`（推荐） / `edit_body` / `locate` | **文本替换**：`{mode:'replace', oldText:'foo()', newText:'bar()'}`，服务端自动定位，重复出现时加 `occurrence=N`；结构化模式用字节偏移 `startByte`/`endByte` 或 selector；`edit_body` 的 selector 格式 `function:<name>`/`method:<name>`/`struct:<name>`；编辑前先 `locate`，小步提交 |
 | 7 | 模式分析 | `query_graph(Cypher)` | 见下方实用模式；有 100k 行硬上限，加 LIMIT；不支持 offset |
@@ -103,6 +104,7 @@ ORDER BY callers DESC LIMIT 20
 
 - **QN 大小写敏感**：`myapp.Pkg.Func` ≠ `myapp.pkg.func`. 如果定位不到，试试调整大小写
 - **search_code 截断**：返回 `totalMatches`/`totalResults`，接近 limit 时加 `file_pattern` 缩小
+- **search_code 二进制安全**：自动跳过 ELF/PE/Mach-O/Java 二进制（magic 检测 + 扩展名 + `_release`/`dist`/`build` 等目录），不会 panic 或混入二进制噪声
 - **trace_path 默认排除测试文件**：要看测试调用链加 `includeTests=true`
 - **Cypher 100k 行上限**：宽泛查询务必加 `LIMIT`；分页用 `search_graph` 的 offset/limit
 - **变更检测基于 git**：未 commit 的修改不纳入。先 commit 再 detect
@@ -110,4 +112,5 @@ ORDER BY callers DESC LIMIT 20
 - **search_graph 分页**：响应有 `has_more` 字段，true 表示结果被截断，递增 offset 继续翻页
 - **locate 模糊匹配**：如果 QN 不精确，会返回候选列表——从候选里选对的确切 QN
 - **edit 优先用文本替换**：`oldText`+`newText`（或 `text`），重复时加 `occurrence`；selector/字节偏移是高级模式
-- **schema 宽容**：未知字段不会报错（宽进严出），但会被忽略——确保用文档中的参数名
+- **schema 默认 strict**（additionalProperties:false + required）：幻觉字段会被拒绝——只用文档/别名表中的参数名（`regex`、`file_pattern`、`symbol`、`function`、`cypher`、`path` 等都是真实 schema 字段，照常可用）；有别名的主字段（如 `pattern`）不强制 required，传别名即可
+- **方法调用边带元数据**：CALLS 边 metadata 含 `callee`（原始文本）+ `receiver`/`method`（方法调用）或 `pkg`（包函数调用），可用 query_graph 的 `json_extract` 过滤
