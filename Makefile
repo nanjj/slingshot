@@ -90,17 +90,18 @@ SITE_DIR := $(HOME)/.local/src/gitlab.com/dscli/slingshot.dscli.io
 release-site:
 	@test -n "$(TAG)" || { echo "Usage: make release-site TAG=vX.Y.Z"; exit 1; }
 	@test -d "$(SITE_DIR)" || { echo "Site repo not found at $(SITE_DIR)"; exit 1; }
+	@cd "$(SITE_DIR)" && grep -q "^## $(TAG) (" content/en-US/docs/releases.smd || { echo "ERROR: release notes for $(TAG) missing — add a '## $(TAG)' entry to content/en-US/docs/releases.smd and content/zh-CN/docs/releases.smd first"; exit 1; }
 	cd "$(SITE_DIR)" && \
 		git pull --ff-only && \
 		./scripts/update-version.sh "$(TAG)" && \
 		rm -rf public && \
 		zine release && \
 		git add assets/version.ziggy && \
-		git diff --cached --quiet || \
-			git commit -m "chore: update version to $(TAG)" && \
+		{ git diff --cached --quiet || git commit -m "chore: update version to $(TAG)"; } && \
 		git push
+	slingshot site rsync slingshot.dscli.io
 	@echo "---"
-	@echo "Site updated and built at $(SITE_DIR)/public/"
+	@echo "Site updated, built and deployed to https://slingshot.dscli.io"
 # --- Clean ---
 
 .PHONY: clean

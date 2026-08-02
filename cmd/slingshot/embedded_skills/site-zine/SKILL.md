@@ -85,7 +85,23 @@ slingshot site rsync mysite
 
 > **AI 智能体注意**：如果你只是改了内容想看看效果，先 `zine release` 再打开 `public/` 中的 HTML 文件即可。只有在最终部署时才需要 `slingshot site rsync`。
 
+### ⚠️ `make release-site` 的两个坑（v0.3.1 实战教训）
+
+`make release-site TAG=vX.Y.Z`（slingshot 仓库 Makefile）只负责：pull 源码 → 更新
+`assets/version.ziggy` → 构建 `public/` → push 到 GitLab。**它不会部署到线上**——
+真正上线必须 `slingshot site rsync <name>`。2026-08-02 发布 v0.3.1 时漏掉 rsync，
+导致 slingshot.dscli.io 线上一直显示 v0.3.0（用户发现后才补部署）。
+
+另外 release notes 是**手工维护**的（`content/{en-US,zh-CN}/docs/releases.smd`），
+`update-version.sh` 只碰版本号，不写 notes。发布新版本时记得：
+
+1. 先在 releases.smd 两个语言版本各加一条 `## vX.Y.Z (日期)` 条目（有 Highlights + 要点列表，**不加** changelog 链接）
+2. 再跑 `make release-site`（已内置检查：缺 release notes 会直接报错退出）
+3. 跑 `slingshot site rsync slingshot.dscli.io` 部署到线上
+4. curl 验证线上页面确实包含新版本号
+
 ---
+
 
 ## 3. 🌐 测试 zine 站点 — 浏览器是你的眼睛
 
