@@ -134,8 +134,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 
 
 	// 处理 version 标志
-	rootCmd.SetVersionTemplate("slingshot v0.3.0\n")
-	rootCmd.Version = "0.3.0"
+	rootCmd.SetVersionTemplate("slingshot v0.3.1\n")
+	rootCmd.Version = "0.3.1"
 
 	// 执行
 	err = rootCmd.ExecuteContext(context.Background())
