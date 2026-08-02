@@ -40,7 +40,7 @@ func (s *Store) SaveNode(n *Node) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 		INSERT INTO nodes (
 			project_id, qualified_name, kind, name, file_path,
 			line, col, end_line, end_col, signature, doc_comment,
@@ -68,9 +68,16 @@ func (s *Store) SaveNode(n *Node) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("save node: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("get last insert id: %w", err)
+	// Same LastInsertId() caveat as UpsertProject: when ON CONFLICT
+	// (project_id, qualified_name) DO UPDATE fires, last_insert_rowid() is
+	// unchanged, so a pooled connection may report 0 or a stale rowid.
+	// Resolve the real id explicitly.
+	var id int64
+	if err := s.db.QueryRow(
+		`SELECT id FROM nodes WHERE project_id = ? AND qualified_name = ?`,
+		n.ProjectID, n.QualifiedName,
+	).Scan(&id); err != nil {
+		return 0, fmt.Errorf("get node id: %w", err)
 	}
 	return id, nil
 }
@@ -363,7 +370,7 @@ func (s *Store) SaveEdge(e *Edge) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 		INSERT INTO edges (project_id, source_qn, target_qn, edge_type, metadata)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(project_id, source_qn, target_qn, edge_type) DO UPDATE SET
@@ -372,7 +379,18 @@ func (s *Store) SaveEdge(e *Edge) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("save edge: %w", err)
 	}
-	return result.LastInsertId()
+	// LastInsertId() caveat as in SaveNode/UpsertProject: the ON CONFLICT
+	// DO UPDATE branch leaves last_insert_rowid() stale, so resolve the
+	// real id explicitly instead.
+	var id int64
+	if err := s.db.QueryRow(`
+		SELECT id FROM edges
+		WHERE project_id = ? AND source_qn = ? AND target_qn = ? AND edge_type = ?`,
+		e.ProjectID, e.SourceQN, e.TargetQN, e.EdgeType,
+	).Scan(&id); err != nil {
+		return 0, fmt.Errorf("get edge id: %w", err)
+	}
+	return id, nil
 }
 
 // SaveEdgesBatch inserts multiple edges in a transaction.
@@ -417,6 +435,10 @@ func (s *Store) SaveADR(project string, a *ADR) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Note: the only unique key on adrs is the AUTOINCREMENT id, which is
+	// never supplied here, so the ON CONFLICT(id) branch is defensive dead
+	// code — every call inserts a new row and LastInsertId() is always
+	// accurate (unlike UpsertProject/SaveNode/SaveEdge).
 	result, err := s.db.Exec(`
 		INSERT INTO adrs (project_id, title, content, status)
 		VALUES ((SELECT id FROM projects WHERE name = ?), ?, ?, ?)

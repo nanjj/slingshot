@@ -20,7 +20,10 @@ type Store struct {
 // OpenStore opens (or creates) a SQLite database at the given path.
 // The schema is automatically initialized on first use.
 func OpenStore(dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_cache_size=-65536")
+	// _pragma=foreign_keys(1) is applied to EVERY pooled connection
+	// (PRAGMA foreign_keys is per-connection, so running it once below would
+	// leave freshly opened connections with FK enforcement OFF).
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_cache_size=-65536&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -30,7 +33,6 @@ func OpenStore(dbPath string) (*Store, error) {
 		"PRAGMA journal_mode=WAL",
 		"PRAGMA synchronous=NORMAL",
 		"PRAGMA busy_timeout=5000",
-		"PRAGMA foreign_keys=ON",
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
@@ -198,18 +200,28 @@ func (s *Store) UpsertProject(name, root string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result, err := s.db.Exec(`
+	if _, err := s.db.Exec(`
 		INSERT INTO projects (name, root, status)
 		VALUES (?, ?, 'indexing')
 		ON CONFLICT(name) DO UPDATE SET
 			root = excluded.root,
 			status = 'indexing',
 			indexed_at = datetime('now')
-	`, name, root)
-	if err != nil {
+	`, name, root); err != nil {
 		return 0, fmt.Errorf("upsert project: %w", err)
 	}
-	return result.LastInsertId()
+	// Do NOT trust LastInsertId() here: when the ON CONFLICT(name) DO UPDATE
+	// branch fires (project already exists — e.g. a re-index), SQLite leaves
+	// last_insert_rowid() untouched, so a fresh/reused pooled connection
+	// reports 0 or a stale rowid. A 0 would cascade into FOREIGN KEY
+	// constraint failures on every nodes/edges insert (seen as
+	// "constraint failed: FOREIGN KEY constraint failed (787)" in
+	// SaveNodesBatch during project re-indexing). Look the id up explicitly.
+	var id int64
+	if err := s.db.QueryRow(`SELECT id FROM projects WHERE name = ?`, name).Scan(&id); err != nil {
+		return 0, fmt.Errorf("get project id: %w", err)
+	}
+	return id, nil
 }
 
 // ListProjects returns all indexed projects.
