@@ -1,13 +1,16 @@
 package lsp
 
 import (
-	"slices"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
+
+	// Registers an explicit elisp tags query (upstream gotreesitter has none).
+	_ "github.com/nanjj/slingshot/internal/code/elispq"
 )
 
 // ─── Parsing ──────────────────────────────────────────────────────────────────
@@ -776,7 +779,6 @@ func ExtractDeclName(node *gotreesitter.Node, lang *gotreesitter.Language, sourc
 	return ""
 }
 
-
 // buildStructure recursively builds a NodeInfo tree.
 func buildStructure(node *gotreesitter.Node, lang *gotreesitter.Language, source []byte, depth, maxDepth, maxWidth int) NodeInfo {
 	if node == nil {
@@ -907,8 +909,8 @@ func detectLineEnding(source []byte) string {
 	}
 	// Check for \r\n
 	if slices.Contains(source, '\r') {
-			return "\r\n"
-		}
+		return "\r\n"
+	}
 	return "\n"
 }
 

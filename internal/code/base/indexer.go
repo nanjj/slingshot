@@ -4,6 +4,7 @@ package base
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,9 @@ import (
 	"github.com/nanjj/slingshot/internal/code/lsp"
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
+
+	// Registers an explicit elisp tags query (upstream gotreesitter has none).
+	_ "github.com/nanjj/slingshot/internal/code/elispq"
 )
 
 // SupportedExts lists file extensions the indexer recognizes.
@@ -19,6 +23,7 @@ var supportedExts = map[string]bool{
 	".rs": true, ".java": true, ".kt": true, ".swift": true, ".c": true, ".h": true,
 	".cpp": true, ".hpp": true, ".cc": true, ".cxx": true, ".cs": true,
 	".rb": true, ".php": true, ".ex": true, ".exs": true,
+	".el": true,
 }
 
 // ─── Indexer ──────────────────────────────────────────────────────────────────
@@ -944,6 +949,9 @@ func findClassRefs(node *gotreesitter.Node, lang *gotreesitter.Language, source 
 func extractTags(tree *gotreesitter.Tree, entry *grammars.LangEntry, lang *gotreesitter.Language) []gotreesitter.Tag {
 	tagsQuery := grammars.ResolveTagsQuery(*entry)
 	if tagsQuery == "" {
+		// Emit a warning instead of silently dropping definitions so missing
+		// tags queries (e.g. an unregistered grammar) are diagnosable.
+		log.Printf("warning: no tree-sitter tags query for language %q — definitions skipped", entry.Name)
 		return nil
 	}
 	tagger, err := gotreesitter.NewTagger(lang, tagsQuery)

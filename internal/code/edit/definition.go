@@ -10,6 +10,9 @@ import (
 
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
+
+	// Registers an explicit elisp tags query (upstream gotreesitter has none).
+	_ "github.com/nanjj/slingshot/internal/code/elispq"
 )
 
 // Tag is a serializable representation of a tree-sitter tag,
@@ -27,15 +30,15 @@ type Tag struct {
 
 // StructureSummary groups definitions by kind for a high-level overview.
 type StructureSummary struct {
-	Language    string `json:"language"`
-	Functions   []Tag  `json:"functions,omitempty"`
-	Methods     []Tag  `json:"methods,omitempty"`
-	Classes     []Tag  `json:"classes,omitempty"`
-	Structs     []Tag  `json:"structs,omitempty"`
-	Interfaces  []Tag  `json:"interfaces,omitempty"`
-	Modules     []Tag  `json:"modules,omitempty"`
-	Imports     []Tag  `json:"imports,omitempty"`
-	Other       []Tag  `json:"other,omitempty"`
+	Language   string `json:"language"`
+	Functions  []Tag  `json:"functions,omitempty"`
+	Methods    []Tag  `json:"methods,omitempty"`
+	Classes    []Tag  `json:"classes,omitempty"`
+	Structs    []Tag  `json:"structs,omitempty"`
+	Interfaces []Tag  `json:"interfaces,omitempty"`
+	Modules    []Tag  `json:"modules,omitempty"`
+	Imports    []Tag  `json:"imports,omitempty"`
+	Other      []Tag  `json:"other,omitempty"`
 }
 
 // GetDefs returns all definition tags from a document.
