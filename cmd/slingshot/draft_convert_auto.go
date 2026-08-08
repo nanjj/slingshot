@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/mathrender"
 	"github.com/nanjj/slingshot/internal/mdtowx"
 )
 
@@ -57,8 +58,15 @@ func ensureHTMLFile(cmd *cobra.Command, sourceFile string) (htmlPath string, err
 		return "", fmt.Errorf("conversion failed: %w", err)
 	}
 
+	// Render LaTeX formulas (auto mode: SVG via MathJax, PNG fallback).
+	html := mdtowx.RemoveCJCSpace(result.HTML)
+	html, err = mathrender.ProcessMath(html, filepath.Dir(sourceFile), mathrender.ModeAuto, cmd.ErrOrStderr())
+	if err != nil {
+		return "", fmt.Errorf("math processing failed: %w", err)
+	}
+
 	// Run the full upload pipeline (images + thumbnail)
-	if err := runUploadPipeline(cmd, result, result.HTML, htmlPath, sourceFile); err != nil {
+	if err := runUploadPipeline(cmd, result, html, htmlPath, sourceFile); err != nil {
 		return "", fmt.Errorf("upload pipeline failed: %w", err)
 	}
 

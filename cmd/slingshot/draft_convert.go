@@ -12,6 +12,7 @@ import (
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/i18n"
+	"github.com/nanjj/slingshot/internal/mathrender"
 	"github.com/nanjj/slingshot/internal/mdtowx"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
@@ -26,8 +27,9 @@ var draftConvertUsage = u.Usage{
 
 // cmdDraftConvert 实现 "slingshot draft convert" 子命令。
 type cmdDraftConvert struct {
-	global *cmdGlobal
-	upload bool
+	global   *cmdGlobal
+	upload   bool
+	mathMode string
 }
 
 func (c *cmdDraftConvert) command() *cobra.Command {
@@ -60,12 +62,19 @@ This command handles all common syntax:
   - Ordered and unordered lists
   - Tables (GFM-style)
   - Thematic breaks (hr)
-  - Raw HTML passthrough (footnotes, etc.)`),
+  - Raw HTML passthrough (footnotes, etc.)
+
+LaTeX formulas are rendered to inline SVG (MathJax, the format WeChat
+supports — same as mdnice) by default, falling back to PNG images
+(tectonic) when MathJax is unavailable. Use --math=text to keep formulas
+as literal LaTeX text.`),
 	)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	cmd.Flags().BoolVarP(&c.upload, "upload", "u", false,
 		i18n.G("Upload images to WeChat and update URLs in the HTML"))
+	cmd.Flags().StringVar(&c.mathMode, "math", "auto",
+		i18n.G("Formula handling: auto (SVG via MathJax, PNG via tectonic fallback), svg, png, text (keep LaTeX as-is)"))
 
 	return cmd
 }
@@ -107,6 +116,18 @@ func (c *cmdDraftConvert) run(cmd *cobra.Command, args []string) (err error) {
 	// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
 	// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
 	html = mdtowx.RemoveCJCSpace(html)
+
+	// Render LaTeX formulas (SVG preferred, PNG fallback) so WeChat readers
+	// see math instead of raw $...$ text. Formula PNGs are picked up by the
+	// upload pipeline below; SVG fragments are self-contained.
+	mathMode, err := mathrender.ParseMode(c.mathMode)
+	if err != nil {
+		return err
+	}
+	html, err = mathrender.ProcessMath(html, filepath.Dir(file.String), mathMode, cmd.ErrOrStderr())
+	if err != nil {
+		return fmt.Errorf("math processing failed: %w", err)
+	}
 
 	outPath := replaceExt(file.String, ".html")
 

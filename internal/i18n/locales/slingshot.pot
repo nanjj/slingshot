@@ -32,7 +32,7 @@ msgstr ""
 msgid "Convert Markdown to WeChat public account HTML"
 msgstr ""
 
-msgid "Convert a Markdown file to HTML format suitable for WeChat public accounts.\n\nThe conversion process:\n  1. Parse the Markdown file using goldmark (supports GFM tables, strikethrough)\n  2. Inject inline CSS styles on every element (required by WeChat)\n  3. Save the result as <filename>.html\n\nWith --upload:\n  4. Parse local image references from the HTML\n  5. Upload images to WeChat material management (with caching via images.yaml)\n  6. Update image URLs in the HTML\n\nWeChat only supports inline styles and a limited set of HTML elements.\nThis command handles all common Markdown syntax:\n  - Headings (h1-h4), paragraphs, blockquotes\n  - Bold, italic, inline code, strikethrough\n  - Fenced code blocks with syntax highlighting\n  - Links and images\n  - Ordered and unordered lists\n  - Tables (GFM-style)\n  - Thematic breaks (hr)\n  - Raw HTML passthrough (footnotes, etc.)"
+msgid "Convert a Markdown file to HTML format suitable for WeChat public accounts.\n\nThe conversion process:\n  1. Parse the Markdown file using goldmark (supports GFM tables, strikethrough)\n  2. Inject inline CSS styles on every element (required by WeChat)\n  3. Save the result as <filename>.html\n\nWith --upload:\n  4. Parse local image references from the HTML\n  5. Upload images to WeChat material management (with caching via images.yaml)\n  6. Update image URLs in the HTML\n\nWeChat only supports inline styles and a limited set of HTML elements.\nThis command handles all common Markdown syntax:\n  - Headings (h1-h4), paragraphs, blockquotes\n  - Bold, italic, inline code, strikethrough\n  - Fenced code blocks with syntax highlighting\n  - Links and images\n  - Ordered and unordered lists\n  - Tables (GFM-style)\n  - Thematic breaks (hr)\n  - Raw HTML passthrough (footnotes, etc.)\n\nLaTeX formulas are rendered to inline SVG (MathJax, the format WeChat\nsupports — same as mdnice) by default, falling back to PNG images\n(tectonic) when MathJax is unavailable. Use --math=text to keep formulas\nas literal LaTeX text."
 msgstr ""
 
 msgid "expected a file argument"
@@ -323,6 +323,9 @@ msgid "User's WeChat ID to receive the preview (100/day limit)"
 msgstr ""
 
 msgid "either --touser or --towxname is required for preview"
+msgstr ""
+
+msgid "Formula handling: auto (SVG via MathJax, PNG via tectonic fallback), svg, png, text (keep LaTeX as-is)"
 msgstr ""
 
 msgid "Preview sent for %s\n"
