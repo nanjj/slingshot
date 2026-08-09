@@ -39,13 +39,44 @@ import (
 // to make it visible as caption text below the image.
 var imgWithTitleRe = regexp.MustCompile(`<img([^>]*)title="([^"]+)"([^>]*>)`)
 
+// figureNumberRe matches an org-style "Figure N: " caption prefix. Org mode
+// numbers #+caption: figures (Figure 1:, Figure 2:, ...) when exporting to HTML,
+// and the ox-md conversion used by ConvertOrgFile keeps that numbering invisible
+// (the caption becomes the image title attribute). We replicate the numbering
+// here so WeChat articles match the org-exported site; captions that already
+// carry a number are left untouched to avoid double numbering.
+var figureNumberRe = regexp.MustCompile(`^Figure\s+\d+[:：]`)
+
 // injectImageCaptions makes image title attributes visible as caption text below each image.
 // Standard HTML renders title only as a tooltip on hover, which is invisible on mobile.
 // This function adds a <span> with the caption text after each <img> that has a title.
+// Captions are numbered "Figure N: " in document order, mirroring org-mode's
+// figure numbering, unless they already start with a figure number.
 func injectImageCaptions(html []byte) []byte {
-	captionSpan := `<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">${2}</span>`
-	repl := []byte(`<img${1}title="${2}"${3}` + captionSpan)
-	return imgWithTitleRe.ReplaceAll(html, repl)
+	captionSpanOpen := `<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">`
+	const captionSpanClose = `</span>`
+	var n int
+	return imgWithTitleRe.ReplaceAllFunc(html, func(m []byte) []byte {
+		sub := imgWithTitleRe.FindSubmatch(m)
+		// sub[1] = attributes before title, sub[2] = title value,
+		// sub[3] = attributes after title plus the closing ">".
+		caption := sub[2]
+		if !figureNumberRe.Match(caption) {
+			n++
+			caption = append([]byte(fmt.Sprintf("Figure %d: ", n)), caption...)
+		}
+		var b bytes.Buffer
+		b.Write([]byte(`<img`))
+		b.Write(sub[1])
+		b.Write([]byte(`title="`))
+		b.Write(sub[2])
+		b.Write([]byte(`"`))
+		b.Write(sub[3])
+		b.WriteString(captionSpanOpen)
+		b.Write(caption)
+		b.WriteString(captionSpanClose)
+		return b.Bytes()
+	})
 }
 
 // --- WeChat API limits ---

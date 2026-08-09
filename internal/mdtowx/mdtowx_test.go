@@ -154,7 +154,28 @@ func TestConvertMarkdown(t *testing.T) {
 			input: `![alt](img.png "Italo Calvino")`,
 			want: []string{
 				`<img src="img.png" alt="alt" title="Italo Calvino" style="max-width:100%;height:auto;display:block;margin:0.8em 0"`,
-				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">Italo Calvino</span>`,
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">Figure 1: Italo Calvino</span>`,
+			},
+		},
+		{
+			name:  "image_captions_numbered_sequentially",
+			input: "![one](a.png \"First\")\n\n![two](b.png \"Second\")\n\n![plain](c.png)",
+			want: []string{
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">Figure 1: First</span>`,
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">Figure 2: Second</span>`,
+			},
+			not: []string{
+				`Figure 3:`,
+			},
+		},
+		{
+			name:  "image_caption_existing_number_not_renumbered",
+			input: `![alt](img.png "Figure 2: already numbered")`,
+			want: []string{
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-top:8px">Figure 2: already numbered</span>`,
+			},
+			not: []string{
+				`Figure 1: Figure 2:`,
 			},
 		},
 		{
