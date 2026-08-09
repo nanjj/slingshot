@@ -230,6 +230,135 @@ func main() {}
 		}
 	})
 
+	t.Run("table_with_caption", func(t *testing.T) {
+		orgContent := `#+TITLE: Caption Test
+
+#+caption: 这是表格的标题
+| A | B |
+|---+---|
+| 1 | 2 |
+`
+		dir := t.TempDir()
+		path := dir + "/caption-table.org"
+		if err := os.WriteFile(path, []byte(orgContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := ConvertOrgFile(path)
+		if err != nil {
+			t.Fatalf("ConvertOrgFile error = %v", err)
+		}
+
+		html := string(result.HTML)
+		if !strings.Contains(html, "Table 1: 这是表格的标题") {
+			t.Errorf("HTML should contain numbered table caption, got: %s", html)
+		}
+		if !strings.Contains(html, `margin-bottom:8px`) {
+			t.Errorf("table caption should sit above the table (margin-bottom), got: %s", html)
+		}
+	})
+
+	t.Run("code_block_with_caption", func(t *testing.T) {
+		orgContent := `#+TITLE: Caption Test
+
+#+caption: 这是代码的标题
+#+begin_src go
+package main
+func main() {}
+#+end_src
+`
+		dir := t.TempDir()
+		path := dir + "/caption-code.org"
+		if err := os.WriteFile(path, []byte(orgContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := ConvertOrgFile(path)
+		if err != nil {
+			t.Fatalf("ConvertOrgFile error = %v", err)
+		}
+
+		html := string(result.HTML)
+		if !strings.Contains(html, "Listing 1: 这是代码的标题") {
+			t.Errorf("HTML should contain numbered code caption, got: %s", html)
+		}
+	})
+
+	t.Run("table_and_code_captions_numbered_independently", func(t *testing.T) {
+		orgContent := `#+TITLE: Caption Test
+
+#+caption: 表一
+| A | B |
+|---+---|
+| 1 | 2 |
+
+#+caption: 代码一
+#+begin_src go
+package main
+#+end_src
+
+#+caption: 表二
+| C | D |
+|---+---|
+| 3 | 4 |
+
+#+caption: 代码二
+#+begin_src python
+print(1)
+#+end_src
+`
+		dir := t.TempDir()
+		path := dir + "/caption-mixed.org"
+		if err := os.WriteFile(path, []byte(orgContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := ConvertOrgFile(path)
+		if err != nil {
+			t.Fatalf("ConvertOrgFile error = %v", err)
+		}
+
+		html := string(result.HTML)
+		for _, want := range []string{
+			"Table 1: 表一",
+			"Listing 1: 代码一",
+			"Table 2: 表二",
+			"Listing 2: 代码二",
+		} {
+			if !strings.Contains(html, want) {
+				t.Errorf("HTML should contain %q, got: %s", want, html)
+			}
+		}
+	})
+
+	t.Run("table_caption_existing_number_not_renumbered", func(t *testing.T) {
+		orgContent := `#+TITLE: Caption Test
+
+#+caption: Table 5: 手工编号
+| A | B |
+|---+---|
+| 1 | 2 |
+`
+		dir := t.TempDir()
+		path := dir + "/caption-numbered.org"
+		if err := os.WriteFile(path, []byte(orgContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := ConvertOrgFile(path)
+		if err != nil {
+			t.Fatalf("ConvertOrgFile error = %v", err)
+		}
+
+		html := string(result.HTML)
+		if !strings.Contains(html, "Table 5: 手工编号") {
+			t.Errorf("HTML should keep the existing caption number, got: %s", html)
+		}
+		if strings.Contains(html, "Table 1: Table 5:") {
+			t.Errorf("HTML should not double-number the caption, got: %s", html)
+		}
+	})
+
 	t.Run("ordered_list", func(t *testing.T) {
 		orgContent := `#+TITLE: List Test
 

@@ -189,6 +189,89 @@ func TestConvertMarkdown(t *testing.T) {
 			},
 		},
 		{
+			name: "table_with_caption_marker",
+			input: `<!-- mdtowx-table-caption: 这是表格的标题 -->
+| A | B |
+| --- | --- |
+| 1 | 2 |`,
+			want: []string{
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-bottom:8px">Table 1: 这是表格的标题</span>`,
+				`<table style=`,
+			},
+			not: []string{
+				`mdtowx-table-caption`, // marker comment must be replaced
+			},
+		},
+		{
+			name: "table_captions_numbered_sequentially",
+			input: `<!-- mdtowx-table-caption: 第一个表 -->
+| A | B |
+| --- | --- |
+| 1 | 2 |
+
+<!-- mdtowx-table-caption: 第二个表 -->
+| C | D |
+| --- | --- |
+| 3 | 4 |`,
+			want: []string{
+				`>Table 1: 第一个表</span>`,
+				`>Table 2: 第二个表</span>`,
+			},
+			not: []string{
+				`Table 3:`,
+			},
+		},
+		{
+			name: "table_caption_existing_number_not_renumbered",
+			input: `<!-- mdtowx-table-caption: Table 5: 已有编号 -->
+| A | B |
+| --- | --- |
+| 1 | 2 |`,
+			want: []string{
+				`>Table 5: 已有编号</span>`,
+			},
+			not: []string{
+				`Table 1: Table 5:`,
+			},
+		},
+		{
+			name: "code_block_with_caption_marker",
+			input: `<!-- mdtowx-code-caption: 这是代码的标题 -->
+` + "```go\npackage main\n```",
+			want: []string{
+				`<span style="display:block;text-align:center;color:#888;font-size:14px;margin-bottom:8px">Listing 1: 这是代码的标题</span>`,
+				`<section class="code-snippet__fix code-snippet__go">`,
+			},
+			not: []string{
+				`mdtowx-code-caption`, // marker comment must be replaced
+			},
+		},
+		{
+			name: "code_captions_numbered_sequentially",
+			input: `<!-- mdtowx-code-caption: 第一段 -->
+` + "```go\npackage a\n```" + `
+
+<!-- mdtowx-code-caption: 第二段 -->
+` + "```python\nprint(1)\n```",
+			want: []string{
+				`>Listing 1: 第一段</span>`,
+				`>Listing 2: 第二段</span>`,
+			},
+		},
+		{
+			name: "caption_marker_escapes_html",
+			input: `<!-- mdtowx-table-caption: A <b> & "quotes" -->
+| A |
+| --- |
+| 1 |`,
+			want: []string{
+				`>Table 1: A &lt;b&gt; &amp; &#34;quotes&#34;</span>`,
+			},
+			not: []string{
+				`<b>`, // caption text must not be interpreted as HTML
+			},
+		},
+		{
 			name: "unordered_list",
 			input: `- a
 - b

@@ -79,6 +79,67 @@ func injectImageCaptions(html []byte) []byte {
 	})
 }
 
+// --- Block captions (tables and code blocks) ---
+
+// captionMarkerRe matches the internal caption marker comments emitted by the
+// org->Markdown conversion (org.go). ox-md drops #+caption: on tables and
+// src blocks, so the caption text is smuggled through the Markdown
+// intermediate as an HTML comment right before the block:
+//
+//	<!-- mdtowx-table-caption: TEXT -->
+//	<!-- mdtowx-code-caption: TEXT -->
+//
+// goldmark passes the comment through (Unsafe mode) and we replace it with a
+// visible caption <span> here. The markers are also usable directly in .md
+// files when a caption is wanted.
+var captionMarkerRe = regexp.MustCompile(`(?s)<!-- mdtowx-(table|code)-caption: (.*?) -->`)
+
+// tableNumberRe and listingNumberRe match org-style "Table N: " / "Listing N: "
+// caption prefixes. Org numbers captions per element kind (Table 1:, Listing 1:)
+// when exporting to HTML; captions that already carry a number are left
+// untouched to avoid double numbering.
+var tableNumberRe = regexp.MustCompile(`^Table\s+\d+[:：]`)
+var listingNumberRe = regexp.MustCompile(`^Listing\s+\d+[:：]`)
+
+// injectBlockCaptions turns internal caption marker comments into visible
+// caption text above tables and code blocks, mirroring org-mode's HTML export:
+// tables get "Table N: " and code blocks get "Listing N: ", each numbered
+// independently in document order. Captions that already start with a number
+// are kept as-is. The caption <span> is emitted before the element (above it),
+// matching ox-html's default caption placement (t-above / org-src-name).
+func injectBlockCaptions(src []byte) []byte {
+	captionSpanOpen := `<span style="display:block;text-align:center;color:#888;font-size:14px;margin-bottom:8px">`
+	const captionSpanClose = `</span>`
+	var nTable, nCode int
+	return captionMarkerRe.ReplaceAllFunc(src, func(m []byte) []byte {
+		sub := captionMarkerRe.FindSubmatch(m)
+		// sub[1] = kind ("table" or "code"), sub[2] = caption text.
+		caption := bytes.TrimSpace(sub[2])
+		kind := string(sub[1])
+		numbered := false
+		switch kind {
+		case "table":
+			numbered = tableNumberRe.Match(caption)
+		case "code":
+			numbered = listingNumberRe.Match(caption)
+		}
+		if !numbered {
+			if kind == "code" {
+				nCode++
+				caption = append([]byte(fmt.Sprintf("Listing %d: ", nCode)), caption...)
+			} else {
+				nTable++
+				caption = append([]byte(fmt.Sprintf("Table %d: ", nTable)), caption...)
+			}
+		}
+		var b bytes.Buffer
+		b.WriteString(captionSpanOpen)
+		b.WriteString(html.EscapeString(string(caption)))
+		b.WriteString(captionSpanClose)
+		return b.Bytes()
+	})
+}
+
 // --- WeChat API limits ---
 
 const (
@@ -671,6 +732,10 @@ func ConvertMarkdown(source []byte) (*Result, error) {
 	// on mobile — WeChat doesn't display hover tooltips. We add a visible
 	// caption <span> after each such image.
 	html := injectImageCaptions(buf.Bytes())
+
+	// 6.6 Replace internal caption marker comments (emitted by the org->md
+	// conversion in org.go) with visible captions above tables and code blocks.
+	html = injectBlockCaptions(html)
 
 	return &Result{
 		HTML:         html,

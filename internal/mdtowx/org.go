@@ -168,14 +168,36 @@ const orgToMarkdownElisp = `(progn
   ;; Load the base Markdown exporter.
   (require 'ox-md)
 
+  ;; --- Caption support ---
+  ;; ox-md drops #+caption: on tables and src blocks (only images keep the
+  ;; caption, as a Markdown title attribute). To carry the caption through
+  ;; the Markdown intermediate, we emit an internal HTML comment marker
+  ;; right before the block:
+  ;;
+  ;;   <!-- mdtowx-table-caption: TEXT -->
+  ;;   <!-- mdtowx-code-caption:  TEXT -->
+  ;;
+  ;; The Go side (injectBlockCaptions in mdtowx.go) replaces these markers
+  ;; with visible caption <span>s ("Table N: ..." / "Listing N: ..."),
+  ;; mirroring org's HTML export numbering.
+  (defun my-org-md-caption (el info)
+    (let* ((caps (org-element-property :caption el))
+           (lines (car caps)))  ;; first caption = the display caption
+      (when lines
+        (let ((text (org-trim (org-export-data lines info))))
+          (unless (string-empty-p text)
+            text)))))
+
   ;; --- Fenced code blocks with language info ---
   ;; Override ox-md's default src-block handler (which emits indented code)
   ;; to produce fenced code blocks.
   (defun my-org-md-src-block (src-block contents info)
     (let ((lang (or (org-element-property :language src-block) ""))
           (code (org-export-format-code-default src-block info))
-          (bt (string 96)))  ;; backtick char
-      (concat bt bt bt lang "\n" code bt bt bt "\n")))
+          (bt (string 96))  ;; backtick char
+          (cap (my-org-md-caption src-block info)))
+      (concat (if cap (concat "<!-- mdtowx-code-caption: " cap " -->\n") "")
+              bt bt bt lang "\n" code bt bt bt "\n")))
 
   ;; --- GFM-style tables ---
   ;; Override ox-md's default table handler (which emits raw HTML tables)
@@ -183,7 +205,8 @@ const orgToMarkdownElisp = `(progn
   (defun my-org-md-table (table contents info)
     (let ((rows (org-element-map table 'table-row 'identity info))
           (output '())
-          (header-done nil))
+          (header-done nil)
+          (cap (my-org-md-caption table info)))
       (dolist (row rows)
         (let ((type (org-element-property :type row)))
           (when (eq type 'standard)
@@ -199,7 +222,8 @@ const orgToMarkdownElisp = `(progn
                                      cell-strs " | ") " |") output)
                 (setq header-done t))))))
       (let ((sep "\n"))
-        (concat (mapconcat #'identity (nreverse output) sep) sep sep))))
+        (concat (if cap (concat "<!-- mdtowx-table-caption: " cap " -->\n") "")
+                (mapconcat #'identity (nreverse output) sep) sep sep))))
 
   ;; Register the derived backend.
   (org-export-define-derived-backend 'my-md 'md
