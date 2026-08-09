@@ -23,7 +23,6 @@ import (
 
 	"github.com/nanjj/slingshot/internal/highlight"
 
-
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -48,7 +47,6 @@ func injectImageCaptions(html []byte) []byte {
 	repl := []byte(`<img${1}title="${2}"${3}` + captionSpan)
 	return imgWithTitleRe.ReplaceAll(html, repl)
 }
-
 
 // --- WeChat API limits ---
 
@@ -238,7 +236,6 @@ func addInlineStyles(doc ast.Node) {
 		case ast.KindImage:
 			n.SetAttributeString("style", styleImage)
 
-
 		case ast.KindThematicBreak:
 			n.SetAttributeString("style", styleHR)
 
@@ -311,7 +308,6 @@ func langSuffix(lang string) string {
 	return lang
 }
 
-
 func (r *codeBlockRenderer) renderCodeBlock(w util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
 		writeWxCodeBlock(w, source, n, "")
@@ -379,8 +375,9 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 			if i == len(hlLines)-1 && len(hlLine) == 0 {
 				break // skip trailing newline
 			}
+			hlLine = bytes.TrimSuffix(hlLine, []byte{'\r'}) // tolerate CRLF sources
 			_, _ = w.WriteString("<code><span class=\"code-snippet_outer\">")
-			_, _ = w.Write(hlLine)
+			_, _ = w.Write(wxNbsp(hlLine))
 			_, _ = w.WriteString("</span></code>\n")
 		}
 	} else {
@@ -389,7 +386,7 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 			line := lines.At(i)
 			_, _ = w.WriteString("<code><span class=\"code-snippet_outer\">")
 			content := bytes.TrimRight(line.Value(source), "\n\r")
-			_, _ = w.WriteString(html.EscapeString(string(content)))
+			_, _ = w.Write(wxNbsp([]byte(html.EscapeString(string(content)))))
 			_, _ = w.WriteString("</span></code>\n")
 		}
 	}
@@ -397,6 +394,57 @@ func writeWxCodeBlock(w util.BufWriter, source []byte, n ast.Node, lang string) 
 	_, _ = w.WriteString("</pre>")
 	// </section> is written by the caller on exiting
 }
+
+// wxNbsp converts ASCII spaces and tabs in a code line into &nbsp; entities
+// so that WeChat's editor preserves them.
+//
+// Background: when pasted HTML is converted into WeChat's native code block
+// format, the editor re-tokenizes the content and drops plain spaces that sit
+// between inline elements (e.g. between syntax-highlighting spans) or at line
+// starts — the published article then shows "funcmain" and lost indentation.
+// &nbsp; entities survive the conversion (WeChat itself serializes preserved
+// spaces as &nbsp;), so we emit them directly from the generator.
+//
+// HTML tags (<span ...>) and character entities (&lt;, &#34;, &nbsp;, ...) are
+// passed through untouched; tabs become four &nbsp; entities.
+func wxNbsp(src []byte) []byte {
+	var b bytes.Buffer
+	b.Grow(len(src) * 3 / 2)
+	i := 0
+	for i < len(src) {
+		c := src[i]
+		switch {
+		case c == '<':
+			// Copy the whole tag verbatim (attributes may contain spaces).
+			end := bytes.IndexByte(src[i:], '>')
+			if end < 0 {
+				end = len(src) - i - 1
+			}
+			b.Write(src[i : i+end+1])
+			i += end + 1
+		case c == '&':
+			// Copy the whole entity verbatim; never re-escape an existing
+			// entity such as &#34; or &lt;.
+			end := bytes.IndexByte(src[i:], ';')
+			if end < 0 {
+				end = len(src) - i - 1
+			}
+			b.Write(src[i : i+end+1])
+			i += end + 1
+		case c == ' ':
+			b.WriteString("&nbsp;")
+			i++
+		case c == '\t':
+			b.WriteString("&nbsp;&nbsp;&nbsp;&nbsp;")
+			i++
+		default:
+			b.WriteByte(c)
+			i++
+		}
+	}
+	return b.Bytes()
+}
+
 // --- Custom list renderer ---
 //
 // WeChat does not support nested <ol>/<li>. All list items must be rendered
@@ -554,7 +602,6 @@ func newGoldmark() goldmark.Markdown {
 		),
 	)
 }
-
 
 // --- Public API ---
 // ConvertMarkdown converts Markdown source bytes to WeChat-friendly HTML.

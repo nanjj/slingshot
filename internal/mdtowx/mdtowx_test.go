@@ -73,6 +73,9 @@ func TestConvertMarkdown(t *testing.T) {
 				`<section class="code-snippet__fix code-snippet__go">`,
 				`<pre class="code-snippet__go" data-lang="go">`,
 				`<span style="color:#d73a49">func</span>`,
+				// spaces become &nbsp; so WeChat's editor does not drop them
+				`func</span>&nbsp;<span`,
+				`()&nbsp;{}`,
 				`</section>`,
 			},
 			not: []string{
@@ -86,7 +89,7 @@ func TestConvertMarkdown(t *testing.T) {
 			want: []string{
 				`<section class="code-snippet__fix code-snippet__text">`,
 				`<pre class="code-snippet__text" data-lang="">`,
-				`<span class="code-snippet_outer">func foo() {}</span>`,
+				`<span class="code-snippet_outer">func&nbsp;foo()&nbsp;{}</span>`,
 				`</section>`,
 			},
 		},
@@ -121,7 +124,7 @@ func TestConvertMarkdown(t *testing.T) {
 			},
 		},
 		{
-			name:  "code_block_malicious_lang",
+			name: "code_block_malicious_lang",
 			// goldmark extracts only the first word of the info string as language
 			input: "```\"><img src=x onerror=alert(1)>\ncode\n```\n",
 			want: []string{
@@ -292,6 +295,34 @@ title: Test
 				if strings.Contains(s, n) {
 					t.Errorf("expected output NOT to contain %q\n--- got ---\n%s", n, s)
 				}
+			}
+		})
+	}
+}
+
+func TestWxNbsp(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain spaces", "func main() {", "func&nbsp;main()&nbsp;{"},
+		{"leading indent", "    pi := 0", "&nbsp;&nbsp;&nbsp;&nbsp;pi&nbsp;:=&nbsp;0"},
+		{"tabs", "\t\t}", "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}"},
+		{"tags untouched", `<span style="color:#d73a49">func</span> <span>x</span>`,
+			`<span style="color:#d73a49">func</span>&nbsp;<span>x</span>`},
+		{"entities untouched", `<span>&#34;quotes&#34;</span> &amp; <span>&lt;div&gt;</span>`,
+			`<span>&#34;quotes&#34;</span>&nbsp;&amp;&nbsp;<span>&lt;div&gt;</span>`},
+		{"nbsp preserved", "a&nbsp;b c", "a&nbsp;b&nbsp;c"},
+		{"no double-escape", `&lt; &amp;`, `&lt;&nbsp;&amp;`},
+		{"empty", "", ""},
+		{"no spaces", "abc123", "abc123"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(wxNbsp([]byte(tc.in)))
+			if got != tc.want {
+				t.Errorf("wxNbsp(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
