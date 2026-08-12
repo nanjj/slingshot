@@ -41,6 +41,10 @@ The input file may contain a full tikzpicture environment or just the
 commands inside it — a tikzpicture wrapper is added automatically when
 missing. \usetikzlibrary lines are hoisted above the environment.
 
+Packages are loaded automatically by content detection (tkz-euclide,
+tikz-cd, pgfplots, circuitikz, forest, ...); explicit \usepackage lines
+in the input are hoisted into the preamble.
+
 The output format is determined by the output file extension.
 Pipeline: tectonic -> PDF -> mutool / ghostscript rasterization.
 Chinese (CJK) text is supported via xeCJK; the font can be overridden
@@ -74,18 +78,96 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 }
 
 // tikzWrapper 是 tectonic 编译用的 standalone 模板。
-// %s 是 CJK 字体名 (由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
+// 第一个 %s 是额外加载的包 (由输入内容自动探测, 可为空)，
+// 第二个 %s 是 CJK 字体名 (由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
 const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{amsmath}
-\usepackage{fontspec}
+%s\usepackage{fontspec}
 \usepackage{xeCJK}
 \setCJKmainfont{%s}
 \begin{document}
 \input{input.tikz}
 \end{document}
 `
+
+// tikzExtraPackages 是 "内容特征 → 需要额外加载的 LaTeX 包" 探测表。
+// 顺序即 \usepackage 的加载顺序; 命中特征说明 tikzpicture 用到了该包的命令/环境。
+var tikzExtraPackages = []struct{ marker, pkg string }{
+	{`\tkz`, "tkz-euclide"}, // \tkzDefPoint, \tkzDrawPoints, \tkzLabelPoints 等
+	{`\begin{tikzcd}`, "tikz-cd"},
+	{`\tikzcdset`, "tikz-cd"},
+	{`\begin{axis}`, "pgfplots"},
+	{`\begin{semilogxaxis}`, "pgfplots"},
+	{`\begin{semilogyaxis}`, "pgfplots"},
+	{`\begin{loglogaxis}`, "pgfplots"},
+	{`\begin{polaraxis}`, "pgfplots"},
+	{`\addplot`, "pgfplots"},
+	{`\pgfplotsset`, "pgfplots"},
+	{`\begin{circuitikz}`, "circuitikz"},
+	{`\begin{forest}`, "forest"},
+	{`\tdplotsetmaincoords`, "tikz-3dplot"},
+	{`\tdplotsetrotatedcoords`, "tikz-3dplot"},
+	{`\smartdiagram`, "smartdiagram"},
+	{`\begin{venndiagram}`, "venndiagram"},
+}
+
+// detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。
+func detectTikzPackages(content string) []string {
+	var pkgs []string
+	seen := make(map[string]bool)
+	for _, e := range tikzExtraPackages {
+		if !strings.Contains(content, e.marker) || seen[e.pkg] {
+			continue
+		}
+		seen[e.pkg] = true
+		pkgs = append(pkgs, e.pkg)
+	}
+	return pkgs
+}
+
+// userPackageRe 匹配行首的 \usepackage{...} (可带可选参数), 连同行尾换行。
+var userPackageRe = regexp.MustCompile(`(?m)^[ \t]*\\usepackage(?:\[[^]]*\])?\{([^}]*)\}[ \t]*\r?\n?`)
+
+// extractUserPackages 提取输入中显式出现的 \usepackage 行并提升到 preamble,
+// 返回提取的包名列表与剩余内容——未知包可以通过这个兜底入口加载。
+func extractUserPackages(content string) ([]string, string) {
+	var pkgs []string
+	for _, m := range userPackageRe.FindAllStringSubmatch(content, -1) {
+		for _, name := range strings.Split(m[1], ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				pkgs = append(pkgs, name)
+			}
+		}
+	}
+	return pkgs, userPackageRe.ReplaceAllString(content, "")
+}
+
+// mergeTikzPackages 合并显式包与自动探测包, 保持顺序并去重 (显式优先)。
+func mergeTikzPackages(explicit, detected []string) []string {
+	seen := make(map[string]bool)
+	var pkgs []string
+	for _, p := range append(explicit, detected...) {
+		if !seen[p] {
+			seen[p] = true
+			pkgs = append(pkgs, p)
+		}
+	}
+	return pkgs
+}
+
+// tikzPackageLines 把包名列表渲染成 \usepackage 行; 空列表返回空串。
+func tikzPackageLines(pkgs []string) string {
+	if len(pkgs) == 0 {
+		return ""
+	}
+	lines := make([]string, len(pkgs))
+	for i, p := range pkgs {
+		lines[i] = `\usepackage{` + p + `}`
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
 
 // 匹配 \usetikzlibrary{...} 及其行尾换行, 避免替换后留下空行。
 var usetikzlibraryRe = regexp.MustCompile(`\\usetikzlibrary\{[^}]*\}\r?\n?`)
@@ -135,6 +217,10 @@ func renderTikz(inFile, outFile string) (err error) {
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
+	// 提升显式 \usepackage + 自动探测内容所需的包 (tkz-euclide / tikz-cd 等)。
+	raw := string(content)
+	explicitPkgs, raw := extractUserPackages(raw)
+	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw))
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
 		return fmt.Errorf("resolving output path: %w", err)
@@ -155,10 +241,10 @@ func renderTikz(inFile, outFile string) (err error) {
 	if font == "" {
 		font = "Noto Sans CJK SC"
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"), []byte(normalizeTikz(string(content))), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"), []byte(normalizeTikz(raw)), 0644); err != nil {
 		return fmt.Errorf("writing input.tikz: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"), []byte(fmt.Sprintf(tikzWrapper, font)), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"), []byte(fmt.Sprintf(tikzWrapper, tikzPackageLines(pkgs), font)), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
