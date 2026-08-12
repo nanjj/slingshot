@@ -129,9 +129,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdJaeger{global: global}).command(),
 		(&cmdI18n{global: global}).command(),
 		(&cmdCode{global: global}).command(),
+		(&cmdTikz{global: global}).command(),
 	)
-
-
 
 	// 处理 version 标志
 	rootCmd.SetVersionTemplate("slingshot v0.3.1\n")

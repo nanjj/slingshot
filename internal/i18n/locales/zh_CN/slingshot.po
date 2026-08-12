@@ -939,3 +939,15 @@ msgstr "公式处理：auto（SVG 优先，MathJax 渲染；PNG 兜底，tectoni
 
 msgid "Set the translation (msgstr) for a single msgid in a locale's .po file.\n\nThis is the precise, one-at-a-time translation command.  It handles\n.po escaping correctly for all edge cases — multi-line entries,\nembedded quotes, backslashes, and newlines all round-trip faithfully.\n\nThe --msgid and --msgstr values must be given in .po-escaped form:\n  \\\\   →  literal backslash\n  \\\"   →  literal double-quote\n  \\n   →  newline\n\nTo copy the exact msgid from a .po file, take the string content\nbetween the quotes of the msgid line (including any \\n, \\\\, \\\" escapes).\n\nExamples:\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\\nLine2\" --msgstr \"行1\\n行2\"\n\nWorkflow:\n  1. slingshot i18n check <locale>       — list untranslated entries\n  2. slingshot i18n show <locale> <id>   — inspect a specific entry\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<translation>\""
 msgstr "为某个 locale 的 .po 文件中的单个 msgid 设置翻译（msgstr）。\n\n这是精确的一次翻译一个条目的命令。它能正确处理所有边界情况的\n.po 转义——多行条目、嵌入引号、反斜杠和换行符都能正确往返。\n\n--msgid 和 --msgstr 值必须使用 .po 转义格式：\n  \\   →  字面反斜杠\n  \"   →  字面双引号\n  \n   →  换行符\n\n要从 .po 文件中复制确切的 msgid，取 msgid 行引号之间的字符串内容\n（包括任何 \n、\\、\" 转义）。\n\n示例：\n  slingshot i18n translate zh_CN --msgid \"Hello\" --msgstr \"你好\"\n  slingshot i18n translate zh_CN --msgid \"Error: %v\" --msgstr \"错误：%v\"\n  slingshot i18n translate zh_CN --msgid \"Line1\nLine2\" --msgstr \"行1\n行2\"\n\n工作流：\n  1. slingshot i18n check <locale>       — 列出未翻译条目\n  2. slingshot i18n show <locale> <id>   — 查看特定条目\n  3. slingshot i18n translate <locale> \\\n      --msgid \"<exact msgid>\" --msgstr \"<翻译>\""
+
+msgid "Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).\n\nThe input file may contain a full tikzpicture environment or just the\ncommands inside it — a tikzpicture wrapper is added automatically when\nmissing. \\usetikzlibrary lines are hoisted above the environment.\n\nThe output format is determined by the output file extension.\nPipeline: tectonic -> PDF -> mutool / ghostscript rasterization.\nChinese (CJK) text is supported via xeCJK; the font can be overridden\nwith the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).\n\nExamples:\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
+msgstr "将 TikZ 片段渲染为图片文件（.png / .jpg / .svg / .pdf）。\n\n输入文件可包含完整的 tikzpicture 环境，也可以只包含环境内的命令——缺失时自动补一层 tikzpicture 包装。\\usetikzlibrary 行会被提升到环境之外。\n\n输出格式由输出文件扩展名决定。\n管线：tectonic -> PDF -> mutool / ghostscript 光栅化。\n中文（CJK）文本通过 xeCJK 支持；可通过 TIKZ_CJK_FONT 环境变量覆盖字体（默认：Noto Sans CJK SC）。\n\n示例：\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
+
+msgid "Render a TikZ snippet to png/jpg/svg/pdf"
+msgstr "将 TikZ 片段渲染为 png/jpg/svg/pdf"
+
+msgid "Wrote"
+msgstr "已写入"
+
+msgid "expected IN-FILE and OUT-FILE arguments"
+msgstr "需要 IN-FILE 和 OUT-FILE 两个参数"
