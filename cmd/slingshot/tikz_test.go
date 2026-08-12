@@ -32,6 +32,26 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\usetikzlibrary{arrows.meta}\n\\usetikzlibrary{calc}\n\\node at (0,0) {a};",
 			want:  "\\usetikzlibrary{arrows.meta}\n\\usetikzlibrary{calc}\n\\begin{tikzpicture}\n\\node at (0,0) {a};\n\\end{tikzpicture}\n",
 		},
+		{
+			name:  "circuitikz environment passed through, not nested",
+			input: "\\begin{circuitikz}\n\\draw (0,0) to[V=1V] (0,2);\n\\end{circuitikz}\n",
+			want:  "\\begin{circuitikz}\n\\draw (0,0) to[V=1V] (0,2);\n\\end{circuitikz}\n",
+		},
+		{
+			name:  "tikzcd environment passed through, not nested",
+			input: "\\begin{tikzcd}\nA \\arrow[r] & B\n\\end{tikzcd}\n",
+			want:  "\\begin{tikzcd}\nA \\arrow[r] & B\n\\end{tikzcd}\n",
+		},
+		{
+			name:  "forest environment passed through, not nested",
+			input: "\\begin{forest}\n[A [B]]\n\\end{forest}\n",
+			want:  "\\begin{forest}\n[A [B]]\n\\end{forest}\n",
+		},
+		{
+			name:  "axis still wrapped (needs tikzpicture)",
+			input: "\\begin{axis}\\addplot {x};\n\\end{axis}",
+			want:  "\\begin{tikzpicture}\n\\begin{axis}\\addplot {x};\n\\end{axis}\n\\end{tikzpicture}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

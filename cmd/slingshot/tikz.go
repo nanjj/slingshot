@@ -135,7 +135,7 @@ var userPackageRe = regexp.MustCompile(`(?m)^[ \t]*\\usepackage(?:\[[^]]*\])?\{(
 func extractUserPackages(content string) ([]string, string) {
 	var pkgs []string
 	for _, m := range userPackageRe.FindAllStringSubmatch(content, -1) {
-		for _, name := range strings.Split(m[1], ",") {
+		for name := range strings.SplitSeq(m[1], ",") {
 			if name = strings.TrimSpace(name); name != "" {
 				pkgs = append(pkgs, name)
 			}
@@ -172,12 +172,26 @@ func tikzPackageLines(pkgs []string) string {
 // 匹配 \usetikzlibrary{...} 及其行尾换行, 避免替换后留下空行。
 var usetikzlibraryRe = regexp.MustCompile(`\\usetikzlibrary\{[^}]*\}\r?\n?`)
 
-// normalizeTikz 保证输入包含完整的 tikzpicture 环境:
-// 已有环境则原样返回; 否则补一层, 并把 \usetikzlibrary 提到环境外
+// tikzSelfContainedEnvs 是自身即为完整 TikZ 环境的顶层环境。
+// circuitikz / tikzcd / forest 内部都会再开 tikzpicture，
+// 把它们包进外层 tikzpicture 会造成嵌套错误 (内容缺失/布局错乱)。
+// 注意: axis / venndiagram 等不是自包含环境, 必须在 tikzpicture 内, 不能加入。
+var tikzSelfContainedEnvs = []string{
+	`\begin{tikzpicture}`,
+	`\begin{circuitikz}`,
+	`\begin{tikzcd}`,
+	`\begin{forest}`,
+}
+
+// normalizeTikz 保证输入包含完整的环境:
+// 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
+// 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
 // (它在 document body 中有效, 但在 tikzpicture 内行为不受保证)。
 func normalizeTikz(content string) string {
-	if strings.Contains(content, `\begin{tikzpicture}`) {
-		return content
+	for _, env := range tikzSelfContainedEnvs {
+		if strings.Contains(content, env) {
+			return content
+		}
 	}
 	var libs []string
 	content = usetikzlibraryRe.ReplaceAllStringFunc(content, func(m string) string {
@@ -241,10 +255,13 @@ func renderTikz(inFile, outFile string) (err error) {
 	if font == "" {
 		font = "Noto Sans CJK SC"
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"), []byte(normalizeTikz(raw)), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
+		[]byte(normalizeTikz(raw)), 0644); err != nil {
 		return fmt.Errorf("writing input.tikz: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"), []byte(fmt.Sprintf(tikzWrapper, tikzPackageLines(pkgs), font)), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
+		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs),
+			font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
