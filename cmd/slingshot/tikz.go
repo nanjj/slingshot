@@ -79,18 +79,103 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 
 // tikzWrapper 是 tectonic 编译用的 standalone 模板。
 // 第一个 %s 是额外加载的包 (由输入内容自动探测, 可为空)，
-// 第二个 %s 是 CJK 字体名 (由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
+// 第二个 %s 是兼容 shim (如旧版 circuitikz 的 buzzer 元件, 可为空)，
+// 第三个 %s 是 CJK 字体名 (由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
 const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{amsmath}
-%s\usepackage{fontspec}
+%s%s\usepackage{fontspec}
 \usepackage{xeCJK}
 \setCJKmainfont{%s}
 \begin{document}
 \input{input.tikz}
 \end{document}
 `
+
+// tikzBuzzerShim 为旧版 circuitikz 补齐 buzzer / rbuzzer 双端元件。
+// buzzer (蜂鸣器) 是 circuitikz 1.5.0 才加入的元件, tectonic bundle 自带的
+// 1.4.6 不认识 /tikz/buzzer key; 底层的 \pgfcircdeclarebipolescaled /
+// \pgfcirc@activate@bipole@simple 宏 1.4.6 已有, 因此直接复用新版定义即可。
+// 双重守卫: \ifcsname ctikzset 要求 circuitikz 已加载;
+// \pgfkeysifdefined{/tikz/buzzer} 保证未来 bundle 升级后不重复定义。
+const tikzBuzzerShim = `\makeatletter
+\ifcsname ctikzset\endcsname
+\pgfkeysifdefined{/tikz/buzzer}{}{%
+\ctikzset{bipoles/buzzer/height/.initial=0.6}
+\ctikzset{bipoles/buzzer/width/.initial=.4}%
+\ctikzset{bipoles/buzzer/span/.initial=.6}%
+
+\pgfcircdeclarebipolescaled{misc}
+{}
+{0}
+{buzzer}
+{\ctikzvalof{bipoles/buzzer/height}}
+{\ctikzvalof{bipoles/buzzer/width}}{
+    \pgf@circ@res@other=\dimexpr\pgf@circ@res@up-\pgf@circ@res@right\relax
+    \pgfscope
+        \pgf@circ@setlinewidth{bipoles}{\pgfstartlinewidth}
+        \pgfpathmoveto{\pgfpoint{\pgf@circ@res@left}{\pgf@circ@res@other}}
+        \pgfpathlineto{\pgfpoint{\pgf@circ@res@right}{\pgf@circ@res@other}}
+        \pgfpatharc{0}{180}{\pgf@circ@res@right}
+        \pgfpathclose
+        \pgf@circ@draworfill
+    \endpgfscope
+    \pgfpathmoveto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@left}{\pgf@circ@res@other}}
+    \pgfpathlineto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@left}{0pt}}
+    \pgfpathlineto{\pgfpoint{\pgf@circ@res@left}{0pt}}
+    \pgfpathmoveto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@right}{\pgf@circ@res@other}}
+    \pgfpathlineto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@right}{0pt}}
+    \pgfpathlineto{\pgfpoint{\pgf@circ@res@right}{0pt}}
+    \pgfusepath{draw}
+}
+\pgfcirc@activate@bipole@simple{l}{buzzer}
+
+\pgfcircdeclarebipolescaled{misc}
+{}
+{0}
+{rbuzzer}
+{\ctikzvalof{bipoles/buzzer/height}}
+{\ctikzvalof{bipoles/buzzer/width}}{
+    \pgf@circ@res@other=\dimexpr\pgf@circ@res@up-\pgf@circ@res@right\relax
+    \pgfmathsetlength\pgf@circ@res@temp{\pgf@circ@res@up-
+        \pgf@circ@res@right*sqrt(1-\ctikzvalof{bipoles/buzzer/span}*\ctikzvalof{bipoles/buzzer/span})}
+    \pgfscope
+        \pgf@circ@setlinewidth{bipoles}{\pgfstartlinewidth}
+        \pgfpathmoveto{\pgfpoint{\pgf@circ@res@left}{\pgf@circ@res@up}}
+        \pgfpathlineto{\pgfpoint{\pgf@circ@res@right}{\pgf@circ@res@up}}
+        \pgfpatharc{0}{-180}{\pgf@circ@res@right}
+        \pgfpathclose
+        \pgf@circ@draworfill
+    \endpgfscope
+    \pgfpathmoveto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@left}{\pgf@circ@res@temp}}
+    \pgfpathlineto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@left}{0pt}}
+    \pgfpathlineto{\pgfpoint{\pgf@circ@res@left}{0pt}}
+    \pgfpathmoveto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@right}{\pgf@circ@res@temp}}
+    \pgfpathlineto{\pgfpoint{\ctikzvalof{bipoles/buzzer/span}*\pgf@circ@res@right}{0pt}}
+    \pgfpathlineto{\pgfpoint{\pgf@circ@res@right}{0pt}}
+    \pgfusepath{draw}
+}
+\pgfcirc@activate@bipole@simple{l}{rbuzzer}
+}
+\fi
+\makeatother`
+
+// buzzerBipoleRe 匹配 circuitikz 的 buzzer / rbuzzer 双端元件用法。
+var buzzerBipoleRe = regexp.MustCompile(`to\[\s*r?buzzer\b`)
+
+// circuitikzBuzzerShim 检测输入是否用到 buzzer 元件, 命中时返回兼容 shim。
+// 注释行中的用法不触发 (LaTeX 中 % 到行尾都是注释)。
+func circuitikzBuzzerShim(content string) string {
+	for _, m := range buzzerBipoleRe.FindAllStringIndex(content, -1) {
+		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
+		if strings.Contains(content[lineStart:m[0]], "%") {
+			continue
+		}
+		return tikzBuzzerShim + "\n"
+	}
+	return ""
+}
 
 // tikzExtraPackages 是 "内容特征 → 需要额外加载的 LaTeX 包" 探测表。
 // 顺序即 \usepackage 的加载顺序; 命中特征说明 tikzpicture 用到了该包的命令/环境。
@@ -261,7 +346,7 @@ func renderTikz(inFile, outFile string) (err error) {
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs),
-			font), 0644); err != nil {
+			circuitikzBuzzerShim(raw), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 

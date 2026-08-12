@@ -298,6 +298,51 @@ func TestMergeTikzPackages(t *testing.T) {
 	}
 }
 
+func TestCircuitikzBuzzerShim(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string // "" = no shim
+	}{
+		{name: "no buzzer", content: "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"},
+		{
+			name:    "buzzer bipole",
+			content: "\\begin{circuitikz}\n\\draw (0,3) to[buzzer, a=Buzzer] (0,5);\n\\end{circuitikz}",
+			want:    tikzBuzzerShim + "\n",
+		},
+		{
+			name:    "reversed buzzer",
+			content: "\\draw (0,0) to[rbuzzer] (2,0);",
+			want:    tikzBuzzerShim + "\n",
+		},
+		{
+			name:    "whitespace before name",
+			content: "\\draw (0,0) to[ rbuzzer ] (2,0);",
+			want:    tikzBuzzerShim + "\n",
+		},
+		{
+			name:    "buzzer label only not a bipole",
+			content: "\\draw (0,0) to[R, a=Buzzer] (2,0);",
+		},
+		{
+			name:    "commented out usage ignored",
+			content: "% \\draw (0,0) to[buzzer] (2,0);\n\\draw (0,0) to[R] (2,0);",
+		},
+		{
+			name:    "inline comment after real usage still triggers",
+			content: "\\draw (0,0) to[buzzer] (2,0); % buzzer comment",
+			want:    tikzBuzzerShim + "\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := circuitikzBuzzerShim(tt.content); got != tt.want {
+				t.Errorf("circuitikzBuzzerShim() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTikzPackageLines(t *testing.T) {
 	if got := tikzPackageLines(nil); got != "" {
 		t.Errorf("tikzPackageLines(nil) = %q, want empty", got)
