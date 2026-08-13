@@ -162,6 +162,47 @@ const tikzBuzzerShim = `\makeatletter
 \fi
 \makeatother`
 
+// tikzSiunitxShim 为 siunitx v3 补齐在 \si 外独立使用单位命令的能力。
+// v3 中 \micro 等单位命令只在 \si{...} 内可用, 单独出现会展开为 \ERROR
+// (circuitikz 标签 l=10<\micro\farad> 是 siunitx v2 时代的惯用写法)。
+// 前缀命令 (micro/nano/...) 直接输出符号, 单位命令 (farad/ohm/...) 委托
+// \si{...} 排版; \si / \SI 正规用法不受影响 (v3 在 \si 内部会临时覆盖定义)。
+// 双重守卫: \ifcsname 分支兼容已定义 (v2/v3) 与未定义两种情况。
+const tikzSiunitxShim = `\makeatletter
+\newcommand{\tikzsiunitx@alias}[2]{%
+  \ifcsname #1\endcsname
+    \expandafter\RenewDocumentCommand\csname #1\endcsname{}{#2}%
+  \else
+    \expandafter\NewDocumentCommand\csname #1\endcsname{}{#2}%
+  \fi}
+\tikzsiunitx@alias{micro}{\ensuremath{\mathrm{\mu}}}
+\tikzsiunitx@alias{nano}{\ensuremath{\mathrm{n}}}
+\tikzsiunitx@alias{pico}{\ensuremath{\mathrm{p}}}
+\tikzsiunitx@alias{milli}{\ensuremath{\mathrm{m}}}
+\tikzsiunitx@alias{kilo}{\ensuremath{\mathrm{k}}}
+\tikzsiunitx@alias{mega}{\ensuremath{\mathrm{M}}}
+\tikzsiunitx@alias{giga}{\ensuremath{\mathrm{G}}}
+\tikzsiunitx@alias{farad}{\si{\farad}}
+\tikzsiunitx@alias{ohm}{\si{\ohm}}
+\tikzsiunitx@alias{henry}{\si{\henry}}
+\tikzsiunitx@alias{volt}{\si{\volt}}
+\tikzsiunitx@alias{ampere}{\si{\ampere}}
+\tikzsiunitx@alias{metre}{\si{\metre}}
+\tikzsiunitx@alias{second}{\si{\second}}
+\tikzsiunitx@alias{hertz}{\si{\hertz}}
+\makeatother
+`
+
+// siunitxAliasShim 检测到 siunitx 包时返回兼容 shim, 否则返回空串。
+func siunitxAliasShim(pkgs []string) string {
+	for _, p := range pkgs {
+		if p == "siunitx" {
+			return tikzSiunitxShim
+		}
+	}
+	return ""
+}
+
 // buzzerBipoleRe 匹配 circuitikz 的 buzzer / rbuzzer 双端元件用法。
 var buzzerBipoleRe = regexp.MustCompile(`to\[\s*r?buzzer\b`)
 
@@ -250,6 +291,13 @@ var tikzExtraPackageRes = []struct {
 	re  *regexp.Regexp
 	pkg string
 }{
+	// siunitx: \micro \farad \ohm 等前缀/单位命令只能由 siunitx 提供,
+	// circuitikz 标签 l=10<\micro\farad> 是典型用法。\b 边界排除内核命令:
+	// \sin \sigma \sim 不是 \si, \number \numexpr 不是 \num, \unitlength 不是 \unit。
+	{regexp.MustCompile(`\\(?:micro|nano|pico|milli|kilo|mega|giga|farad|ohm|henry|volt|ampere|metre|second|hertz)\b`), "siunitx"},
+	{regexp.MustCompile(`\\(?:SI|si|num|qty|unit|sisetup)\b`), "siunitx"},
+	// \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
+	// 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
 	{regexp.MustCompile(`\\up(?:alpha|beta|gamma|delta|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega)\b`), "upgreek"},
 }
 
@@ -410,7 +458,7 @@ func renderTikz(inFile, outFile string) (err error) {
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs),
-			tikzLibraryLines(libs), circuitikzBuzzerShim(raw), font), 0644); err != nil {
+			tikzLibraryLines(libs), circuitikzBuzzerShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 

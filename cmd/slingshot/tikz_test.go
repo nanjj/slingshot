@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -199,6 +200,56 @@ func TestDetectTikzPackages(t *testing.T) {
 			want:    []string{"upgreek"},
 		},
 		{
+			name:    "siunitx micro farad in circuitikz label",
+			content: "\\draw (0,0) to[C, l=10<\\micro\\farad>] (0,2);",
+			want:    []string{"siunitx"},
+		},
+		{
+			name:    "siunitx prefix command",
+			content: "\\draw (0,0) to[R, l=1<\\kilo\\ohm>] (2,0);",
+			want:    []string{"siunitx"},
+		},
+		{
+			name:    "siunitx SI command",
+			content: "\\node at (0,0) {\\SI{10}{\\micro\\farad}};",
+			want:    []string{"siunitx"},
+		},
+		{
+			name:    "siunitx si command",
+			content: "\\node at (0,0) {\\si{\\ohm}};",
+			want:    []string{"siunitx"},
+		},
+		{
+			name:    "siunitx setup",
+			content: "\\sisetup{detect-all}\n\\draw (0,0);",
+			want:    []string{"siunitx"},
+		},
+		{
+			name:    "siunitx num qty unit",
+			content: "\\node {\\num{3.14}, \\qty{10}{\\farad}, \\unit{\\ohm}};",
+			want:    []string{"siunitx"},
+		},
+		{
+			name:    "sin is kernel not siunitx",
+			content: "\\node at (0,0) {$\\sin x$};",
+		},
+		{
+			name:    "sigma and sim are kernel not siunitx",
+			content: "\\node at (0,0) {$\\sigma \\sim \\mu$};",
+		},
+		{
+			name:    "number and numexpr are kernel not siunitx",
+			content: "\\node at (0,0) {\\number\\value{page}, \\numexpr 1+2\\relax};",
+		},
+		{
+			name:    "unitlength is kernel not siunitx",
+			content: "\\setlength{\\unitlength}{1cm}\n\\begin{picture}(2,2)\\end{picture}",
+		},
+		{
+			name:    "plain text micro not siunitx",
+			content: "\\node at (0,0) {microcontroller};",
+		},
+		{
 			name:    "upgreek other letters",
 			content: "\\node {$\\upalpha, \\upomega$};",
 			want:    []string{"upgreek"},
@@ -362,6 +413,21 @@ func TestTikzLibraryLines(t *testing.T) {
 	}
 	if got := tikzLibraryLines([]string{"fit", "calc"}); got != "\\usetikzlibrary{fit,calc}\n" {
 		t.Errorf("tikzLibraryLines multiple = %q", got)
+	}
+}
+
+func TestSiunitxAliasShim(t *testing.T) {
+	if got := siunitxAliasShim(nil); got != "" {
+		t.Errorf("siunitxAliasShim(nil) = %q, want empty", got)
+	}
+	if got := siunitxAliasShim([]string{"circuitikz"}); got != "" {
+		t.Errorf("siunitxAliasShim(no siunitx) = %q, want empty", got)
+	}
+	got := siunitxAliasShim([]string{"circuitikz", "siunitx"})
+	for _, want := range []string{`\newcommand{\tikzsiunitx@alias}[2]`, `\tikzsiunitx@alias{micro}`, `\tikzsiunitx@alias{farad}{\si{\farad}}`, `\tikzsiunitx@alias{ohm}{\si{\ohm}}`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("siunitxAliasShim() missing %q in:\n%s", want, got)
+		}
 	}
 }
 
