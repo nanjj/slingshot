@@ -492,6 +492,46 @@ func TestCircuitikzBuzzerShim(t *testing.T) {
 	}
 }
 
+func TestCircuitikzMotorShim(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string // "" = no shim
+	}{
+		{name: "no motor", content: "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"},
+		{
+			name:    "motor bipole",
+			content: "\\begin{circuitikz}\n\\draw (0,3) to[motor, l=电动机] (0,5);\n\\end{circuitikz}",
+			want:    tikzMotorShim + "\n",
+		},
+		{
+			name:    "whitespace before name",
+			content: "\\draw (0,0) to[ motor ] (2,0);",
+			want:    tikzMotorShim + "\n",
+		},
+		{
+			name:    "motorcycle not a bipole",
+			content: "\\draw (0,0) to[motorcycle] (2,0);",
+		},
+		{
+			name:    "commented out usage ignored",
+			content: "% \\draw (0,0) to[motor] (2,0);\n\\draw (0,0) to[R] (2,0);",
+		},
+		{
+			name:    "inline comment after real usage still triggers",
+			content: "\\draw (0,0) to[motor] (2,0); % motor comment",
+			want:    tikzMotorShim + "\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := circuitikzMotorShim(tt.content); got != tt.want {
+				t.Errorf("circuitikzMotorShim() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTikzPackageLines(t *testing.T) {
 	if got := tikzPackageLines(nil, false); got != "" {
 		t.Errorf("tikzPackageLines(nil) = %q, want empty", got)

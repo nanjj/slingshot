@@ -162,6 +162,45 @@ const tikzBuzzerShim = `\makeatletter
 \fi
 \makeatother`
 
+// tikzMotorShim 为旧版 circuitikz 补齐 motor (电动机: 圆圈 + M) 双端元件。
+// circuitikz 只有 elmech (矩形穿圆) 的机电抽象符号, 没有教科书式
+// "圆圈内一个 M" 的电动机符号; 以 ammeter (圆 + A, 仪表) 为模板定制:
+// 左右接线 + 圆圈 + 加粗 M, 去掉 ammeter 的指针箭头。
+// 双重守卫: \ifcsname ctikzset 要求 circuitikz 已加载;
+// \pgfkeysifdefined{/tikz/motor} 保证未来 bundle 升级后不重复定义。
+const tikzMotorShim = `\makeatletter
+\ifcsname ctikzset\endcsname
+\pgfkeysifdefined{/tikz/motor}{}{%
+\ctikzset{bipoles/motor/height/.initial=.60}
+\ctikzset{bipoles/motor/width/.initial=.60}%
+
+\pgfcircdeclarebipolescaled{instruments}
+{}
+{\ctikzvalof{bipoles/motor/height}}
+{motor}
+{\ctikzvalof{bipoles/motor/height}}
+{\ctikzvalof{bipoles/motor/width}}
+{
+    % draw connections to circle
+    \pgfpathmoveto{\pgfpoint{\pgf@circ@res@left}{\pgf@circ@res@zero}}
+    \pgfpathlineto{\pgfpoint{.9\pgf@circ@res@left}{\pgf@circ@res@zero}}
+    \pgfpathmoveto{\pgfpoint{.9\pgf@circ@res@right}{\pgf@circ@res@zero}}
+    \pgfpathlineto{\pgfpoint{\pgf@circ@res@right}{\pgf@circ@res@zero}}
+    \pgfusepath{draw}
+    % draw circle
+    \pgfscope
+        \pgf@circ@setlinewidth{bipoles}{\pgfstartlinewidth}
+        \pgfpathcircle{\pgfpointorigin}{.9\pgf@circ@res@up}
+        \pgf@circ@draworfill
+    \endpgfscope
+    % draw M
+    \pgfnode{circle}{center}{\pgf@circ@font@bold{M}}{}{}
+}
+\pgfcirc@activate@bipole@simple{l}{motor}
+}
+\fi
+\makeatother`
+
 // tikzSiunitxShim 为 siunitx v3 补齐在 \si 外独立使用单位命令的能力。
 // v3 中 \micro 等单位命令只在 \si{...} 内可用, 单独出现会展开为 \ERROR
 // (circuitikz 标签 l=10<\micro\farad> 是 siunitx v2 时代的惯用写法)。
@@ -215,6 +254,23 @@ func circuitikzBuzzerShim(content string) string {
 			continue
 		}
 		return tikzBuzzerShim + "\n"
+	}
+	return ""
+}
+
+// motorBipoleRe 匹配 circuitikz 的 motor 双端元件用法。
+// circuitikz 上游没有 motor 元件 (圆 + M), 由 tikzMotorShim 定制补齐。
+var motorBipoleRe = regexp.MustCompile(`to\[\s*motor\b`)
+
+// circuitikzMotorShim 检测输入是否用到 motor 元件, 命中时返回定制 shim。
+// 注释行中的用法不触发 (LaTeX 中 % 到行尾都是注释)。
+func circuitikzMotorShim(content string) string {
+	for _, m := range motorBipoleRe.FindAllStringIndex(content, -1) {
+		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
+		if strings.Contains(content[lineStart:m[0]], "%") {
+			continue
+		}
+		return tikzMotorShim + "\n"
 	}
 	return ""
 }
@@ -596,7 +652,7 @@ func renderTikz(inFile, outFile string) (err error) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
 			tikzLibraryLines(libs),
-			circuitikzBuzzerShim(raw)+circuitikzIecShim(raw)+circuitikzConverterShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
+			circuitikzBuzzerShim(raw)+circuitikzMotorShim(raw)+circuitikzIecShim(raw)+circuitikzConverterShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
