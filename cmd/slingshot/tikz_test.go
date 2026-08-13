@@ -193,6 +193,24 @@ func TestDetectTikzPackages(t *testing.T) {
 			content: "\\smartdiagram[bubble diagram]{A, B}",
 			want:    []string{"smartdiagram"},
 		},
+		{
+			name:    "upgreek upright mu",
+			content: "\\node {$\\upmu$C};",
+			want:    []string{"upgreek"},
+		},
+		{
+			name:    "upgreek other letters",
+			content: "\\node {$\\upalpha, \\upomega$};",
+			want:    []string{"upgreek"},
+		},
+		{
+			name:    "uparrow is kernel not upgreek",
+			content: "\\node {$\\uparrow$};",
+		},
+		{
+			name:    "mu without up prefix",
+			content: "\\node {$\\mu$};",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -295,6 +313,55 @@ func TestMergeTikzPackages(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDetectTikzLibraries(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{name: "plain tikz no libraries", content: "\\draw (0,0) -- (1,1);"},
+		{name: "fit bounding box", content: "\\node[draw, fit=(a)(b)] {};", want: []string{"fit"}},
+		{name: "calc coordinate", content: "\\node at ($(a)!0.5!(b)$) {};", want: []string{"calc"}},
+		{name: "positioning", content: "\\node[right=of foo] {};", want: []string{"positioning"}},
+		{name: "arrows.meta", content: "\\draw[-Stealth] (0,0) -- (1,1);", want: []string{"arrows.meta"}},
+		{name: "arrows.meta braced", content: "\\draw[-{Latex[length=3pt]}] (0,0) -- (1,1);", want: []string{"arrows.meta"}},
+		{name: "arrows legacy", content: "\\draw[-stealth] (0,0) -- (1,1);", want: []string{"arrows"}},
+		{name: "patterns", content: "\\fill[pattern=north east lines] (0,0) rectangle (1,1);", want: []string{"patterns"}},
+		{name: "decorations", content: "\\draw[decorate, decoration={brace}] (0,0) -- (1,1);", want: []string{"decorations.pathreplacing"}},
+		{name: "quotes label", content: "\\draw (a) to[\"label\"] (b);", want: []string{"quotes"}},
+		{name: "shapes.geometric", content: "\\node[ellipse, draw] {};", want: []string{"shapes.geometric"}},
+		{name: "combined dedup and order", content: "\\node[fit=(a)(b)] {};\n\\node at ($(a)!0.5!(b)$) {};\n\\node[fit=(c)] {};", want: []string{"fit", "calc"}},
+		{name: "to path without dash not arrows", content: "\\draw (0,0) to (1,1);"},
+		{name: "node text LaTeX not arrows.meta", content: "\\node {LaTeX};"},
+		{name: "plain text fit not option", content: "\\node {a fit b};"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := detectTikzLibraries(tt.content)
+			if len(got) != len(tt.want) {
+				t.Fatalf("detectTikzLibraries() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("detectTikzLibraries() = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestTikzLibraryLines(t *testing.T) {
+	if got := tikzLibraryLines(nil); got != "" {
+		t.Errorf("tikzLibraryLines(nil) = %q, want empty", got)
+	}
+	if got := tikzLibraryLines([]string{"fit"}); got != "\\usetikzlibrary{fit}\n" {
+		t.Errorf("tikzLibraryLines single = %q", got)
+	}
+	if got := tikzLibraryLines([]string{"fit", "calc"}); got != "\\usetikzlibrary{fit,calc}\n" {
+		t.Errorf("tikzLibraryLines multiple = %q", got)
 	}
 }
 

@@ -78,14 +78,15 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 }
 
 // tikzWrapper 是 tectonic 编译用的 standalone 模板。
-// 第一个 %s 是额外加载的包 (由输入内容自动探测, 可为空)，
-// 第二个 %s 是兼容 shim (如旧版 circuitikz 的 buzzer 元件, 可为空)，
-// 第三个 %s 是 CJK 字体名 (由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
+// 四个 %s 依次为: 额外加载的包、自动探测的 tikz 库、兼容 shim、CJK 字体名
+// (后两者可为空; 字体由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
+// \usetikzlibrary 放在所有 \usepackage 之后、\begin{document} 之前,
+// 确保 fit / calc 等库在输入内容执行前生效。
 const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{amsmath}
-%s%s\usepackage{fontspec}
+%s%s%s\usepackage{fontspec}
 \usepackage{xeCJK}
 \setCJKmainfont{%s}
 \begin{document}
@@ -198,12 +199,73 @@ var tikzExtraPackages = []struct{ marker, pkg string }{
 	{`\begin{venndiagram}`, "venndiagram"},
 }
 
+// tikzExtraLibraries 是 "内容特征 → 需要额外加载的 tikz 库" 探测表。
+// 与 tikzExtraPackages 不同, 库特征更微妙 (fit= / ($ / right=of 等),
+// 因此用正则而非子串匹配; 顺序即 \usetikzlibrary 的加载顺序。
+// circuitikz 会顺带加载 calc / arrows.meta / bending / fpu,
+// 但 fit / positioning / patterns 等库必须显式加载。
+var tikzExtraLibraries = []struct {
+	re  *regexp.Regexp
+	lib string
+}{
+	{regexp.MustCompile(`\bfit\s*=`), "fit"}, // node[fit=(a)(b)] 包围盒
+	{regexp.MustCompile(`\(\$`), "calc"},     // ($(a)!0.5!(b)$) 坐标运算
+	{regexp.MustCompile(`\b(?:above|below|left|right)\s*=\s*of\b`), "positioning"},
+	{regexp.MustCompile(`-\{?(?:Stealth|Latex|Triangle|Circle|Square|Diamond|Kite|To)\b`), "arrows.meta"},
+	{regexp.MustCompile(`-\{?(?:stealth|latex|to|triangle)\b`), "arrows"},
+	{regexp.MustCompile(`\bpattern\s*=`), "patterns"},
+	{regexp.MustCompile(`\bdecorate\b|\bdecoration\s*=`), "decorations.pathreplacing"},
+	{regexp.MustCompile(`\bsnake\b`), "decorations.pathmorphing"},
+	{regexp.MustCompile(`\bname\s+intersections\b`), "intersections"},
+	{regexp.MustCompile(`(?:to|edge)\s*\["`), "quotes"},
+	{regexp.MustCompile(`node\s*\[[^\]]*\b(?:ellipse|diamond|cylinder|regular\s+polygon|star|cloud|trapezium)\b`), "shapes.geometric"},
+}
+
+// detectTikzLibraries 从输入内容推断需要的 tikz 库, 按表顺序收集、去重。
+func detectTikzLibraries(content string) []string {
+	var libs []string
+	seen := make(map[string]bool)
+	for _, e := range tikzExtraLibraries {
+		if !e.re.MatchString(content) || seen[e.lib] {
+			continue
+		}
+		seen[e.lib] = true
+		libs = append(libs, e.lib)
+	}
+	return libs
+}
+
+// tikzLibraryLines 把库名列表渲染成 \usetikzlibrary 行; 空列表返回空串。
+func tikzLibraryLines(libs []string) string {
+	if len(libs) == 0 {
+		return ""
+	}
+	return `\usetikzlibrary{` + strings.Join(libs, ",") + "}\n"
+}
+
+// tikzExtraPackageRes 是正则匹配的额外包探测——子串匹配无法精确表达的条目。
+// \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
+// 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
+var tikzExtraPackageRes = []struct {
+	re  *regexp.Regexp
+	pkg string
+}{
+	{regexp.MustCompile(`\\up(?:alpha|beta|gamma|delta|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega)\b`), "upgreek"},
+}
+
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。
 func detectTikzPackages(content string) []string {
 	var pkgs []string
 	seen := make(map[string]bool)
 	for _, e := range tikzExtraPackages {
 		if !strings.Contains(content, e.marker) || seen[e.pkg] {
+			continue
+		}
+		seen[e.pkg] = true
+		pkgs = append(pkgs, e.pkg)
+	}
+	for _, e := range tikzExtraPackageRes {
+		if !e.re.MatchString(content) || seen[e.pkg] {
 			continue
 		}
 		seen[e.pkg] = true
@@ -316,10 +378,12 @@ func renderTikz(inFile, outFile string) (err error) {
 	if err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
-	// 提升显式 \usepackage + 自动探测内容所需的包 (tkz-euclide / tikz-cd 等)。
+	// 提升显式 \usepackage + 自动探测内容所需的包和 tikz 库
+	// (tkz-euclide / circuitikz / fit / calc 等)。
 	raw := string(content)
 	explicitPkgs, raw := extractUserPackages(raw)
 	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw))
+	libs := detectTikzLibraries(raw)
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
 		return fmt.Errorf("resolving output path: %w", err)
@@ -346,7 +410,7 @@ func renderTikz(inFile, outFile string) (err error) {
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs),
-			circuitikzBuzzerShim(raw), font), 0644); err != nil {
+			tikzLibraryLines(libs), circuitikzBuzzerShim(raw), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
