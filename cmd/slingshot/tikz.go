@@ -219,6 +219,76 @@ func circuitikzBuzzerShim(content string) string {
 	return ""
 }
 
+// circuitEeIECRe 匹配 TikZ IEC 电路风格 tikzpicture[circuit ee IEC]。
+var circuitEeIECRe = regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`)
+
+// tikzIecShim 为 tectonic bundle 补齐 TikZ circuits.ee.IEC 库的 IEC 风格。
+// bundle 不含该库 (tikzlibrarycircuits.ee.IEC.code.tex 缺失), 但 circuitikz
+// 元件可以等价表达 IEC 符号: resistor→欧标矩形 (generic), diode→D,
+// capacitor→C, ... 元件 {name=R} 里的内容在 TikZ IEC 库中是节点选项
+// (命名节点), 所以 IEC 样式先以空标签展开后端, 再把参数当键列表原样传入。
+// 后端统一使用私有名 tikzcirciec@*, 普通 / [compatibility] 两种 circuitikz
+// 模式下内部路径宏都可用, 与自带的 * 样式互不干扰。
+// \pgfkeysifdefined{/tikz/circuit ee IEC} 守卫: 未来 bundle 带上真库时不覆盖。
+// 注意 \pgf@circ@emptydiode@path 是 1.4.6 默认 (empty diode) 的路径宏,
+// 即空心三角+横杠, 与 IEC 二极管一致; 其余路径宏由 activate@bipole 动态创建。
+const tikzIecShim = `\makeatletter
+\pgfkeysifdefined{/tikz/circuit ee IEC}{}{%
+  \tikzset{
+    tikzcirciec@resistor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bipole@path{generic}, l={#1}},
+    tikzcirciec@var resistor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bipole@path{tgeneric}, l={#1}},
+    tikzcirciec@diode/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@emptydiode@path, l={#1}},
+    tikzcirciec@inductor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@inductor@path, l={#1}},
+    tikzcirciec@capacitor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@capacitor@path, l={#1}},
+    tikzcirciec@battery/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@battery@path, l={#1}},
+    tikzcirciec@bulb/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bulb@path, l={#1}},
+    tikzcirciec@ammeter/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@ammeter@path, l={#1}},
+    tikzcirciec@voltmeter/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@voltmeter@path, l={#1}},
+    tikzcirciec@ohmmeter/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@ohmmeter@path, l={#1}},
+  }%
+  \tikzset{
+    circuit ee IEC/.style={},
+    resistor/.style={tikzcirciec@resistor={}, #1},
+    var resistor/.style={tikzcirciec@var resistor={}, #1},
+    diode/.style={tikzcirciec@diode={}, #1},
+    inductor/.style={tikzcirciec@inductor={}, #1},
+    capacitor/.style={tikzcirciec@capacitor={}, #1},
+    battery/.style={tikzcirciec@battery={}, #1},
+    bulb/.style={tikzcirciec@bulb={}, #1},
+    amperemeter/.style={tikzcirciec@ammeter={}, #1},
+    voltmeter/.style={tikzcirciec@voltmeter={}, #1},
+    ohmmeter/.style={tikzcirciec@ohmmeter={}, #1},
+  }%
+}
+\makeatother`
+
+// circuitikzIecShim 检测输入是否使用 circuit ee IEC 风格, 命中时返回 IEC shim。
+func circuitikzIecShim(content string) string {
+	if circuitEeIECRe.MatchString(content) {
+		return tikzIecShim + "\n"
+	}
+	return ""
+}
+
+// circuitikzCompatRe 匹配显式 \usepackage[compatibility]{circuitikz(git)}。
+// circuitikzgit 是本地开发包名 (bundle 里是 circuitikz), 同样按 compat 处理。
+var circuitikzCompatRe = regexp.MustCompile(`\\usepackage\s*\[\s*[^\]]*compatibility[^\]]*\]\s*\{circuitikz(?:git)?\}`)
+
+// circuitikzStarRe 匹配 circuitikz [compatibility] 的星号元件 to[*R=$R_1$]。
+// 与 to[*-*] / to[o-*] 等端点样式区分: * 后必须紧跟元件名 (字母)。
+var circuitikzStarRe = regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`)
+
+// circuitikzCompatDetected 判断 circuitikz 是否应以 [compatibility] 模式加载:
+// 内容中出现星号元件写法 (老式语法), 或显式写了 compatibility 选项。
+func circuitikzCompatDetected(content string) bool {
+	return circuitikzCompatRe.MatchString(content) || circuitikzStarRe.MatchString(content)
+}
+
+// usetikzlibraryIECRe 匹配 \usetikzlibrary{circuits.ee.IEC} 行 (含行尾换行)。
+// bundle 缺该库, IEC 组件由 tikzIecShim 提供, 显式加载行直接丢弃, 否则
+// tectonic 会报文件不存在。
+var usetikzlibraryIECRe = regexp.MustCompile(`(?m)^[ \t]*\\usetikzlibrary\{circuits\.ee\.IEC\}[ \t]*\r?\n?`)
+
 // tikzExtraPackages 是 "内容特征 → 需要额外加载的 LaTeX 包" 探测表。
 // 顺序即 \usepackage 的加载顺序; 命中特征说明 tikzpicture 用到了该包的命令/环境。
 var tikzExtraPackages = []struct{ marker, pkg string }{
@@ -299,6 +369,11 @@ var tikzExtraPackageRes = []struct {
 	// \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 	// 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
 	{regexp.MustCompile(`\\up(?:alpha|beta|gamma|delta|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega)\b`), "upgreek"},
+	// circuit ee IEC 是 TikZ circuits.ee.IEC 库提供的风格; bundle 缺该库,
+	// tikzIecShim 把它映射到 circuitikz 元件, 所以需要加载 circuitikz。
+	{regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`), "circuitikz"},
+	// to[*R=$R_1$] 是 circuitikz [compatibility] 的星号元件写法 (老式语法)。
+	{regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`), "circuitikz"},
 }
 
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。
@@ -332,6 +407,9 @@ func extractUserPackages(content string) ([]string, string) {
 	for _, m := range userPackageRe.FindAllStringSubmatch(content, -1) {
 		for name := range strings.SplitSeq(m[1], ",") {
 			if name = strings.TrimSpace(name); name != "" {
+				if name == "circuitikzgit" { // 本地开发包名, tectonic bundle 里是 circuitikz
+					name = "circuitikz"
+				}
 				pkgs = append(pkgs, name)
 			}
 		}
@@ -353,13 +431,18 @@ func mergeTikzPackages(explicit, detected []string) []string {
 }
 
 // tikzPackageLines 把包名列表渲染成 \usepackage 行; 空列表返回空串。
-func tikzPackageLines(pkgs []string) string {
+// compatCircuitikz 为真时 circuitikz 以 [compatibility] 加载 (星号元件语法)。
+func tikzPackageLines(pkgs []string, compatCircuitikz bool) string {
 	if len(pkgs) == 0 {
 		return ""
 	}
 	lines := make([]string, len(pkgs))
 	for i, p := range pkgs {
-		lines[i] = `\usepackage{` + p + `}`
+		if p == "circuitikz" && compatCircuitikz {
+			lines[i] = `\usepackage[compatibility]{circuitikz}`
+		} else {
+			lines[i] = `\usepackage{` + p + `}`
+		}
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
@@ -429,6 +512,9 @@ func renderTikz(inFile, outFile string) (err error) {
 	// 提升显式 \usepackage + 自动探测内容所需的包和 tikz 库
 	// (tkz-euclide / circuitikz / fit / calc 等)。
 	raw := string(content)
+	compat := circuitikzCompatDetected(raw)
+	// bundle 无 circuits.ee.IEC 库 (tikzIecShim 提供等价 IEC 组件), 丢弃显式加载行。
+	raw = usetikzlibraryIECRe.ReplaceAllString(raw, "")
 	explicitPkgs, raw := extractUserPackages(raw)
 	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw))
 	libs := detectTikzLibraries(raw)
@@ -457,8 +543,9 @@ func renderTikz(inFile, outFile string) (err error) {
 		return fmt.Errorf("writing input.tikz: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
-		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs),
-			tikzLibraryLines(libs), circuitikzBuzzerShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
+		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
+			tikzLibraryLines(libs),
+			circuitikzBuzzerShim(raw)+circuitikzIecShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 

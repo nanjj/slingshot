@@ -195,6 +195,16 @@ func TestDetectTikzPackages(t *testing.T) {
 			want:    []string{"smartdiagram"},
 		},
 		{
+			name:    "circuit ee IEC style",
+			content: "\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}",
+			want:    []string{"circuitikz"},
+		},
+		{
+			name:    "circuitikz compat star component",
+			content: "\\draw (0,0) to[*R=$R_1$] (1.5,0) to[*Tnpn] (3,0) to[*D](3,2);",
+			want:    []string{"circuitikz"},
+		},
+		{
 			name:    "upgreek upright mu",
 			content: "\\node {$\\upmu$C};",
 			want:    []string{"upgreek"},
@@ -313,6 +323,12 @@ func TestExtractUserPackages(t *testing.T) {
 			input:    "\\begin{tikzpicture}\n\\usepackage{weird}\n\\draw (0,0);\n\\end{tikzpicture}",
 			wantPkgs: []string{"weird"},
 			wantRest: "\\begin{tikzpicture}\n\\draw (0,0);\n\\end{tikzpicture}",
+		},
+		{
+			name:     "circuitikzgit normalized to circuitikz",
+			input:    "\\usepackage[compatibility]{circuitikzgit}\n\\draw (0,0);",
+			wantPkgs: []string{"circuitikz"},
+			wantRest: "\\draw (0,0);",
 		},
 		{
 			name:     "commented usepackage untouched",
@@ -477,14 +493,74 @@ func TestCircuitikzBuzzerShim(t *testing.T) {
 }
 
 func TestTikzPackageLines(t *testing.T) {
-	if got := tikzPackageLines(nil); got != "" {
+	if got := tikzPackageLines(nil, false); got != "" {
 		t.Errorf("tikzPackageLines(nil) = %q, want empty", got)
 	}
-	if got := tikzPackageLines([]string{"tkz-euclide"}); got != "\\usepackage{tkz-euclide}\n" {
+	if got := tikzPackageLines([]string{"tkz-euclide"}, false); got != "\\usepackage{tkz-euclide}\n" {
 		t.Errorf("tikzPackageLines single = %q", got)
 	}
 	want := "\\usepackage{a}\n\\usepackage{b}\n"
-	if got := tikzPackageLines([]string{"a", "b"}); got != want {
+	if got := tikzPackageLines([]string{"a", "b"}, false); got != want {
 		t.Errorf("tikzPackageLines multiple = %q, want %q", got, want)
+	}
+	if got := tikzPackageLines([]string{"circuitikz"}, false); got != "\\usepackage{circuitikz}\n" {
+		t.Errorf("tikzPackageLines plain circuitikz = %q", got)
+	}
+	if got := tikzPackageLines([]string{"circuitikz"}, true); got != "\\usepackage[compatibility]{circuitikz}\n" {
+		t.Errorf("tikzPackageLines compat circuitikz = %q", got)
+	}
+	wantCompat := "\\usepackage{a}\n\\usepackage[compatibility]{circuitikz}\n"
+	if got := tikzPackageLines([]string{"a", "circuitikz"}, true); got != wantCompat {
+		t.Errorf("tikzPackageLines mixed compat = %q, want %q", got, wantCompat)
+	}
+}
+
+func TestCircuitikzCompatDetected(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{name: "plain circuitikz env", content: "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"},
+		{name: "plain tikz", content: "\\draw (0,0) -- (1,1);"},
+		{name: "star resistor", content: "\\draw (0,0) to[*R=$R_1$] (1.5,0);", want: true},
+		{name: "star transistor", content: "\\draw (0,0) to[*Tnpn] (3,0);", want: true},
+		{name: "star with spaces", content: "\\draw (0,0) to [ *D ] (3,2);", want: true},
+		{name: "pole dots not star", content: "\\draw (0,0) to[*-*] (2,0);"},
+		{name: "pole dot at end", content: "\\draw (0,0) to[R, *-] (2,0);"},
+		{name: "explicit compat option", content: "\\usepackage[compatibility]{circuitikzgit}\n\\draw (0,0) to[*R] (2,0);", want: true},
+		{name: "explicit compat plain pkg", content: "\\usepackage[compatibility]{circuitikz}\n\\draw (0,0) to[R] (2,0);", want: true},
+		{name: "plain usepackage", content: "\\usepackage{circuitikz}\n\\draw (0,0) to[R] (2,0);"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := circuitikzCompatDetected(tt.content); got != tt.want {
+				t.Errorf("circuitikzCompatDetected() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCircuitikzIecShim(t *testing.T) {
+	if got := circuitikzIecShim("\\draw (0,0) -- (1,1);"); got != "" {
+		t.Errorf("circuitikzIecShim(plain) = %q, want empty", got)
+	}
+	if got := circuitikzIecShim("\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"); got != "" {
+		t.Errorf("circuitikzIecShim(circuitikz only) = %q, want empty", got)
+	}
+	got := circuitikzIecShim("\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}")
+	for _, want := range []string{
+		`\pgfkeysifdefined{/tikz/circuit ee IEC}`,
+		`circuit ee IEC/.style={}`,
+		`resistor/.style={tikzcirciec@resistor={}, #1}`,
+		`diode/.style={tikzcirciec@diode={}, #1}`,
+		`amperemeter/.style={tikzcirciec@ammeter={}, #1}`,
+		`\pgf@circ@emptydiode@path`,
+		`tikzcirciec@resistor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bipole@path{generic}, l={#1}}`,
+		`tikzcirciec@var resistor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bipole@path{tgeneric}, l={#1}}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("circuitikzIecShim() missing %q in:\n%s", want, got)
+		}
 	}
 }
