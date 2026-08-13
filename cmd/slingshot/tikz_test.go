@@ -564,3 +564,39 @@ func TestCircuitikzIecShim(t *testing.T) {
 		}
 	}
 }
+
+func TestCircuitikzConverterShim(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string // "" = no shim
+	}{
+		{name: "no converter", content: "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"},
+		{name: "plain tikz", content: "\\draw (0,0) -- (1,1);"},
+		{name: "tacdcshape node", content: "\\node[tacdcshape, anchor=ac mid in](acdc){};", want: tikzConverterShim + "\n"},
+		{name: "tdcacshape node", content: "\\draw (0,0) node[tdcacshape, anchor=dc up in](dcac){};", want: tikzConverterShim + "\n"},
+		{name: "anchor access only", content: "\\draw (0,0) -- (acdc.ac up in);"},
+		{name: "commented out usage ignored", content: "% \\node[tacdcshape, anchor=ac mid in](acdc){};\n\\draw (0,0) to[R] (2,0);"},
+		{name: "inline comment after real usage still triggers", content: "\\draw (0,0) node[tacdcshape]{}; % converter", want: tikzConverterShim + "\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := circuitikzConverterShim(tt.content); got != tt.want {
+				t.Errorf("circuitikzConverterShim() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+	got := circuitikzConverterShim("\\draw (0,0) node[tacdcshape, anchor=ac mid in](acdc){} to[smallR] ++(-2,0);")
+	for _, want := range []string{
+		`\ifcsname pgf@sh@s@tacdcshape\endcsname`,
+		`\expandafter\gdef\csname pgf@anchor@tacdcshape@ac mid in\endcsname{\northeast\pgf@y=0\pgf@y\pgf@x=-\pgf@x}`,
+		`\expandafter\gdef\csname pgf@anchor@tacdcshape@ac up in\endcsname{\northeast\pgf@y=.6\pgf@y\pgf@x=-\pgf@x}`,
+		`\expandafter\gdef\csname pgf@anchor@tacdcshape@dc up out\endcsname{\northeast\pgf@y=.4\pgf@y}`,
+		`\expandafter\gdef\csname pgf@anchor@tdcacshape@dc up in\endcsname{\northeast\pgf@y=.4\pgf@y\pgf@x=-\pgf@x}`,
+		`\expandafter\gdef\csname pgf@anchor@tdcacshape@ac mid out\endcsname{\northeast\pgf@y=0\pgf@y}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("circuitikzConverterShim() missing %q in:\n%s", want, got)
+		}
+	}
+}

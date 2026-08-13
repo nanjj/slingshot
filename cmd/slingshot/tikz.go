@@ -270,6 +270,57 @@ func circuitikzIecShim(content string) string {
 	return ""
 }
 
+// converterShapeRe 匹配 AC-DC / DC-AC 三相转换器 shape 名 (手册示例写法)。
+var converterShapeRe = regexp.MustCompile(`\b(?:tacdcshape|tdcacshape)\b`)
+
+// tikzConverterShim 为 bundle 的转换器 shape 补 mnemonic anchor。
+// 新版 circuitikz (twoport 重构后) 的 tacdc / tdcac 使用记忆名 anchor
+// (ac up in / ac mid in / dc up out 等), 老手册示例 (circuitikzmanual.tex
+// "power electronics" 一节) 则用 tacdcshape / tdcacshape 形状名, 两者结合
+// 的写法 (node[tacdcshape, anchor=ac mid in]) 在 bundle (1.5.x) 上会挂:
+// bundle 的 tacdcshape 由 \pgfcircdeclarebipolescaled{...}{tacdc} 生成,
+// 只有 legacy anchor (dc1/dc2/ac1/ac2/ac3); 记忆名 anchor 缺失时
+// \pgfpointanchor 把 anchor 名当角度数学表达式解析 (\pgfqpointpolar 兜底),
+// 报 "PGF Math Error: Unknown function `ac' (in 'ac mid in')"。
+// pgf 的 anchor 就是 \csname pgf@anchor@<shape>@<名字>\endcsname,
+// 直接 \gdef 追加即可, 无需重声明 shape; \northeast 在 anchor 调用时
+// 由节点上下文提供 (与 bundle 自带 anchor 写法一致)。
+// 守卫: shape 存在 (circuitikz 已加载) 且 mnemonic anchor 尚缺才注入,
+// 未来 bundle 升级自带这些 anchor 时不重复定义。
+// 注意 shape 注册表是 \pgf@sh@s@<名> (由 \pgfdeclareshape 定义);
+// \pgf@sh@ns@<名> 是节点实例指针, 不能用作 shape 存在性检测。
+const tikzConverterShim = `\makeatletter
+\ifcsname pgf@sh@s@tacdcshape\endcsname
+\ifcsname pgf@anchor@tacdcshape@ac mid in\endcsname\else
+  \expandafter\gdef\csname pgf@anchor@tacdcshape@ac up in\endcsname{\northeast\pgf@y=.6\pgf@y\pgf@x=-\pgf@x}
+  \expandafter\gdef\csname pgf@anchor@tacdcshape@ac mid in\endcsname{\northeast\pgf@y=0\pgf@y\pgf@x=-\pgf@x}
+  \expandafter\gdef\csname pgf@anchor@tacdcshape@ac down in\endcsname{\northeast\pgf@y=-.6\pgf@y\pgf@x=-\pgf@x}
+  \expandafter\gdef\csname pgf@anchor@tacdcshape@dc up out\endcsname{\northeast\pgf@y=.4\pgf@y}
+  \expandafter\gdef\csname pgf@anchor@tacdcshape@dc down out\endcsname{\northeast\pgf@y=-.4\pgf@y}
+\fi
+\ifcsname pgf@anchor@tdcacshape@dc up in\endcsname\else
+  \expandafter\gdef\csname pgf@anchor@tdcacshape@dc up in\endcsname{\northeast\pgf@y=.4\pgf@y\pgf@x=-\pgf@x}
+  \expandafter\gdef\csname pgf@anchor@tdcacshape@dc down in\endcsname{\northeast\pgf@y=-.4\pgf@y\pgf@x=-\pgf@x}
+  \expandafter\gdef\csname pgf@anchor@tdcacshape@ac up out\endcsname{\northeast\pgf@y=.6\pgf@y}
+  \expandafter\gdef\csname pgf@anchor@tdcacshape@ac mid out\endcsname{\northeast\pgf@y=0\pgf@y}
+  \expandafter\gdef\csname pgf@anchor@tdcacshape@ac down out\endcsname{\northeast\pgf@y=-.6\pgf@y}
+\fi
+\fi
+\makeatother`
+
+// circuitikzConverterShim 检测输入是否用到转换器 shape 名, 命中时返回
+// mnemonic anchor 补齐 shim。注释行中的用法不触发 (% 到行尾都是注释)。
+func circuitikzConverterShim(content string) string {
+	for _, m := range converterShapeRe.FindAllStringIndex(content, -1) {
+		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
+		if strings.Contains(content[lineStart:m[0]], "%") {
+			continue
+		}
+		return tikzConverterShim + "\n"
+	}
+	return ""
+}
+
 // circuitikzCompatRe 匹配显式 \usepackage[compatibility]{circuitikz(git)}。
 // circuitikzgit 是本地开发包名 (bundle 里是 circuitikz), 同样按 compat 处理。
 var circuitikzCompatRe = regexp.MustCompile(`\\usepackage\s*\[\s*[^\]]*compatibility[^\]]*\]\s*\{circuitikz(?:git)?\}`)
@@ -545,7 +596,7 @@ func renderTikz(inFile, outFile string) (err error) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
 			tikzLibraryLines(libs),
-			circuitikzBuzzerShim(raw)+circuitikzIecShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
+			circuitikzBuzzerShim(raw)+circuitikzIecShim(raw)+circuitikzConverterShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
