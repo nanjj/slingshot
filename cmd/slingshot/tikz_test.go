@@ -53,6 +53,36 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\begin{axis}\\addplot {x};\n\\end{axis}",
 			want:  "\\begin{tikzpicture}\n\\begin{axis}\\addplot {x};\n\\end{axis}\n\\end{tikzpicture}\n",
 		},
+		{
+			name:  "tkzpicture normalized to tikzpicture",
+			input: "\\begin{tkzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tkzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "tkzpicture with options normalized",
+			input: "\\begin{tkzpicture}[scale=2]\n\\tkzDefPoint(0,0){A}\n\\end{tkzpicture}\n",
+			want:  "\\begin{tikzpicture}[scale=2]\n\\tkzDefPoint(0,0){A}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "outer tikzpicture shell around tkzpicture stripped",
+			input: "\\begin{tikzpicture}\n\\begin{tkzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tkzpicture}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tikzpicture}",
+		},
+		{
+			name:  "double outer shells stripped iteratively",
+			input: "\\begin{tikzpicture}\n\\begin{tikzpicture}\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}\n\\end{tikzpicture}\n\\end{tikzpicture}\n",
+			want:  "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}",
+		},
+		{
+			name:  "node embedded picture not stripped",
+			input: "\\begin{tikzpicture}\n\\node {\\begin{tikzpicture}\\draw (0,0);\\end{tikzpicture}};\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\node {\\begin{tikzpicture}\\draw (0,0);\\end{tikzpicture}};\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "scope not mistaken for self-contained env",
+			input: "\\begin{tikzpicture}\n\\begin{scope}\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\begin{scope}\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

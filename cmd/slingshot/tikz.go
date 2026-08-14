@@ -568,11 +568,57 @@ var tikzSelfContainedEnvs = []string{
 	`\begin{forest}`,
 }
 
+// tkzpictureBeginRe 匹配 tkz-base 风格的 tkzpicture 环境 (可带可选参数)。
+// tkzpicture 是 tkz-base (tkz-euclide 2.x 时代的依赖) 提供的 tikzpicture
+// 别名; tkz-euclide 4.x 重写后不再定义该环境, 旧示例直接编译会报
+// "Environment tkzpicture undefined", 因此归一化为标准 tikzpicture。
+var tkzpictureBeginRe = regexp.MustCompile(`\\begin\{tkzpicture\}(\[[^]]*\])?`)
+
+// tkzpictureEndRe 匹配 tkzpicture 环境的结束标记。
+var tkzpictureEndRe = regexp.MustCompile(`\\end\{tkzpicture\}`)
+
+// selfContainedStart 报告内容是否以自包含 TikZ 环境开头。
+func selfContainedStart(content string) bool {
+	for _, env := range tikzSelfContainedEnvs {
+		if strings.HasPrefix(content, env) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripOuterTikzShells 迭代剥离误包的 tikzpicture 空外壳。
+// 用户常把完整示例再套一层 tikzpicture (如外层 tikzpicture 套 tkz-euclide
+// 示例), 但 pgf 不允许直接嵌套 picture 环境——字体钩子会无限递归
+// (\pgf@selectfontorig 自引用, TeX capacity exceeded, input stack size=5000),
+// 必须消除嵌套。
+// 仅当剥掉外壳后内部以另一个自包含环境 (tikzpicture/circuitikz/tikzcd/forest)
+// 开头时才剥离: \node 内嵌 picture、\begin{scope} 等合法结构不受影响。
+func stripOuterTikzShells(content string) string {
+	const begin, end = `\begin{tikzpicture}`, `\end{tikzpicture}`
+	for {
+		trimmed := strings.TrimSpace(content)
+		if !strings.HasPrefix(trimmed, begin) || !strings.HasSuffix(trimmed, end) {
+			return content
+		}
+		inner := strings.TrimSpace(trimmed[len(begin) : len(trimmed)-len(end)])
+		if !selfContainedStart(inner) {
+			return content
+		}
+		content = inner
+	}
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
 // (它在 document body 中有效, 但在 tikzpicture 内行为不受保证)。
 func normalizeTikz(content string) string {
+	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
+	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
+	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
+	// 剥掉误包的空外壳, 避免 pgf 嵌套 picture 崩溃。
+	content = stripOuterTikzShells(content)
 	for _, env := range tikzSelfContainedEnvs {
 		if strings.Contains(content, env) {
 			return content
