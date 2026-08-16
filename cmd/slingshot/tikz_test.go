@@ -228,6 +228,16 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\begin{tikzpicture}\n\\node {next to the point};\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\node {next to the point};\n\\end{tikzpicture}\n",
 		},
+		{
+			name:  "def point on circle through reordered (apollonius doc example)",
+			input: "\\begin{tikzpicture}\n\\tkzDefCircle[apollonius,K=2](A,B) \\tkzGetPoints{K1}{k}\n\\tkzDefPointOnCircle[through= center K1 angle 30 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefCircle[apollonius,K=2](A,B) \\tkzGetPoints{K1}{k}\n\\tkzDefPointOnCircle[through= angle 30 center K1 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "def point on circle 4.051b order kept",
+			input: "\\begin{tikzpicture}\n\\tkzDefPointOnCircle[through= angle 30 center K1 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefPointOnCircle[through= angle 30 center K1 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -314,6 +324,82 @@ func TestFixNextToKeys(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := fixNextToKeys(tt.input); got != tt.want {
 				t.Errorf("fixNextToKeys() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFixDefPointOnCircleThrough(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "2x order reordered to 4.051b",
+			input: `\tkzDefPointOnCircle[through= center K1 angle 30 point k]`,
+			want:  `\tkzDefPointOnCircle[through= angle 30 center K1 point k]`,
+		},
+		{
+			name:  "different angle value",
+			input: `\tkzDefPointOnCircle[through= center K1 angle 280 point k]`,
+			want:  `\tkzDefPointOnCircle[through= angle 280 center K1 point k]`,
+		},
+		{
+			name:  "spaces around equals",
+			input: `\tkzDefPointOnCircle [through = center K1 angle 30 point k]`,
+			want:  `\tkzDefPointOnCircle [through= angle 30 center K1 point k]`,
+		},
+		{
+			name:  "primed point name",
+			input: `\tkzDefPointOnCircle[through= center O angle 90 point P']`,
+			want:  `\tkzDefPointOnCircle[through= angle 90 center O point P']`,
+		},
+		{
+			name:  "negative and decimal angles",
+			input: `\tkzDefPointOnCircle[through= center O angle -30.5 point A]`,
+			want:  `\tkzDefPointOnCircle[through= angle -30.5 center O point A]`,
+		},
+		{
+			name:  "other options before through kept",
+			input: `\tkzDefPointOnCircle[color=red, through= center O angle 30 point A]`,
+			want:  `\tkzDefPointOnCircle[color=red, through= angle 30 center O point A]`,
+		},
+		{
+			name:  "4.051b order untouched",
+			input: `\tkzDefPointOnCircle[through= angle 30 center K1 point k]`,
+			want:  `\tkzDefPointOnCircle[through= angle 30 center K1 point k]`,
+		},
+		{
+			name:  "R variant untouched",
+			input: `\tkzDefPointOnCircle[R= angle 30 center O radius 2]`,
+			want:  `\tkzDefPointOnCircle[R= angle 30 center O radius 2]`,
+		},
+		{
+			name:  "through in rad untouched (not in 4.051b)",
+			input: `\tkzDefPointOnCircle[through in rad= center O angle 30 point A]`,
+			want:  `\tkzDefPointOnCircle[through in rad= center O angle 30 point A]`,
+		},
+		{
+			name:  "bare through boolean untouched",
+			input: `\tkzDefPointOnCircle[through] \tkzGetPoint{I}`,
+			want:  `\tkzDefPointOnCircle[through] \tkzGetPoint{I}`,
+		},
+		{
+			name:  "def point on line untouched",
+			input: `\tkzDefPointOnLine[through= center O angle 30 point A](X,Y)`,
+			want:  `\tkzDefPointOnLine[through= center O angle 30 point A](X,Y)`,
+		},
+		{
+			name:  "text mentioning through untouched",
+			input: `\node {through= center O angle 30 point A};`,
+			want:  `\node {through= center O angle 30 point A};`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixDefPointOnCircleThrough(tt.input); got != tt.want {
+				t.Errorf("fixDefPointOnCircleThrough() = %q, want %q", got, tt.want)
 			}
 		})
 	}

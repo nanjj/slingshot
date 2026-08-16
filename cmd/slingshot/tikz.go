@@ -771,6 +771,32 @@ func fixNextToKeys(content string) string {
 	})
 }
 
+// defPtCircleThroughRe 匹配 \tkzDefPointOnCircle 选项列表中的旧版
+// through 解析式参数 "through= center C angle a point P" (tkz-euclide
+// 2.x 语法, 5.x 手册示例仍在用, 如 TKZdoc-euclide-examples.tex 的
+// Apollonius 圆示例)。bundle 内置的 4.051b 也支持 through, 但 .code
+// args 的参数顺序不同 (tkz-obj-eu-points-spc.tex):
+//
+//	5.x/2.x:  through/.code args = {center #1 angle #2 point #3}
+//	4.051b:   through/.code args = {angle #1 center #2 point #3}
+//
+// 语义完全一致 (center=圆心, angle=圆上点方向角, point=圆所过之点),
+// 但 .code args 按字面 token 匹配, 顺序不对时报 "Use of \pgfkeys@code
+// doesn't match its definition", 因此把参数重排为 4.051b 顺序。
+// 仅匹配 \tkzDefPointOnCircle 的选项列表 ([^]]*? 不跨 ]), 保留
+// through 前后的其他 key; 4.051b 没有的 through in rad / R 变体
+// 保持原样 (宁报错, 不静默画错)。
+var defPtCircleThroughRe = regexp.MustCompile(`\\tkzDefPointOnCircle\b(\s*\[[^]]*?)through\s*=\s*center\s+([A-Za-z0-9']+)\s+angle\s+([^,\]\s]+)\s+point\s+([A-Za-z0-9']+)`)
+
+// fixDefPointOnCircleThrough 把 through 的 2.x/5.x 参数顺序重排为
+// 4.051b 认识的 angle → center → point 顺序。
+func fixDefPointOnCircleThrough(content string) string {
+	return defPtCircleThroughRe.ReplaceAllStringFunc(content, func(m string) string {
+		sub := defPtCircleThroughRe.FindStringSubmatch(m)
+		return `\tkzDefPointOnCircle` + sub[1] + `through= angle ` + sub[3] + ` center ` + sub[2] + ` point ` + sub[4]
+	})
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
@@ -781,6 +807,9 @@ func normalizeTikz(content string) string {
 	content = fixTkzPercentJoins(content)
 	// next to (tkz-euclide 2.x 旧选项名) 翻译为 4.051b 的 common。
 	content = fixNextToKeys(content)
+	// through= center … angle … point … (2.x/5.x 参数顺序) 重排为
+	// 4.051b 的 angle → center → point 顺序。
+	content = fixDefPointOnCircleThrough(content)
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
