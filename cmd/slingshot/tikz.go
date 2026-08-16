@@ -850,6 +850,47 @@ func fixDefPointOnCircleThrough(content string) string {
 	})
 }
 
+// defCircleRRe 匹配 tkz-euclide 5.x 的 \tkzDefCircle[R](center,radius) 语法。
+// bundle 内置 4.051b 的 /tkzcircle 家族 (tkz-obj-eu-circles.tex) 没有 R key
+// (5.x 的 R/.code=\def\tkz@numc{0} 在 4.051b 中不存在, 只有 through/radius/
+// diameter/circum/in/ex/euler/nine/apollonius/orthogonal/spieker/K),
+// 直接编译报 "I do not know the key '/tkzcircle/R'"。
+var defCircleRRe = regexp.MustCompile(`\\tkzDefCircle\b\s*\[\s*R\s*\]\s*\(\s*([A-Za-z0-9']+)\s*,\s*([^()]+?)\s*\)`)
+
+// fixDefCircleR 把 \tkzDefCircle[R](A,1) 翻译为 4.051b 等价的 5.x 语义。
+// 5.x 的 R 分支最终调用 \tkzDefCircleR(#1,#2) (tkz-obj-eu-circles.tex):
+//
+//	\tkzLengthResult = 半径; tkzPointResult = tkzSecondPointResult =
+//	圆上 (角度 0 方向) 的点。手册示例 \tkzDefCircle[R](A,1)\tkzGetPoint{a}
+//	后用 \tkzDrawCircles(A,a) 画圆, a 必须是圆上点。
+//
+// 4.051b 自带同名 "for compatibility" 的 \tkzDefCircleR, 但语义不同:
+// tkzPointResult = 圆心, GetPoint 取不到圆上点——直接翻译会把圆画成半径 0。
+// 因此先调 4.051b 的 \tkzDefCircleR 得到 tkzLengthResult (global 存活),
+// 再按 5.x 的方式补建圆上点并覆盖 tkzPointResult: 只依赖 4.051b 内置宏,
+// 不重定义任何宏, \tkzDrawCircle[R] (4.051b 原生支持) 的行为不受影响。
+// 仅匹配纯 [R] 选项; [R,其他 key] 组合无意义, 保持原样 (宁报错, 不静默画错)。
+// 注释行中的用法不翻译 (% 到行尾都是注释): 翻译会引入换行, 若匹配点前有 %,
+// 新插入的 \path 行会从注释中泄出变成真实代码。
+func fixDefCircleR(content string) string {
+	var b strings.Builder
+	start := 0
+	for _, m := range defCircleRRe.FindAllStringIndex(content, -1) {
+		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
+		if strings.Contains(content[lineStart:m[0]], "%") {
+			continue
+		}
+		b.WriteString(content[start:m[0]])
+		sub := defCircleRRe.FindStringSubmatch(content[m[0]:m[1]])
+		b.WriteString(`\tkzDefCircleR(` + sub[1] + `,` + sub[2] + `)
+\path (` + sub[1] + `)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
+\tkzRenamePoint(tkzSecondPointResult){tkzPointResult}`)
+		start = m[1]
+	}
+	b.WriteString(content[start:])
+	return b.String()
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
@@ -863,6 +904,9 @@ func normalizeTikz(content string) string {
 	// through= center … angle … point … (2.x/5.x 参数顺序) 重排为
 	// 4.051b 的 angle → center → point 顺序。
 	content = fixDefPointOnCircleThrough(content)
+	// \tkzDefCircle[R](A,1) (5.x 语法, /tkzcircle 家族 4.051b 没有 R key)
+	// 翻译为 4.051b 内置宏的等价序列, 保持 5.x 的圆上点语义 (见上)。
+	content = fixDefCircleR(content)
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)

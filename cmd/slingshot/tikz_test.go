@@ -405,6 +405,83 @@ func TestFixDefPointOnCircleThrough(t *testing.T) {
 	}
 }
 
+func TestFixDefCircleR(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "basic R circle def gets 5.x point-on-circle semantics",
+			input: `\tkzDefCircle[R](A,1) \tkzGetPoint{a}`,
+			want: `\tkzDefCircleR(A,1)
+\path (A)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
+\tkzRenamePoint(tkzSecondPointResult){tkzPointResult} \tkzGetPoint{a}`,
+		},
+		{
+			name:  "spaces around command, key and args",
+			input: `\tkzDefCircle [ R ](B, 3)\tkzGetPoint{b}`,
+			want: `\tkzDefCircleR(B,3)
+\path (B)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
+\tkzRenamePoint(tkzSecondPointResult){tkzPointResult}\tkzGetPoint{b}`,
+		},
+		{
+			name:  "decimal radius",
+			input: `\tkzDefCircle[R](O,2.5) \tkzGetPoint{p}`,
+			want: `\tkzDefCircleR(O,2.5)
+\path (O)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
+\tkzRenamePoint(tkzSecondPointResult){tkzPointResult} \tkzGetPoint{p}`,
+		},
+		{
+			name:  "through option untouched",
+			input: `\tkzDefCircle[through](A,B) \tkzGetPoint{a}`,
+			want:  `\tkzDefCircle[through](A,B) \tkzGetPoint{a}`,
+		},
+		{
+			name:  "radius option untouched (4.051b through alias)",
+			input: `\tkzDefCircle[radius](A,B) \tkzGetPoint{a}`,
+			want:  `\tkzDefCircle[radius](A,B) \tkzGetPoint{a}`,
+		},
+		{
+			name:  "R with other keys untouched (no silent misinterpretation)",
+			input: `\tkzDefCircle[R,K=2](A,B)`,
+			want:  `\tkzDefCircle[R,K=2](A,B)`,
+		},
+		{
+			name:  "inter CC R untouched (native in 4.051b)",
+			input: `\tkzInterCC[R](A,1)(K,3) \tkzGetPoints{a}{a'}`,
+			want:  `\tkzInterCC[R](A,1)(K,3) \tkzGetPoints{a}{a'}`,
+		},
+		{
+			name:  "inter LC R untouched (native in 4.051b)",
+			input: `\tkzInterLC[R](A,B)(B,3) \tkzGetPoints{b1}{E}`,
+			want:  `\tkzInterLC[R](A,B)(B,3) \tkzGetPoints{b1}{E}`,
+		},
+		{
+			name:  "draw circle R untouched (native in 4.051b)",
+			input: `\tkzDrawCircle[R](O,2)`,
+			want:  `\tkzDrawCircle[R](O,2)`,
+		},
+		{
+			name:  "plain text mentioning R untouched",
+			input: `% \tkzDefCircle[R](A,1) example in comment`,
+			want:  `% \tkzDefCircle[R](A,1) example in comment`,
+		},
+		{
+			name:  "inline comment usage untouched (translation would leak code)",
+			input: `\node{x}; % \tkzDefCircle[R](A,1)`,
+			want:  `\node{x}; % \tkzDefCircle[R](A,1)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixDefCircleR(tt.input); got != tt.want {
+				t.Errorf("fixDefCircleR() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTkzApolloniusShim(t *testing.T) {
 	tests := []struct {
 		name    string
