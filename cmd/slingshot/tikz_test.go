@@ -193,11 +193,127 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\begin{tikzpicture}\n\\begin{scope}\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\begin{scope}\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
 		},
+		{
+			name:  "tkzInterLC next to first endpoint translated to near",
+			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=Ja](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "tkzInterLC next to second endpoint swaps line and uses near",
+			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=Q](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Q,Ja)(Q,Cb) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "tkzInterCC next to untouched (no near in 4.051b circlecircle)",
+			input: "\\begin{tikzpicture}\n\\tkzInterCC[next to=C](A,B)(C,D) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterCC[next to=C](A,B)(C,D) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "next to and common coexist, each kept semantically",
+			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=Ja](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a) \\tkzGetFirstPoint{Fa}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a) \\tkzGetFirstPoint{Fa}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "next to with spaces around key and value",
+			input: "\\begin{tikzpicture}\n\\tkzInterLC [next to = Ja](Ja,Q)(Q,Cb)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Ja,Q)(Q,Cb)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "next to not a line endpoint untouched",
+			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=O](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterLC[next to=O](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "next to in node text untouched",
+			input: "\\begin{tikzpicture}\n\\node {next to the point};\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\node {next to the point};\n\\end{tikzpicture}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := normalizeTikz(tt.input); got != tt.want {
 				t.Errorf("normalizeTikz() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFixNextToKeys(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "next to first endpoint becomes near",
+			input: `\tkzInterLC[next to=Ja](Ja,Q)(Q,Cb)`,
+			want:  `\tkzInterLC[near](Ja,Q)(Q,Cb)`,
+		},
+		{
+			name:  "next to second endpoint swaps line",
+			input: `\tkzInterLC[next to=Q](Ja,Q)(Q,Cb)`,
+			want:  `\tkzInterLC[near](Q,Ja)(Q,Cb)`,
+		},
+		{
+			name:  "spaces around key and equals",
+			input: `\tkzInterLC [next to = Ja](Ja,Q)(Q,Cb)`,
+			want:  `\tkzInterLC[near](Ja,Q)(Q,Cb)`,
+		},
+		{
+			name:  "primed point names",
+			input: `\tkzInterLC[next to=F'a](F'a,Jc)(Ja,F'a)`,
+			want:  `\tkzInterLC[near](F'a,Jc)(Ja,F'a)`,
+		},
+		{
+			name:  "inter CC untouched (no near in 4.051b circlecircle)",
+			input: `\tkzInterCC[next to=C](A,B)(C,D)`,
+			want:  `\tkzInterCC[next to=C](A,B)(C,D)`,
+		},
+		{
+			name:  "next to other point untouched",
+			input: `\tkzInterLC[next to=O](Ja,Q)(Q,Cb)`,
+			want:  `\tkzInterLC[next to=O](Ja,Q)(Q,Cb)`,
+		},
+		{
+			name:  "already near untouched",
+			input: `\tkzInterLC[near](A,B)(C,D)`,
+			want:  `\tkzInterLC[near](A,B)(C,D)`,
+		},
+		{
+			name:  "already common untouched",
+			input: `\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a)`,
+			want:  `\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a)`,
+		},
+		{
+			name:  "other options untouched",
+			input: `\tkzInterLC[R](A,B)(C,2)`,
+			want:  `\tkzInterLC[R](A,B)(C,2)`,
+		},
+		{
+			name:  "internal LCR variant not matched by prefix",
+			input: `\tkzInterLCR(A,B)(C,D){X}{Y}`,
+			want:  `\tkzInterLCR(A,B)(C,D){X}{Y}`,
+		},
+		{
+			name:  "no option bracket, next to stays",
+			input: `\tkzInterLC (A,B)(C,D) next to=Ja`,
+			want:  `\tkzInterLC (A,B)(C,D) next to=Ja`,
+		},
+		{
+			name:  "plain text next to untouched",
+			input: `\node {go next to the point};`,
+			want:  `\node {go next to the point};`,
+		},
+		{
+			name:  "inter LL untouched",
+			input: `\tkzInterLL(Za,Xc)(C,B) \tkzGetPoint{C'}`,
+			want:  `\tkzInterLL(Za,Xc)(C,B) \tkzGetPoint{C'}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixNextToKeys(tt.input); got != tt.want {
+				t.Errorf("fixNextToKeys() = %q, want %q", got, tt.want)
 			}
 		})
 	}

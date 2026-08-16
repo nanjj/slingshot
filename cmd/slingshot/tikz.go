@@ -741,6 +741,36 @@ func fixTkzPercentJoins(content string) string {
 	return b.String()
 }
 
+// nextToLCRe 匹配 \tkzInterLC 的旧版 next to 选项, 捕获指定点与直线/圆参数。
+// tkz-euclide 2.x 用 [next to=X] 取两交点中离 X 最近的那个; 5.x 保留该 key
+// (.store in = \tkz@nextto) 语义不变。bundle 内置的 4.051b 没有 next to,
+// 只有 near (取离直线第一端点近的交点) 与 common (pt 为交点之一, 取另一个),
+// 直接编译报 "I do not know the key '/linecircle/next to'"。
+// 语义等价映射 (5.x 文档 TKZdoc-euclide-intersection.tex):
+//
+//	next to=A (直线第一端点) -> near
+//	next to=B (直线第二端点) -> near 并交换直线参数 (交点集合不变)
+//	其他指定点 -> 4.051b 无等价物, 保持原样 (宁报错, 不静默画错)。
+//
+// 仅匹配 \tkzInterLC (\b 排除 \tkzInterLCR 等内部命令); \tkzInterCC 的
+// /circlecircle 家族 4.051b 连 near 都没有, 同样保持原样。
+var nextToLCRe = regexp.MustCompile(`\\tkzInterLC\b\s*\[\s*next\s+to\s*=\s*([A-Za-z0-9']+)\s*\]\s*\(\s*([A-Za-z0-9']+)\s*,\s*([A-Za-z0-9']+)\s*\)\s*\(\s*([A-Za-z0-9']+)\s*,\s*([A-Za-z0-9']+)\s*\)`)
+
+// fixNextToKeys 把 tkz-euclide 2.x 的 next to 选项翻译为 4.051b 的 near。
+func fixNextToKeys(content string) string {
+	return nextToLCRe.ReplaceAllStringFunc(content, func(m string) string {
+		sub := nextToLCRe.FindStringSubmatch(m)
+		x, a, b, c, d := sub[1], sub[2], sub[3], sub[4], sub[5]
+		switch x {
+		case a:
+			return `\tkzInterLC[near](` + a + `,` + b + `)(` + c + `,` + d + `)`
+		case b:
+			return `\tkzInterLC[near](` + b + `,` + a + `)(` + c + `,` + d + `)`
+		}
+		return m
+	})
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
@@ -749,6 +779,8 @@ func normalizeTikz(content string) string {
 	// % 续行陷阱: 手册示例靠续行缩进提供空格, 抄写丢缩进时 P' 与下一项
 	// 粘合成 P'N; 在 \tkz 参数区内删除行尾 % 让换行还原为空格 (见上)。
 	content = fixTkzPercentJoins(content)
+	// next to (tkz-euclide 2.x 旧选项名) 翻译为 4.051b 的 common。
+	content = fixNextToKeys(content)
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
