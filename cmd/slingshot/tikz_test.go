@@ -482,10 +482,70 @@ func TestFixDefCircleR(t *testing.T) {
 	}
 }
 
+func TestFixDefLineTangent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "tangent at becomes direct 4.051b call with center-first order",
+			input: `\tkzDefLine[tangent at=T](B) \tkzGetPoint{h}`,
+			want:  `\tkzTgtAt(B)(T) \tkzGetPoint{h}`,
+		},
+		{
+			name:  "prime point name",
+			input: `\tkzDefLine[tangent at=T'](B) \tkzGetPoint{h}`,
+			want:  `\tkzTgtAt(B)(T') \tkzGetPoint{h}`,
+		},
+		{
+			name:  "spaces around command, key and args",
+			input: `\tkzDefLine [ tangent at = T' ](B) \tkzGetPoint{h}`,
+			want:  `\tkzTgtAt(B)(T') \tkzGetPoint{h}`,
+		},
+		{
+			name:  "combined keys untouched (no silent misinterpretation)",
+			input: `\tkzDefLine[tangent at=T,new](B)`,
+			want:  `\tkzDefLine[tangent at=T,new](B)`,
+		},
+		{
+			name:  "mediator untouched (out of scope, keeps explicit error)",
+			input: `\tkzDefLine[mediator](A,B)`,
+			want:  `\tkzDefLine[mediator](A,B)`,
+		},
+		{
+			name:  "plain line def untouched",
+			input: `\tkzDefLine(A,B) \tkzGetPoint{O}`,
+			want:  `\tkzDefLine(A,B) \tkzGetPoint{O}`,
+		},
+		{
+			name:  "internal macro name untouched (word boundary)",
+			input: `\tkzDefLineLL(A,B)`,
+			want:  `\tkzDefLineLL(A,B)`,
+		},
+		{
+			name:  "comment-only usage untouched",
+			input: `% \tkzDefLine[tangent at=T](B) example`,
+			want:  `% \tkzDefLine[tangent at=T](B) example`,
+		},
+		{
+			name:  "inline comment usage untouched",
+			input: `\node{x}; % \tkzDefLine[tangent at=T](B)`,
+			want:  `\node{x}; % \tkzDefLine[tangent at=T](B)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixDefLineTangent(tt.input); got != tt.want {
+				t.Errorf("fixDefLineTangent() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
 func TestTkzApolloniusShim(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
+		name     string
+		input    string
 		wantShim bool
 	}{
 		{

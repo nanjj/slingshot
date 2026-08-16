@@ -891,6 +891,41 @@ func fixDefCircleR(content string) string {
 	return b.String()
 }
 
+// defLineTangentRe 匹配 tkz-euclide 5.x 的 \tkzDefLine[tangent at=X](O) 语法。
+// bundle 内置 4.051b 的 \tkz@DefLine 用 \pgfqkeys{/tkzDefLine/.cd}{选项} 分派,
+// 但 \pgfqkeys 把 "/tkzDefLine/.cd" 整体当路径前缀, key 被解析为
+// "/tkzDefLine/.cd/tangent at" → 报 "I do not know the key" 后被忽略,
+// \tkz@numl 保持未定义, \ifcase 归 0 误走 \tkzDefMediatorLine(#2) 分支;
+// 而 4.051b 的 MediatorLine 需要 (A,B) 两个点, 参数扫描吞掉后续整行内容,
+// 遇到逗号截断后 csname 展开撞 \endgroup → "Missing \endcsname inserted"
+// (无逗号时则是 "File ended while scanning use of \tkzDefMediatorLine")。
+var defLineTangentRe = regexp.MustCompile(`\\tkzDefLine\b\s*\[\s*tangent\s+at\s*=\s*([A-Za-z0-9']+)\s*\]\s*\(\s*([A-Za-z0-9']+)\s*\)`)
+
+// fixDefLineTangent 把 \tkzDefLine[tangent at=X](O) 翻译为 4.051b 直调宏。
+// 5.x 的 tangent at 分支最终调用 \tkzTgtAt (tkz-obj-eu-lines.tex); 4.051b
+// 同名宏存在且不依赖坏掉的 key 分派: \tkzTgtAt(#1)(#2) 内部执行
+// \tkz@VecKOrthNorm[-1](#2,#1) —— 路径起点取第 2 参数、方向为 (第2参-第1参)⊥,
+// 因此必须按 (圆心)(切点) 顺序调用, 结果 tkzPointResult 才是过切点 X 的
+// 切线上一点 (与 5.x 语义一致: \tkzGetPoint{h} 后 \tkzInterLL(X,h)(A,B)
+// 求切线与直线交点)。仅匹配纯 [tangent at=X] 选项; 组合选项保持原样
+// (宁报错, 不静默画错)。注释行中的用法不翻译 (% 到行尾都是注释)。
+func fixDefLineTangent(content string) string {
+	var b strings.Builder
+	start := 0
+	for _, m := range defLineTangentRe.FindAllStringIndex(content, -1) {
+		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
+		if strings.Contains(content[lineStart:m[0]], "%") {
+			continue
+		}
+		b.WriteString(content[start:m[0]])
+		sub := defLineTangentRe.FindStringSubmatch(content[m[0]:m[1]])
+		b.WriteString(`\tkzTgtAt(` + sub[2] + `)(` + sub[1] + `)`)
+		start = m[1]
+	}
+	b.WriteString(content[start:])
+	return b.String()
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
@@ -907,6 +942,10 @@ func normalizeTikz(content string) string {
 	// \tkzDefCircle[R](A,1) (5.x 语法, /tkzcircle 家族 4.051b 没有 R key)
 	// 翻译为 4.051b 内置宏的等价序列, 保持 5.x 的圆上点语义 (见上)。
 	content = fixDefCircleR(content)
+	// \tkzDefLine[tangent at=X](O) (5.x 语法): 4.051b 的 \tkz@DefLine key 分派
+	// 在 bundle 的 pgfkeys 下失效 (\pgfqkeys 把 .cd 当路径前缀), 选项被忽略后
+	// 误走 MediatorLine 分支吞掉后续代码, 翻译为 4.051b 直调宏 \tkzTgtAt。
+	content = fixDefLineTangent(content)
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
