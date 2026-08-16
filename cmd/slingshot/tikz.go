@@ -642,11 +642,113 @@ func stripOuterTikzShells(content string) string {
 	}
 }
 
+// isTkzNameChar 判断字节是否属于 tkz 点名的名字字符
+// (字母 / 数字 / 撇号 — 撇号用于 P' 这类反射点)。
+func isTkzNameChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' ||
+		c >= '0' && c <= '9' || c == '\''
+}
+
+// fixTkzPercentJoins 修复 tkz-euclide 文档示例的 "% 续行" 陷阱:
+// 手册惯用 "…N,P'%<换行>   N,Q'…" 把长点列表折行, 指望续行缩进提供空格分隔。
+// 但 TeX 在 % 注释后进入行首状态 (state N), 下一行的前导空格会被直接跳过,
+// P' 与 N 粘成 P'N, tkz 按空格切分列表后段 (N,P'N,Q') 被 pgf 当作坐标
+// (x=P'N) 解析, pgfmath 报 "Unknown function 'P'" — 缩进与否同样失败。
+// 修复: 仅当行尾 % 位于 \tkz 命令参数区内、% 前是名字字符、且下一行首个
+// 非空白字符也是名字字符时删掉该 %, 让 TeX 把换行还原为空格分隔。
+// 逗号续行 (","% 换行) 不需要空格, \node 文本、注释内容均不受影响。
+func fixTkzPercentJoins(content string) string {
+	var b strings.Builder
+	b.Grow(len(content))
+	pendingTkz := false // 刚读到 \tkz, 正在等待参数组
+	depth := 0          // \tkz 参数组嵌套深度, 0 = 参数区外
+	i := 0
+	for i < len(content) {
+		c := content[i]
+		if depth == 0 {
+			// 参数区外: % 注释整行跳过, 避免扫描注释里的 \tkz。
+			if c == '%' {
+				j := i + 1
+				for j < len(content) && content[j] != '\n' {
+					j++
+				}
+				if j < len(content) {
+					j++ // 含换行
+				}
+				b.WriteString(content[i:j])
+				i = j
+				pendingTkz = false
+				continue
+			}
+			if !pendingTkz {
+				if c == '\\' && i+4 <= len(content) && content[i:i+4] == `\tkz` {
+					pendingTkz = true
+				}
+				b.WriteByte(c)
+				i++
+				continue
+			}
+			// pendingTkz: 等待 \tkz 命令的参数组。
+			switch c {
+			case '[': // 跳过 [options], 其中的 % 是普通注释。
+				j := i + 1
+				for j < len(content) && content[j] != ']' {
+					j++
+				}
+				if j >= len(content) {
+					j = len(content) - 1
+				}
+				b.WriteString(content[i : j+1])
+				i = j + 1
+				continue
+			case '(', '{':
+				depth = 1
+			case '\\', '\n', '\r':
+				// 新命令或换行: 参数须与命令同行, 放弃等待。
+				pendingTkz = false
+			}
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		// 参数区内 (depth > 0)。
+		switch c {
+		case '[', '(', '{':
+			depth++
+		case ']', ')', '}':
+			depth--
+		case '%':
+			if i > 0 && isTkzNameChar(content[i-1]) {
+				j := i + 1
+				for j < len(content) && (content[j] == ' ' || content[j] == '\t' || content[j] == '\r') {
+					j++
+				}
+				if j < len(content) && content[j] == '\n' {
+					k := j + 1
+					for k < len(content) && (content[k] == ' ' || content[k] == '\t' || content[k] == '\r') {
+						k++
+					}
+					if k < len(content) && isTkzNameChar(content[k]) {
+						i = j // 删掉 % 与其后空白, 换行成为空格 (state N 吞掉续行缩进)。
+						continue
+					}
+				}
+			}
+		}
+		b.WriteByte(c)
+		i++
+	}
+	return b.String()
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
 // (它在 document body 中有效, 但在 tikzpicture 内行为不受保证)。
 func normalizeTikz(content string) string {
+	// % 续行陷阱: 手册示例靠续行缩进提供空格, 抄写丢缩进时 P' 与下一项
+	// 粘合成 P'N; 在 \tkz 参数区内删除行尾 % 让换行还原为空格 (见上)。
+	content = fixTkzPercentJoins(content)
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)

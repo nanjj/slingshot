@@ -134,6 +134,51 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\begin{scope}[xfp, new]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
 		},
 		{
+			name:  "percent line-join col-0 continuation fixed",
+			input: "\\begin{tikzpicture}\n\\tkzDrawSegments[new](P,R M,P M,Q M,R N,P'%\nN,Q' N,R' P',R' I,K)\n\\end{tikzpicture}\n",
+			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\tkzDrawSegments[new](P,R M,P M,Q M,R N,P'\nN,Q' N,R' P',R' I,K)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "percent line-join indented continuation also fixed",
+			input: "\\begin{tikzpicture}\n\\tkzDrawSegments[new](P,R N,P'%\n   N,Q')\n\\end{tikzpicture}\n",
+			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\tkzDrawSegments[new](P,R N,P'\n   N,Q')\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "percent line-join in tkz brace list fixed",
+			input: "\\begin{tikzpicture}\n\\tkzDefPointsBy[reflection=over A--B](M,N){P,P'%\nQ,Q'}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefPointsBy[reflection=over A--B](M,N){P,P'\nQ,Q'}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "percent line-join in manual MarkRightAngles example fixed",
+			input: "\\begin{tikzpicture}\n\\tkzMarkRightAngles(A,F,I B,D,I J_c,X_c,A%\n     J_c,Y_c,B)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzMarkRightAngles(A,F,I B,D,I J_c,X_c,A\n     J_c,Y_c,B)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "node text percent join untouched",
+			input: "\\begin{tikzpicture}\n\\node {foo%\nbar};\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\node {foo%\nbar};\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "comma before percent untouched",
+			input: "\\begin{tikzpicture}\n\\tkzDrawPoints(A,B,%\nC,D)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDrawPoints(A,B,%\nC,D)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "number before percent with comma continuation untouched",
+			input: "\\begin{tikzpicture}\n\\tkzFillAngle[fill=teal,opacity=.2%\n,fill=blue](A,B,C)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzFillAngle[fill=teal,opacity=.2%\n,fill=blue](A,B,C)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "comment containing tkz command untouched",
+			input: "\\begin{tikzpicture}\n% \\tkzDrawPoints(A,B%\nC,D)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n% \\tkzDrawPoints(A,B%\nC,D)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "mid-line comment with indented continuation untouched",
+			input: "\\begin{tikzpicture}\n\\tkzDrawSegments(A,B% note\n   C,D)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDrawSegments(A,B% note\n   C,D)\n\\end{tikzpicture}\n",
+		},
+		{
 			name:  "double outer shells stripped iteratively",
 			input: "\\begin{tikzpicture}\n\\begin{tikzpicture}\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}\n\\end{tikzpicture}\n\\end{tikzpicture}\n",
 			want:  "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}",
