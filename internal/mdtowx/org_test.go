@@ -359,6 +359,59 @@ print(1)
 		}
 	})
 
+	t.Run("image_caption_with_double_quotes", func(t *testing.T) {
+		orgContent := `#+TITLE: Caption Test
+
+#+caption: "The" Circle of APOLLONIUS
+[[file:x.png]]
+
+#+caption: evised version of "Tangente"
+[[file:x2.png]]
+
+#+caption: ""Le Monde" version"
+[[file:x3.png]]
+
+#+caption: plain caption
+[[file:x4.png]]
+
+#+caption: C:\path\dir
+[[file:x5.png]]
+`
+		dir := t.TempDir()
+		path := dir + "/caption-img.org"
+		if err := os.WriteFile(path, []byte(orgContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := ConvertOrgFile(path)
+		if err != nil {
+			t.Fatalf("ConvertOrgFile error = %v", err)
+		}
+
+		html := string(result.HTML)
+		// Quoted captions must not degrade the image line to literal text.
+		if strings.Contains(html, "![img]") {
+			t.Errorf("HTML should not contain literal markdown image syntax, got: %s", html)
+		}
+		// All five images must render as <img> tags.
+		if got := strings.Count(html, "<img"); got != 5 {
+			t.Errorf("HTML should contain 5 <img> tags, got %d: %s", got, html)
+		}
+		// Captions become visible text below the image (injectImageCaptions),
+		// with quotes preserved as HTML entities.
+		for _, want := range []string{
+			`Figure 1: &quot;The&quot; Circle of APOLLONIUS`,
+			`Figure 2: evised version of &quot;Tangente&quot;`,
+			`Figure 3: &quot;&quot;Le Monde&quot; version&quot;`,
+			`Figure 4: plain caption`,
+			`Figure 5: C:\path\dir`,
+		} {
+			if !strings.Contains(html, want) {
+				t.Errorf("HTML should contain caption %q, got: %s", want, html)
+			}
+		}
+	})
+
 	t.Run("ordered_list", func(t *testing.T) {
 		orgContent := `#+TITLE: List Test
 

@@ -161,6 +161,8 @@ func orgToMarkdown(orgPath string) ([]byte, error) {
 // It defines a derived Org export backend 'my-md based on 'md (ox-md) with:
 //   - Fenced code blocks: #+begin_src go becomes ```go ... ```
 //   - GFM tables: Org tables become | A | B |\n |---|---| format
+//   - Image captions: caption quotes escaped so goldmark parses the
+//     Markdown title attribute correctly (ox-md emits them unescaped)
 //
 // The backtick character (ASCII 96) is generated via (string 96) to avoid
 // any quoting issues when embedding in Go source.
@@ -199,6 +201,41 @@ const orgToMarkdownElisp = `(progn
       (concat (if cap (concat "<!-- mdtowx-code-caption: " cap " -->\n") "")
               bt bt bt lang "\n" code bt bt bt "\n")))
 
+  ;; --- Image captions: escape title quotes ---
+  ;; ox-md emits image captions verbatim inside the Markdown title
+  ;; attribute: #+caption: "The" Circle becomes ![img](x.png ""The" Circle").
+  ;; goldmark closes the title at the second quote and the whole line
+  ;; degrades to literal text.  We escape backslash and double quote so the
+  ;; Markdown intermediate stays valid (goldmark round-trips them exactly).
+  (defun my-org-md-escape-title (s)
+    (mapconcat
+     (lambda (c)
+       (cond ((= c ?\\) "\\\\")
+             ((= c ?\") "\\\"")
+             (t (char-to-string c))))
+     s ""))
+
+  ;; Override ox-md's link handler only for inline images with captions:
+  ;; emit the title attribute with escaped quotes.  All other links (plain
+  ;; links, images with a description, http links, ...) are delegated to
+  ;; the parent 'md backend via org-export-with-backend.
+  (defun my-org-md-link (link desc info)
+    (if (org-export-inline-image-p link org-html-inline-image-rules)
+        (let* ((type (org-element-property :type link))
+               (raw-path (org-element-property :path link))
+               (path (cond ((not (string-equal type "file"))
+                            (concat type ":" raw-path))
+                           ((not (file-name-absolute-p raw-path)) raw-path)
+                           (t (expand-file-name raw-path))))
+               (caption (org-export-data
+                         (org-export-get-caption
+                          (org-element-parent-element link))
+                         info)))
+          (if (org-string-nw-p caption)
+              (format "![img](%s \"%s\")" path (my-org-md-escape-title caption))
+            (format "![img](%s)" path)))
+      (org-export-with-backend 'md link desc info)))
+
   ;; --- GFM-style tables ---
   ;; Override ox-md's default table handler (which emits raw HTML tables)
   ;; to produce standard GFM pipe tables.
@@ -228,7 +265,8 @@ const orgToMarkdownElisp = `(progn
   ;; Register the derived backend.
   (org-export-define-derived-backend 'my-md 'md
     :translate-alist '((src-block . my-org-md-src-block)
-                       (table . my-org-md-table)))
+                       (table . my-org-md-table)
+                       (link . my-org-md-link)))
 
   ;; Export current buffer (loaded via --visit) as Markdown string.
   ;; TOC is suppressed -- WeChat articles never need a table of contents.
