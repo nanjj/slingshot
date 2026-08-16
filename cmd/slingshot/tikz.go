@@ -587,6 +587,29 @@ var tkzpictureEndRe = regexp.MustCompile(`\\end\{tkzpicture\}`)
 // 函数调用、节点文本中的 veclen 均不受影响。
 var veclenKeyRe = regexp.MustCompile(`(?i)([\[,]\s*)veclen(\s*[,}\]= {])`)
 
+// newKeyRe 匹配 tikz 选项列表中的独立 new key。
+var newKeyRe = regexp.MustCompile(`([\[,]\s*)new(\s*[,}\]= {])`)
+
+// newStyleDefinedRe 匹配输入中已自定义 new 样式的情况
+// (\tikzset{new/.style=...} / \pgfkeys{new/.code=...} / \tkzSetUpStyle[...]{new})。
+// 已定义时不注入, 尊重用户自己的样式语义。
+var newStyleDefinedRe = regexp.MustCompile(`(?i)new\s*/\s*[a-z.]+\b|\\tkzSetUpStyle\s*(\[[^]]*\])?\s*\{new\}`)
+
+// ensureNewStyle 为 tkz-euclide 文档示例注入 new 样式定义。
+// new 不是 tkz-euclide 包内置 key, 而是 5.x 文档 (TKZdoc-euclide-main.tex)
+// 在 preamble 自定义的高亮样式: new/.style={color=orange,line width=.2pt},
+// 用于标记新构造的对象 (\tkzDrawSegment[new](...), \tkzDrawCircles[new] 等)。
+// 抄文档示例时缺失该定义, 4.051b 与 5.x 都会报 "I do not know the key
+// '/tikz/new'"。因此: 选项列表中使用 new 且输入未自行定义时, 注入文档同款
+// 定义 (color=orange 高亮 + 0.2pt 线宽), 语义与 5.x 文档示例完全一致。
+// 仅匹配 key 位置 (前导 [ 或 ,), 坐标/文本中的 new 不受影响。
+func ensureNewStyle(content string) string {
+	if !newKeyRe.MatchString(content) || newStyleDefinedRe.MatchString(content) {
+		return content
+	}
+	return "\\tikzset{new/.style={color=orange,line width=.2pt}}\n" + content
+}
+
 // selfContainedStart 报告内容是否以自包含 TikZ 环境开头。
 func selfContainedStart(content string) bool {
 	for _, env := range tikzSelfContainedEnvs {
@@ -631,6 +654,8 @@ func normalizeTikz(content string) string {
 	content = veclenKeyRe.ReplaceAllString(content, `${1}xfp${2}`)
 	// 剥掉误包的空外壳, 避免 pgf 嵌套 picture 崩溃。
 	content = stripOuterTikzShells(content)
+	// new (tkz-euclide 文档自定义的高亮样式) 未定义时注入文档同款定义。
+	content = ensureNewStyle(content)
 	for _, env := range tikzSelfContainedEnvs {
 		if strings.Contains(content, env) {
 			return content

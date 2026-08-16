@@ -99,6 +99,41 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\begin{tikzpicture}[scale=1]\n\\tkzDefPoint(0,0){O}\n\\tkzDefPoint(2.5,0){N}\n\\begin{scope}[xfp]\n\\tkzMarkAngle[mkpos=.2, size=1.2](C,A,M)\n\\end{scope}\n\\end{tikzpicture}\n",
 		},
 		{
+			name:  "new style injected for tkz-euclide doc example",
+			input: "\\begin{tikzpicture}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "new later among other options",
+			input: "\\begin{tikzpicture}\n\\tkzDrawCircle[draw=red, new](I,J)\n\\end{tikzpicture}\n",
+			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\tkzDrawCircle[draw=red, new](I,J)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "new not injected when user defines it via tikzset",
+			input: "\\begin{tikzpicture}\n\\tikzset{new/.style={color=blue}}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tikzset{new/.style={color=blue}}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "new not injected when user defines it via tkzSetUpStyle",
+			input: "\\tkzSetUpStyle[color=blue]{new}\n\\tkzDrawPoints[new](A,B)\n",
+			want:  "\\begin{tikzpicture}\n\\tkzSetUpStyle[color=blue]{new}\n\\tkzDrawPoints[new](A,B)\n\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "new style injected for bare content",
+			input: "\\tkzDrawSegment[new](I,C)",
+			want:  "\\begin{tikzpicture}\n\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "new not injected for longer key names",
+			input: "\\begin{tikzpicture}\n\\node[newwidth]{x};\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\node[newwidth]{x};\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "veclen translated and new injected independently",
+			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen, new]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\begin{scope}[xfp, new]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
+		{
 			name:  "double outer shells stripped iteratively",
 			input: "\\begin{tikzpicture}\n\\begin{tikzpicture}\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}\n\\end{tikzpicture}\n\\end{tikzpicture}\n",
 			want:  "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}",
