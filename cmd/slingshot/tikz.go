@@ -242,6 +242,59 @@ func siunitxAliasShim(pkgs []string) string {
 	return ""
 }
 
+// apolloniusUseRe 匹配 tkz-euclide 的阿波罗尼奥斯圆用法:
+// \tkzDefCircle[apollonius,…] / \tkzDrawCircle[s][apollonius,…] /
+// 直接调用内部宏 \tkzDefApolloniusCircle。
+var apolloniusUseRe = regexp.MustCompile(`\\tkz(?:DefCircle|DrawCircles?)\s*\[[^]]*\bapollonius\b|\\tkzDefApolloniusCircle`)
+
+// tikzApolloniusShim 覆盖 bundle 内置 4.051b 的 \tkzDefApolloniusCircle,
+// 使其结果点语义与 tkz-euclide 5.x 一致。两版实现 (tkz-obj-eu-circles.tex):
+//
+//	5.x:   tkzFirstPointResult = 圆心, tkzSecondPointResult = 圆上内分点,
+//	       tkzThirdPointResult = 圆上外分点, tkzLengthResult = 半径。
+//	4.051b: tkzFirstPointResult / tkzSecondPointResult 是两个圆上分点,
+//	       圆心只留在 tkzPointResult, GetPoints 取不到。
+//
+// 文档示例 \tkzDefCircle[apollonius,K=2](A,B) \tkzGetPoints{K1}{k} 因此
+// 在 4.051b 下 K1=圆上点而非圆心, \tkzDrawCircle(K1,k) 以错误圆心画出
+// 大圆, \tkzDefPointOnCircle[through= center K1 …] 的 I/J 也随之全错。
+// 覆盖为 5.x 语义 (沿用 4.051b 自带的 \tkz@VecK / \tkzDefMidPoint /
+// \tkz@@CalcLengthcm): First=圆心、Second=内分点、Third=外分点、Length=半径。
+// 圆心仍留在 tkzPointResult, 半径仍在 tkzLengthResult, 因此
+// \tkzDrawCircle[apollonius] 分支 ((tkzPointResult) circle (\tkzLengthResult))
+// 行为不变; \ifcsname 守卫保证 tkz-euclide 未加载时不定义。
+const tikzApolloniusShim = `\makeatletter
+\ifcsname tkzDefApolloniusCircle\endcsname
+\def\tkzDefApolloniusCircle(#1,#2){%
+\begingroup
+  \tkz@VecK[\tkz@koeff/(1+\tkz@koeff)](#1,#2)
+  \pgfnodealias{apo@pta}{tkzPointResult}
+  \pgfnodealias{tkzSecondPointResult}{tkzPointResult}
+  \tkz@VecK[\tkz@koeff/(\tkz@koeff-1)](#1,#2)
+  \pgfnodealias{apo@ptb}{tkzPointResult}
+  \tkzDefMidPoint(apo@pta,apo@ptb)
+  \pgfnodealias{tkzFirstPointResult}{tkzPointResult}
+  \tkz@@CalcLengthcm(tkzFirstPointResult,apo@pta){tkzLengthResult}
+  \pgfnodealias{tkzThirdPointResult}{apo@ptb}
+\endgroup
+}
+\fi
+\makeatother
+`
+
+// tkzApolloniusShimFor 检测输入是否用到阿波罗尼奥斯圆, 命中时返回兼容 shim。
+// 注释行中的用法不触发 (LaTeX 中 % 到行尾都是注释)。
+func tkzApolloniusShimFor(content string) string {
+	for _, m := range apolloniusUseRe.FindAllStringIndex(content, -1) {
+		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
+		if strings.Contains(content[lineStart:m[0]], "%") {
+			continue
+		}
+		return tikzApolloniusShim + "\n"
+	}
+	return ""
+}
+
 // buzzerBipoleRe 匹配 circuitikz 的 buzzer / rbuzzer 双端元件用法。
 var buzzerBipoleRe = regexp.MustCompile(`to\[\s*r?buzzer\b`)
 
@@ -898,7 +951,7 @@ func renderTikz(inFile, outFile string) (err error) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
 			tikzLibraryLines(libs),
-			circuitikzBuzzerShim(raw)+circuitikzMotorShim(raw)+circuitikzIecShim(raw)+circuitikzConverterShim(raw)+siunitxAliasShim(pkgs), font), 0644); err != nil {
+			circuitikzBuzzerShim(raw)+circuitikzMotorShim(raw)+circuitikzIecShim(raw)+circuitikzConverterShim(raw)+siunitxAliasShim(pkgs)+tkzApolloniusShimFor(raw), font), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 

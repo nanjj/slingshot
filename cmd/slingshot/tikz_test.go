@@ -405,6 +405,91 @@ func TestFixDefPointOnCircleThrough(t *testing.T) {
 	}
 }
 
+func TestTkzApolloniusShim(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantShim bool
+	}{
+		{
+			name:     "DefCircle apollonius",
+			input:    `\tkzDefCircle[apollonius,K=2](A,B) \tkzGetPoints{K1}{k}`,
+			wantShim: true,
+		},
+		{
+			name:     "DrawCircle apollonius",
+			input:    `\tkzDrawCircle[apollonius,K=3](A,B)`,
+			wantShim: true,
+		},
+		{
+			name:     "DrawCircles apollonius",
+			input:    `\tkzDrawCircles[apollonius,K=2](A,B)`,
+			wantShim: true,
+		},
+		{
+			name:     "direct internal macro",
+			input:    `\tkzDefApolloniusCircle(A,B)`,
+			wantShim: true,
+		},
+		{
+			name:     "comment mention does not trigger",
+			input:    "% apollonius circle example\n\\tkzDefPoint(0,0){A}",
+			wantShim: false,
+		},
+		{
+			name:     "unrelated input",
+			input:    `\tkzDefCircle[circum](A,B,C)`,
+			wantShim: false,
+		},
+		{
+			name:     "apollonius in node text does not trigger",
+			input:    `\node {apollonius};`,
+			wantShim: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tkzApolloniusShimFor(tt.input)
+			if tt.wantShim && got == "" {
+				t.Fatal("tkzApolloniusShimFor() = empty, want shim")
+			}
+			if !tt.wantShim && got != "" {
+				t.Fatalf("tkzApolloniusShimFor() = %q, want empty", got)
+			}
+		})
+	}
+}
+
+// TestTkzApolloniusShimSemantics 验证注入定义镜像 5.x 的结果点语义:
+// First=圆心、Second=内分点、Third=外分点、Length=半径,
+// 且圆心仍在 tkzPointResult (DrawCircle[apollonius] 分支兼容)。
+func TestTkzApolloniusShimSemantics(t *testing.T) {
+	shim := tkzApolloniusShimFor(`\tkzDefCircle[apollonius,K=2](A,B)`)
+	checks := []struct {
+		name string
+		sub  string
+	}{
+		{"guarded", `\ifcsname tkzDefApolloniusCircle\endcsname`},
+		{"first is center", `\pgfnodealias{tkzFirstPointResult}{tkzPointResult}`},
+		{"second is inner point", `\pgfnodealias{tkzSecondPointResult}{tkzPointResult}`},
+		{"third is outer point", `\pgfnodealias{tkzThirdPointResult}{apo@ptb}`},
+		{"radius from center to inner", `\tkz@@CalcLengthcm(tkzFirstPointResult,apo@pta){tkzLengthResult}`},
+		{"inner via VecK k/(1+k)", `\tkz@VecK[\tkz@koeff/(1+\tkz@koeff)](#1,#2)`},
+		{"outer via VecK k/(k-1)", `\tkz@VecK[\tkz@koeff/(\tkz@koeff-1)](#1,#2)`},
+		{"center stays in tkzPointResult", `\tkzDefMidPoint(apo@pta,apo@ptb)`},
+	}
+	for _, c := range checks {
+		if !strings.Contains(shim, c.sub) {
+			t.Errorf("shim missing %s: %q not found", c.name, c.sub)
+		}
+	}
+	// First 的赋值必须在 Second 之后出现 (圆心来自 MidPoint 之后的
+	// tkzPointResult, 颠倒会取到 VecK 的中间结果)。
+	if strings.Index(shim, `\pgfnodealias{tkzFirstPointResult}`) < strings.Index(shim, `\pgfnodealias{tkzSecondPointResult}`) {
+		t.Error("tkzFirstPointResult must be assigned after tkzSecondPointResult (center from MidPoint)")
+	}
+}
+
 func TestTikzOutputFormat(t *testing.T) {
 	tests := []struct {
 		name    string
