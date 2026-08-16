@@ -577,6 +577,16 @@ var tkzpictureBeginRe = regexp.MustCompile(`\\begin\{tkzpicture\}(\[[^]]*\])?`)
 // tkzpictureEndRe 匹配 tkzpicture 环境的结束标记。
 var tkzpictureEndRe = regexp.MustCompile(`\\end\{tkzpicture\}`)
 
+// veclenKeyRe 匹配 tikz 选项列表中的独立 veclen key。
+// tkz-euclide 5.x 把激活 xfp 高精度向量长度计算的 key 从 xfp 改名为 veclen
+// (tkz-tools-eu-math.tex: \tikzset{veclen/.code={...}}); bundle 内置的
+// 4.051b 只认识旧名 xfp, 新版示例的 \begin{scope}[veclen] 直接编译报
+// "I do not know the key '/tikz/veclen'", 因此把选项列表中的独立 veclen
+// 翻译为 xfp (两版语义一致: 用 xfp 重定义 pgfmath veclen, 解决 dimension
+// too large)。仅匹配 key 位置 (前导 [ 或 ,): veclen(\x,\y) 这类 pgfmath
+// 函数调用、节点文本中的 veclen 均不受影响。
+var veclenKeyRe = regexp.MustCompile(`(?i)([\[,]\s*)veclen(\s*[,}\]= {])`)
+
 // selfContainedStart 报告内容是否以自包含 TikZ 环境开头。
 func selfContainedStart(content string) bool {
 	for _, env := range tikzSelfContainedEnvs {
@@ -617,6 +627,8 @@ func normalizeTikz(content string) string {
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
+	// veclen (tkz-euclide 5.x 的 xfp key 新名) 归一化为 4.051b 认识的 xfp。
+	content = veclenKeyRe.ReplaceAllString(content, `${1}xfp${2}`)
 	// 剥掉误包的空外壳, 避免 pgf 嵌套 picture 崩溃。
 	content = stripOuterTikzShells(content)
 	for _, env := range tikzSelfContainedEnvs {

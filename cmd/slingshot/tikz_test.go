@@ -69,6 +69,36 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\begin{tikzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tikzpicture}",
 		},
 		{
+			name:  "veclen scope option normalized to xfp",
+			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\begin{scope}[xfp]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "veclen first among other options",
+			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen, x=1]\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\begin{scope}[xfp, x=1]\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "veclen later option with space",
+			input: "\\begin{tikzpicture}\n\\begin{scope}[a, veclen]\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\begin{scope}[a, xfp]\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "veclen with value and node",
+			input: "\\begin{tikzpicture}\n\\node[veclen=true]{x};\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\node[xfp=true]{x};\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "veclen pgfmath function call untouched",
+			input: "\\begin{tikzpicture}\n\\node at ($ (0,0) ! veclen(1,1) ! (1,0) $) {};\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\node at ($ (0,0) ! veclen(1,1) ! (1,0) $) {};\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "tkz-euclide doc example with scope veclen",
+			input: "\\begin{tikzpicture}[scale=1]\n\\tkzDefPoint(0,0){O}\n\\tkzDefPoint(2.5,0){N}\n\\begin{scope}[veclen]\n\\tkzMarkAngle[mkpos=.2, size=1.2](C,A,M)\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}[scale=1]\n\\tkzDefPoint(0,0){O}\n\\tkzDefPoint(2.5,0){N}\n\\begin{scope}[xfp]\n\\tkzMarkAngle[mkpos=.2, size=1.2](C,A,M)\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
+		{
 			name:  "double outer shells stripped iteratively",
 			input: "\\begin{tikzpicture}\n\\begin{tikzpicture}\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}\n\\end{tikzpicture}\n\\end{tikzpicture}\n",
 			want:  "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}",
