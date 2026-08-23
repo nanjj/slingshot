@@ -944,3 +944,78 @@ msgstr "Wrote"
 
 msgid "expected IN-FILE and OUT-FILE arguments"
 msgstr "expected IN-FILE and OUT-FILE arguments"
+
+msgid "Convert GCJ-02 coordinates (经度,纬度) to an address."
+msgstr "Convert GCJ-02 coordinates (经度,纬度) to an address."
+
+msgid "Convert an address to GCJ-02 coordinates (经度,纬度)."
+msgstr "Convert an address to GCJ-02 coordinates (经度,纬度)."
+
+msgid "Fetch detailed information of a POI by its Amap POI ID."
+msgstr "Fetch detailed information of a POI by its Amap POI ID."
+
+msgid "Geocode an address"
+msgstr "Geocode an address"
+
+msgid "Locate an IP address"
+msgstr "Locate an IP address"
+
+msgid "Locate an IP address; omit the argument to use the requester's IP."
+msgstr "Locate an IP address; omit the argument to use the requester's IP."
+
+msgid "Measure distance"
+msgstr "Measure distance"
+
+msgid "Measure distance(s): type 1 = driving, 0 = straight line, 3 = walking (default 0)."
+msgstr "Measure distance(s): type 1 = driving, 0 = straight line, 3 = walking (default 0)."
+
+msgid "Nearby POI search around a coordinate point (经度,纬度); default radius 3000m."
+msgstr "Nearby POI search around a coordinate point (经度,纬度); default radius 3000m."
+
+msgid "POI keyword search, restricted to the given city when provided (citylimit=true)."
+msgstr "POI keyword search, restricted to the given city when provided (citylimit=true)."
+
+msgid "Plan a bicycling route"
+msgstr "Plan a bicycling route"
+
+msgid "Plan a bicycling route between two addresses (both are geocoded automatically)."
+msgstr "Plan a bicycling route between two addresses (both are geocoded automatically)."
+
+msgid "Plan a driving route"
+msgstr "Plan a driving route"
+
+msgid "Plan a driving route between two addresses (both are geocoded automatically)."
+msgstr "Plan a driving route between two addresses (both are geocoded automatically)."
+
+msgid "Plan a public transit route; city and cityd are the origin/destination city names (required for cross-city)."
+msgstr "Plan a public transit route; city and cityd are the origin/destination city names (required for cross-city)."
+
+msgid "Plan a transit route"
+msgstr "Plan a transit route"
+
+msgid "Plan a walking route"
+msgstr "Plan a walking route"
+
+msgid "Plan a walking route between two addresses (both are geocoded automatically)."
+msgstr "Plan a walking route between two addresses (both are geocoded automatically)."
+
+msgid "Query Amap (高德地图) POI, geocoding and routing"
+msgstr "Query Amap (高德地图) POI, geocoding and routing"
+
+msgid "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\nSubcommands:\n  search    <keywords> [city]                 POI keyword search (city-limited)\n  around    <keywords> <location> [radius]    Nearby search (default 3000m)\n  detail    <id>                              POI detail by Amap ID\n  geo       <address>                         Geocode address to coordinates\n  regeo     <location>                        Reverse geocode coordinates\n  driving   <origin> <destination>            Driving route (auto geocode)\n  walking   <origin> <destination>            Walking route (auto geocode)\n  bicycling <origin> <destination>            Bicycling route (auto geocode)\n  transit   <origin> <destination> <city> <cityd>\n                                              Transit route (city names required)\n  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)\n  ip        [ip]                              IP location"
+msgstr "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\nSubcommands:\n  search    <keywords> [city]                 POI keyword search (city-limited)\n  around    <keywords> <location> [radius]    Nearby search (default 3000m)\n  detail    <id>                              POI detail by Amap ID\n  geo       <address>                         Geocode address to coordinates\n  regeo     <location>                        Reverse geocode coordinates\n  driving   <origin> <destination>            Driving route (auto geocode)\n  walking   <origin> <destination>            Walking route (auto geocode)\n  bicycling <origin> <destination>            Bicycling route (auto geocode)\n  transit   <origin> <destination> <city> <cityd>\n                                              Transit route (city names required)\n  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)\n  ip        [ip]                              IP location"
+
+msgid "Reverse geocode coordinates"
+msgstr "Reverse geocode coordinates"
+
+msgid "Search POIs around a location"
+msgstr "Search POIs around a location"
+
+msgid "Search POIs by keywords"
+msgstr "Search POIs by keywords"
+
+msgid "Show POI detail by ID"
+msgstr "Show POI detail by ID"
+
+msgid "expected an argument"
+msgstr "expected an argument"

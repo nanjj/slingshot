@@ -18,6 +18,10 @@ go install github.com/nanjj/slingshot/cmd/slingshot@latest
 slingshot config set wechat.appid APPID
 slingshot config set wechat.secret SECRET
 
+# 高德地图（可选）：POI 搜索 / 地理编码 / 路线规划
+slingshot config set amap.key KEY   # 或 export AMAP_KEY
+slingshot amap search "冰煮羊" 呼和浩特
+
 # 2. 转换 Markdown → 微信 HTML（可选 --upload 自动上传图片）
 slingshot draft convert article.md --upload
 
@@ -29,11 +33,28 @@ slingshot draft add article.html
 
 ```
 slingshot
+├── amap     search|around|detail|geo|regeo|driving|walking|bicycling|transit|distance|ip
 ├── draft    list|add|update|remove|show|convert <file>
 ├── config   list|show|get|set|unset
 ├── meterial add|list|remove|show
 └── skill    list|install
 ```
+
+### amap（高德地图）
+
+通过高德官方 MCP 服务（Streamable HTTP，JSON-RPC）查询地图数据：
+
+- `amap search <关键词> [城市]` — POI 关键字搜索（citylimit=true）
+- `amap around <关键词> <经度,纬度> [半径]` — 周边搜索（默认 3000m）
+- `amap detail <poiId>` — POI ID 详情
+- `amap geo <地址>` / `amap regeo <经度,纬度>` — （逆）地理编码
+- `amap driving|walking|bicycling <起点> <终点>` — 路线规划（起终点自动地理编码）
+- `amap transit <起点> <终点> <起城> <终城>` — 公交路线（跨城必传城市）
+- `amap distance <origins> <dest> <type>` — 距离测量（1驾车/0直线/3步行）
+- `amap ip [ip]` — IP 定位
+
+坐标使用高德 GCJ-02 坐标系，格式 `经度,纬度`（如 `111.772234,40.853779`）。
+Key 通过 `slingshot config set amap.key <key>` 或环境变量 `AMAP_KEY` 提供，结果以 JSON 输出。
 
 ### sidecar YAML
 

@@ -14,12 +14,14 @@ cmd/slingshot/                      # 主入口 + 子命令
 ├── draft_convert.go                # draft convert + --upload
 ├── meterial.go                     # meterial 子命令
 ├── skill.go                        # skill 子命令 (含 embedded skills)
+├── amap.go                         # amap 子命令 (高德地图 MCP)
 └── embedded_skills/weixin/SKILL.md  # 内置 skill (嵌入 binary)
 internal/
 ├── cmd/shared.go                   # 共享 CLI 工具
 ├── config/config.go                # YAML 配置管理
 ├── draft/draft.go                  # 微信草稿 API
 ├── getaccesstoken/getaccesstoken.go# Access Token 管理 (缓存 + 自动刷新)
+├── amap/amap.go                    # 高德地图 MCP 客户端 (JSON-RPC, 无状态)
 ├── i18n/                           # 国际化 (.po + locales/)
 ├── material/material.go            # 永久素材 API
 ├── mdtowx/mdtowx.go               # Markdown → 微信 HTML (goldmark + inline styles)
@@ -35,7 +37,8 @@ slingshot
 ├── draft list|add|update|remove|show|convert <file>
 ├── config list|show|get|set|unset
 ├── meterial add|list|remove|show
-└── skill list|install
+├── skill list|install
+└── amap search|around|detail|geo|regeo|driving|walking|bicycling|transit|distance|ip
 ```
 
 ## 架构要点

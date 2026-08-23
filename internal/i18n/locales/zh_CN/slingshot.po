@@ -951,3 +951,78 @@ msgstr "已写入"
 
 msgid "expected IN-FILE and OUT-FILE arguments"
 msgstr "需要 IN-FILE 和 OUT-FILE 两个参数"
+
+msgid "Convert GCJ-02 coordinates (经度,纬度) to an address."
+msgstr "将 GCJ-02 坐标（经度,纬度）转换为地址。"
+
+msgid "Convert an address to GCJ-02 coordinates (经度,纬度)."
+msgstr "将地址转换为 GCJ-02 坐标（经度,纬度）。"
+
+msgid "Fetch detailed information of a POI by its Amap POI ID."
+msgstr "按高德 POI ID 获取 POI 详细信息。"
+
+msgid "Geocode an address"
+msgstr "地址地理编码"
+
+msgid "Locate an IP address"
+msgstr "IP 定位"
+
+msgid "Locate an IP address; omit the argument to use the requester's IP."
+msgstr "定位 IP 地址；省略参数时使用请求方 IP。"
+
+msgid "Measure distance"
+msgstr "测量距离"
+
+msgid "Measure distance(s): type 1 = driving, 0 = straight line, 3 = walking (default 0)."
+msgstr "测量距离：type 1 = 驾车，0 = 直线，3 = 步行（默认 0）。"
+
+msgid "Nearby POI search around a coordinate point (经度,纬度); default radius 3000m."
+msgstr "围绕坐标点（经度,纬度）进行周边 POI 搜索；默认半径 3000 米。"
+
+msgid "POI keyword search, restricted to the given city when provided (citylimit=true)."
+msgstr "POI 关键字搜索，提供城市时限定在该城市范围内（citylimit=true）。"
+
+msgid "Plan a bicycling route"
+msgstr "规划骑行路线"
+
+msgid "Plan a bicycling route between two addresses (both are geocoded automatically)."
+msgstr "规划两个地址之间的骑行路线（两端自动地理编码）。"
+
+msgid "Plan a driving route"
+msgstr "规划驾车路线"
+
+msgid "Plan a driving route between two addresses (both are geocoded automatically)."
+msgstr "规划两个地址之间的驾车路线（两端自动地理编码）。"
+
+msgid "Plan a public transit route; city and cityd are the origin/destination city names (required for cross-city)."
+msgstr "规划公交路线；city 和 cityd 为起终点城市名（跨城必传）。"
+
+msgid "Plan a transit route"
+msgstr "规划公交路线"
+
+msgid "Plan a walking route"
+msgstr "规划步行路线"
+
+msgid "Plan a walking route between two addresses (both are geocoded automatically)."
+msgstr "规划两个地址之间的步行路线（两端自动地理编码）。"
+
+msgid "Query Amap (高德地图) POI, geocoding and routing"
+msgstr "查询高德地图 POI、地理编码与路线"
+
+msgid "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\nSubcommands:\n  search    <keywords> [city]                 POI keyword search (city-limited)\n  around    <keywords> <location> [radius]    Nearby search (default 3000m)\n  detail    <id>                              POI detail by Amap ID\n  geo       <address>                         Geocode address to coordinates\n  regeo     <location>                        Reverse geocode coordinates\n  driving   <origin> <destination>            Driving route (auto geocode)\n  walking   <origin> <destination>            Walking route (auto geocode)\n  bicycling <origin> <destination>            Bicycling route (auto geocode)\n  transit   <origin> <destination> <city> <cityd>\n                                              Transit route (city names required)\n  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)\n  ip        [ip]                              IP location"
+msgstr "查询高德地图 MCP 服务：POI 搜索、地理编码、路线规划、距离测量与 IP 定位。\n\n坐标使用 GCJ-02，格式为 \"经度,纬度\"（如 111.772234,40.853779）。\n\n配置：\n  slingshot config set amap.key <key>   # 或设置环境变量 AMAP_KEY\n\n子命令：\n  search    <关键词> [城市]                  POI 关键字搜索（限定城市）\n  around    <关键词> <经度,纬度> [半径]        周边搜索（默认 3000 米）\n  detail    <id>                              按高德 POI ID 查看详情\n  geo       <地址>                            地址地理编码\n  regeo     <经度,纬度>                        逆地理编码\n  driving   <起点> <终点>                      驾车路线（自动地理编码）\n  walking   <起点> <终点>                      步行路线（自动地理编码）\n  bicycling <起点> <终点>                      骑行路线（自动地理编码）\n  transit   <起点> <终点> <起城> <终城>\n                                              公交路线（需提供城市名）\n  distance  <origins> <destination> [type]    距离测量（1 驾车 / 0 直线 / 3 步行）\n  ip        [ip]                              IP 定位"
+
+msgid "Reverse geocode coordinates"
+msgstr "坐标逆地理编码"
+
+msgid "Search POIs around a location"
+msgstr "搜索周边 POI"
+
+msgid "Search POIs by keywords"
+msgstr "按关键字搜索 POI"
+
+msgid "Show POI detail by ID"
+msgstr "按 ID 查看 POI 详情"
+
+msgid "expected an argument"
+msgstr "需要一个参数"
