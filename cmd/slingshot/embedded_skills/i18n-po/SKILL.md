@@ -1,12 +1,27 @@
 ---
 name: i18n-po
-description: Slingshot .po 翻译管理 — sync → check → translate → stats
-keywords: i18n, po, translation, zh_CN, en_US, slingshot, sync, check, translate, stats
+description: Slingshot .po 翻译管理 — sync → check → translate → stats（--id 按编号翻译）
+author: Curie <curie@dscli.io>
+keywords:
+- i18n
+- po
+- translation
+- zh_CN
+- en_US
+- slingshot
+- sync
+- check
+- translate
+- stats
 ---
 
 # i18n-po — Slingshot 翻译管理
 
 管理 slingshot 的 `.po` 翻译文件。翻译在编译时通过 `//go:embed` 打包进二进制文件。
+
+## ⚠️ 铁律（AI 与用户通用）
+
+**修改 .po 的唯一方式是通过 `slingshot i18n` 命令**，不要直接编辑 `.po` 文件，不要写脚本来改它。命令会正确处理转义、保持文件结构稳定。
 
 ## 工作流
 
@@ -40,7 +55,17 @@ slingshot i18n check --exit-code      # 发现问题时非零退出
 slingshot i18n show zh_CN <id>        # 查看完整 msgid（不截断）
 ```
 
-### 4. 翻译
+### 4. 翻译（推荐 `--id`）
+
+```bash
+slingshot i18n check zh_CN            # 1. 先看未翻译条目及其编号
+slingshot i18n translate zh_CN \
+  --id 3 --msgstr "管理翻译（.po）文件"   # 2. 按编号翻译，无需复制 msgid
+```
+
+`--id` 与 `i18n check` 显示的编号一致（也用于 `i18n show`）。适合长/多行 msgid，避免 shell 转义问题。
+
+如需指定精确 msgid（已翻译了的修改、或 check 之外的条目）：
 
 ```bash
 slingshot i18n translate zh_CN \
@@ -64,7 +89,7 @@ go build ./cmd/slingshot/     # 编译验证
 # 1. 源码加 i18n.G()
 # 2. slingshot i18n sync
 # 3. slingshot i18n check zh_CN
-# 4. slingshot i18n translate zh_CN --msgid "..." --msgstr "..."
+# 4. slingshot i18n translate zh_CN --id <编号> --msgstr "..."
 # 5. slingshot i18n stats && go build ./cmd/slingshot/
 ```
 

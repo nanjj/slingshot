@@ -78,5 +78,5 @@ Release: `CGO_ENABLED=0` + `-ldflags="-s -w"`
 
 - **DCO**: commit 需 `Signed-off-by: JUN JIE NAN <nanjunjie@gmail.com>`
 - **前缀**: `feat:` / `fix:` / `docs:` / `refactor:` / `i18n:`
-- **i18n**: 修改 CLI 字符串后同步更新 `.pot` / `.po`
+- **i18n**: 翻译必须用 `slingshot i18n translate`（`--id` 优先），禁止直接编辑 `.po` 或写脚本；改代码后先 `i18n sync` 再 `i18n translate`，最后 `i18n stats` + `i18n check --exit-code` 验证
 - **格式化**: `make fmt`
