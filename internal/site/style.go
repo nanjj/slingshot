@@ -11,12 +11,12 @@ import (
 // CSSVersion is a cache-busting version number for the site stylesheet.
 // Bump this whenever DefaultCSS() changes so that regenerated index.html
 // gets a ?v=N query parameter, forcing browsers to fetch the new CSS.
-const CSSVersion = "3"
+const CSSVersion = "4"
 
 // responsiveSentinel is a marker embedded at the top of the CSS to indicate
 // that the site has been upgraded to the responsive stylesheet.
 // UpgradeCSS checks for this sentinel to decide whether an upgrade is needed.
-const responsiveSentinel = "/* === slingshot-responsive: v1 === */"
+const responsiveSentinel = "/* === slingshot-responsive: v2 === */"
 
 // DefaultCSS returns the default style.css for a slingshot site.
 // It includes base layout, navbar, Org-mode HTML export defaults, and the
@@ -252,6 +252,17 @@ pre.src-nxml:before { content: 'XML'; }
 pre.src-conf:before { content: 'Configuration File'; }
 
 table { border-collapse:collapse; }
+/* Restore the table frame that ox-html drops for HTML5 doctype exports:
+   frame="hsides" (top/bottom rules) + rules="groups" (thead/tbody rule).
+   Without this, org-exported tables render with no rules at all. */
+table {
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+}
+thead th {
+  border-bottom: 1px solid #000;
+}
+th, td { padding: 6px; }
 caption.t-above { caption-side: top; }
 caption.t-bottom { caption-side: bottom; }
 td, th { vertical-align:top;  }
