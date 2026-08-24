@@ -1032,3 +1032,9 @@ msgstr "为语言环境的 .po 文件中的单个 msgid 设置翻译（msgstr）
 
 msgid "Target entry #%d:"
 msgstr "目标条目 #%d："
+
+msgid "Locate an IP address. The upstream Amap MCP tool has no session\ncontext, so the requester's IP cannot be resolved automatically — the\nIP argument is required."
+msgstr "定位 IP 地址。上游高德 MCP 工具没有会话上下文，无法自动获取请求方 IP——IP 参数是必需的。"
+
+msgid "amap ip: missing IP argument, use: slingshot amap ip <ip>"
+msgstr "amap ip：缺少 IP 参数，请使用：slingshot amap ip <ip>"

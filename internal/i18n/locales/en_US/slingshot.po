@@ -1025,3 +1025,9 @@ msgstr "Set the translation (msgstr) for a single msgid in a locale's .po file.\
 
 msgid "Target entry #%d:"
 msgstr "Target entry #%d:"
+
+msgid "Locate an IP address. The upstream Amap MCP tool has no session\ncontext, so the requester's IP cannot be resolved automatically — the\nIP argument is required."
+msgstr "Locate an IP address. The upstream Amap MCP tool has no session\ncontext, so the requester's IP cannot be resolved automatically — the\nIP argument is required."
+
+msgid "amap ip: missing IP argument, use: slingshot amap ip <ip>"
+msgstr "amap ip: missing IP argument, use: slingshot amap ip <ip>"

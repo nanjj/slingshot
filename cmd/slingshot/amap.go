@@ -201,7 +201,7 @@ func (c *cmdAmap) cmdIP() *cmdAmapSub {
 		name:   "ip",
 		usage:  amapIPUsage,
 		short:  i18n.G("Locate an IP address"),
-		long:   i18n.G("Locate an IP address; omit the argument to use the requester's IP."),
+		long:   i18n.G("Locate an IP address. The upstream Amap MCP tool has no session\ncontext, so the requester's IP cannot be resolved automatically — the\nIP argument is required."),
 		action: c.doIP,
 	}
 }
@@ -342,11 +342,14 @@ func (c *cmdAmap) doDistance(parsed []*u.Parsed, cmd *cobra.Command) error {
 }
 
 func (c *cmdAmap) doIP(parsed []*u.Parsed, cmd *cobra.Command) error {
-	args := map[string]any{}
-	if ip, ok := argOptionalString(parsed, 0); ok && ip != "" {
-		args["ip"] = ip
+	ip := ""
+	if v, ok := argOptionalString(parsed, 0); ok && v != "" {
+		ip = v
 	}
-	return amapCall(cmd, amap.ToolIPLocation, args)
+	if ip == "" {
+		return errors.New(i18n.G("amap ip: missing IP argument, use: slingshot amap ip <ip>"))
+	}
+	return amapCall(cmd, amap.ToolIPLocation, map[string]any{"ip": ip})
 }
 
 // --- 辅助 ---
