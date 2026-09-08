@@ -84,6 +84,7 @@ slingshot draft convert article.org    # 直接转换 Org mode
 # 完整转换：上传图片 + 缩略图
 slingshot draft convert article.md --upload
 slingshot draft convert article.org --upload
+```
 
 输出：`article.html`（与输入文件同目录）。
 
@@ -97,7 +98,8 @@ slingshot draft add article.html
 slingshot draft add article.html --title "我的文章标题"
 
 # 指定封面 media_id（覆盖 HTML 中的 <meta>）
-PM0a ```
+slingshot draft add article.html --thumb <media_id>
+```
 
 ### 4. 管理草稿
 
@@ -105,7 +107,7 @@ PM0a ```
 # 列出所有草稿
 slingshot draft list
 
-# 查看草稿详情
+# 查看草稿详情（查看文章内容等）
 slingshot draft show <media_id>
 
 # 更新草稿（自动检测 media_id：sidecar YAML 优先 → 兜底第一篇草稿）
@@ -141,6 +143,7 @@ slingshot meterial show <media_id>
 slingshot meterial show <media_id> --output image.jpg
 
 # 删除素材
+slingshot meterial remove <media_id>
 ```
 
 ## 端到端示例
@@ -178,7 +181,7 @@ slingshot meterial add cover.jpg
 - **封面图**：微信草稿要求必须提供 `thumb_media_id`。可以通过 sidecar YAML
   （`<file>.yaml`）或 HTML `<meta name="thumb_media_id">` 指定
 - **摘要**：可通过 sidecar YAML 的 `digest` 字段或 HTML `<meta name="digest">` 设置
-- **图片缓存**：首次上传的图片会缓存到 `images.yaml`（当前目录），下次跳过重复上传
+- **图片缓存**：首次上传的图片会缓存到 `images.yaml`（当前目录）。下次 `--upload` 跳过重复上传；`draft add/update` 也会自动从缓存中查找 CDN URL 替换本地路径，无需重新上传
 - **缩略图缓存**：封面图片的 media_id 也会缓存到 `images.yaml`，避免重复上传
 - **Emacs 依赖**：转换 `.org` 文件需要系统安装 `emacs`（Emacs 26+）。
   大多数 Linux/macOS 环境默认可用；若缺失，降级使用 `.md` 文件即可。
