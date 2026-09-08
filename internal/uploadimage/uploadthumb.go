@@ -83,4 +83,3 @@ func UploadThumb(token, filePath string) (mediaID, url string, err error) {
 
 	return tr.MediaID, tr.URL, nil
 }
-

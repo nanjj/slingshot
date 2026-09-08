@@ -351,6 +351,7 @@ func main() {
 	assert.Assert(t, len(refs) >= 2,
 		"expected ≥2 REFERENCES to counter (from increment + main), got %d", len(refs))
 }
+
 // ─── extractGoTypeDefs ──────────────────────────────────────────────────────
 //
 // extractGoTypeDefs manually walks the AST to find Go type declarations

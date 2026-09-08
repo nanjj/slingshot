@@ -33,15 +33,15 @@ var captureColors = map[string]string{
 	"escape":         "#005cc5",
 
 	// Identifiers
-	"function":            "#6f42c1",
-	"function.method":     "#6f42c1",
-	"function.builtin":    "#6f42c1",
-	"constructor":         "#6f42c1",
-	"type":                "#22863a",
-	"type.builtin":        "#22863a",
-	"variable":            "#e36209",
-	"variable.parameter":  "#e36209",
-	"property":            "#005cc5",
+	"function":           "#6f42c1",
+	"function.method":    "#6f42c1",
+	"function.builtin":   "#6f42c1",
+	"constructor":        "#6f42c1",
+	"type":               "#22863a",
+	"type.builtin":       "#22863a",
+	"variable":           "#e36209",
+	"variable.parameter": "#e36209",
+	"property":           "#005cc5",
 
 	// Comments
 	"comment":               "#6a737d",
@@ -349,6 +349,7 @@ func indexPreClassSrc(data []byte) int {
 		idx = pos + 1
 	}
 }
+
 // findClosingTag finds the closing tag </tag> in src, handling self-closing
 // tags and simple nesting of the same tag type. Returns the index of the
 // byte right after </tag> (i.e., the end of the closing tag).

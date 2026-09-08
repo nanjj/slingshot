@@ -119,7 +119,6 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
 	}
 	htmlStr := string(htmlContent)
 
-
 	// Determine title
 	title := c.title
 	if title == "" {

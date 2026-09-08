@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 
 	"github.com/fatih/color"
+	"github.com/nanjj/clog"
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/material"
 	u "github.com/nanjj/slingshot/internal/usage"
-	"github.com/nanjj/clog"
 	"github.com/spf13/cobra"
 )
 

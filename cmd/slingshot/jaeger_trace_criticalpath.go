@@ -54,11 +54,11 @@ func (c *cmdJaegerTraceCriticalPath) run(cmd *cobra.Command, args []string) erro
 
 // cpNode represents one span in the critical path tree.
 type cpNode struct {
-	SpanID    string   `json:"spanID"`
-	Service   string   `json:"service"`
-	Operation string   `json:"operation"`
-	DurationMs int64   `json:"durationMs"`
-	Children  []*cpNode `json:"children,omitempty"`
+	SpanID     string    `json:"spanID"`
+	Service    string    `json:"service"`
+	Operation  string    `json:"operation"`
+	DurationMs int64     `json:"durationMs"`
+	Children   []*cpNode `json:"children,omitempty"`
 }
 
 func printCriticalPath(trace jaegerTraceData, asJSON bool) error {

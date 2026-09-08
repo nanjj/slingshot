@@ -315,7 +315,7 @@ func TestFindClosingTag(t *testing.T) {
 		tag         string
 		expectedEnd int
 	}{
-	{"<code>hello</code>", "code", 18},
+		{"<code>hello</code>", "code", 18},
 		{"<code>a</code><code>b</code>", "code", 14},
 		{"<pre><code>hi</code></pre>", "code", 20},
 		{"<pre>hi</pre>", "pre", 13},

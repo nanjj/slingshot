@@ -277,4 +277,3 @@ func (c *Cache) SetEntry(key, filename, url, mediaID string) {
 func (c *Cache) Path() string {
 	return c.path
 }
-

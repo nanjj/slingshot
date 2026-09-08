@@ -243,6 +243,7 @@ func stripTags(src []byte) []byte {
 //	"I am an AI"        → "I am an AI"  (unchanged — all ASCII)
 //	"Hello 世界"        → "Hello 世界"  (unchanged — ASCII on one side)
 //	"我们 相信 你"      → "我们相信你"
+//
 // RemoveCJCSpace removes whitespace characters (spaces, newlines, tabs, etc.)
 // that appear between two non-ASCII characters. This is commonly needed for CJK
 // text where whitespace between Chinese/Japanese/Korean characters are artifacts

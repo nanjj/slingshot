@@ -1,6 +1,6 @@
 module github.com/nanjj/slingshot
 
-go 1.26.4
+go 1.27.1
 
 require (
 	github.com/fatih/color v1.18.0

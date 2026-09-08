@@ -7,19 +7,18 @@ import (
 	"testing"
 )
 
-
 func TestParseOrgKeywords(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantTitle string
+		name       string
+		input      string
+		wantTitle  string
 		wantAuthor string
-		wantThumb string
+		wantThumb  string
 		wantDigest string
 	}{
 		{
-			name:     "empty",
-			input:    "",
+			name:      "empty",
+			input:     "",
 			wantTitle: "",
 		},
 		{
@@ -63,8 +62,8 @@ Content.
 			wantTitle: "First",
 		},
 		{
-			name: "no_keywords",
-			input:  "* Just a headline\n\nSome text.\n",
+			name:      "no_keywords",
+			input:     "* Just a headline\n\nSome text.\n",
 			wantTitle: "",
 		},
 		{

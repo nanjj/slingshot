@@ -19,8 +19,8 @@ import (
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/config"
-	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/highlight"
+	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/mdtowx"
 	"github.com/nanjj/slingshot/internal/site"
 	u "github.com/nanjj/slingshot/internal/usage"
@@ -36,6 +36,7 @@ var dateParagraphRe = regexp.MustCompile(`(?i)<p\s+class="date"[^>]*>.*?</p>\s*`
 
 // Format: <!-- slingshot-date: YYYY-MM-DD -->
 var slingshotDateRe = regexp.MustCompile(`(?i)<!--\s*slingshot-date:\s*(\d{4}-\d{2}-\d{2})\s*-->`)
+
 // --- cmdPageAdd ---
 
 // cmdPageAdd implements both "slingshot page add <site> <file>"
@@ -455,6 +456,7 @@ func extractOrgDate(orgPath string) time.Time {
 	}
 	return parseOrgDate(string(data))
 }
+
 // parseOrgDate scans content for #+DATE: and tries to parse the value.
 // Supports common Org timestamp formats:
 //
@@ -545,7 +547,7 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	if _, err := exec.LookPath("emacs"); err != nil {
 		return "", fmt.Errorf(i18n.G("emacs not found: %w")+
 			"\n"+i18n.G("Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. "+
-				"Install it or use an .html file instead."), err)
+			"Install it or use an .html file instead."), err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -9,8 +9,8 @@ type NodeInfo struct {
 	Type       string     `json:"type"`
 	StartByte  uint32     `json:"startByte"`
 	EndByte    uint32     `json:"endByte"`
-	StartPoint [2]uint32 `json:"startPoint"`
-	EndPoint   [2]uint32 `json:"endPoint"`
+	StartPoint [2]uint32  `json:"startPoint"`
+	EndPoint   [2]uint32  `json:"endPoint"`
 	Text       string     `json:"text,omitempty"`
 	IsNamed    bool       `json:"isNamed"`
 	IsError    bool       `json:"isError"`
@@ -21,7 +21,7 @@ type NodeInfo struct {
 
 // QueryResult 是查询匹配结果。
 type QueryResult struct {
-	Pattern  int                    `json:"pattern"`
+	Pattern  int                   `json:"pattern"`
 	Captures map[string][]NodeInfo `json:"captures"`
 }
 

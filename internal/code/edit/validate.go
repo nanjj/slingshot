@@ -8,7 +8,7 @@ import (
 
 // SyntaxError 描述语法树中的一个错误或缺失节点。
 type SyntaxError struct {
-	Type     string `json:"type"`     // "error" 或 "missing"
+	Type     string `json:"type"` // "error" 或 "missing"
 	StartRow uint32 `json:"startRow"`
 	StartCol uint32 `json:"startCol"`
 	EndRow   uint32 `json:"endRow"`

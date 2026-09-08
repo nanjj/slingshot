@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
+	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/site"
-	"github.com/nanjj/slingshot/internal/config"
 	u "github.com/nanjj/slingshot/internal/usage"
 )
 
@@ -20,7 +20,7 @@ var siteOptimizeUsage = u.Usage{
 }
 
 type cmdSiteOptimize struct {
-	global *cmdGlobal
+	global    *cmdGlobal
 	flagForce bool
 }
 

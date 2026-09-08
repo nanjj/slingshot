@@ -912,7 +912,9 @@ func main() {
 	// Find function declarations and test signatures
 	var walk func(n *gotreesitter.Node)
 	walk = func(n *gotreesitter.Node) {
-		if n == nil { return }
+		if n == nil {
+			return
+		}
 		typ := n.Type(lang)
 		if typ == "method_declaration" || typ == "function_declaration" {
 			sig := lsp.ExtractSignature(n, lang, result.Source)
@@ -955,7 +957,9 @@ func MultiLine() int {
 	// Collect doc comments
 	var walk func(n *gotreesitter.Node)
 	walk = func(n *gotreesitter.Node) {
-		if n == nil { return }
+		if n == nil {
+			return
+		}
 		typ := n.Type(lang)
 		if typ == "function_declaration" {
 			doc := lsp.ExtractDocComment(n, lang, result.Source)
@@ -994,7 +998,9 @@ func (r *Receiver) Bar() {}
 	found := make(map[string]bool)
 	var walk func(n *gotreesitter.Node)
 	walk = func(n *gotreesitter.Node) {
-		if n == nil { return }
+		if n == nil {
+			return
+		}
 		typ := n.Type(lang)
 		if typ == "function_declaration" || typ == "method_declaration" {
 			name := lsp.ExtractDeclName(n, lang, result.Source)

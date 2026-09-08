@@ -1,6 +1,6 @@
 # Slingshot — AI 智能体 CLI 工具
 
-**模块**: `github.com/nanjj/slingshot` | **语言**: Go 1.26.4 | **许可证**: Apache 2.0
+**模块**: `github.com/nanjj/slingshot` | **语言**: Go 1.27.1 | **许可证**: Apache 2.0
 
 微信公众号 Markdown 转换 + 草稿管理 CLI，基于 Cobra + 声明式参数解析器。
 

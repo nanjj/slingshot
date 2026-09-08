@@ -20,6 +20,7 @@ type cmdI18n struct {
 	global *cmdGlobal
 	dir    string // --dir flag: path to locales directory
 }
+
 func (c *cmdI18n) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "i18n"

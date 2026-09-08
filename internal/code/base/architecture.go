@@ -35,14 +35,15 @@ type FileTreeEntry struct {
 
 // Cluster represents a structural community detected from the call/import graph.
 type Cluster struct {
-	Label          string   `json:"label"`          // auto-generated name (top package/representative)
-	Size           int      `json:"size"`           // number of nodes in the cluster
-	InternalEdges  int      `json:"internalEdges"`  // edges with both endpoints inside the cluster
-	ExternalEdges  int      `json:"externalEdges"`  // edges crossing cluster boundary
-	Cohesion       float64  `json:"cohesion"`       // internal / total edges ratio (0–1)
-	TopNodes       []string `json:"topNodes"`       // highest-degree nodes in the cluster
-	Packages       []string `json:"packages"`       // packages that dominate this cluster
+	Label         string   `json:"label"`         // auto-generated name (top package/representative)
+	Size          int      `json:"size"`          // number of nodes in the cluster
+	InternalEdges int      `json:"internalEdges"` // edges with both endpoints inside the cluster
+	ExternalEdges int      `json:"externalEdges"` // edges crossing cluster boundary
+	Cohesion      float64  `json:"cohesion"`      // internal / total edges ratio (0–1)
+	TopNodes      []string `json:"topNodes"`      // highest-degree nodes in the cluster
+	Packages      []string `json:"packages"`      // packages that dominate this cluster
 }
+
 // ─── Hotspots (fan-in analysis) ──────────────────────────────────────────────
 
 // Hotspots returns the top N functions/methods ranked by fan-in (number of
@@ -315,8 +316,8 @@ func (s *Store) Clusters(project string, limit int) ([]Cluster, error) {
 
 		// 4. Find top nodes (highest degree)
 		type degreeItem struct {
-			qn    string
-			deg   int
+			qn  string
+			deg int
 		}
 		var top []degreeItem
 		for n := range component {
@@ -372,13 +373,13 @@ func (s *Store) Clusters(project string, limit int) ([]Cluster, error) {
 		}
 
 		clusters = append(clusters, Cluster{
-			Label:          label,
-			Size:           memberCount,
-			InternalEdges:  internalEdges,
-			ExternalEdges:  externalEdges,
-			Cohesion:       cohesion,
-			TopNodes:       topNodes,
-			Packages:       packages,
+			Label:         label,
+			Size:          memberCount,
+			InternalEdges: internalEdges,
+			ExternalEdges: externalEdges,
+			Cohesion:      cohesion,
+			TopNodes:      topNodes,
+			Packages:      packages,
 		})
 	}
 

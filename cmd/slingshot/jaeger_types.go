@@ -6,10 +6,10 @@ type jaegerTraceResponse struct {
 }
 
 type jaegerTraceData struct {
-	TraceID   string                 `json:"traceID"`
-	Spans     []jaegerSpan           `json:"spans"`
+	TraceID   string                   `json:"traceID"`
+	Spans     []jaegerSpan             `json:"spans"`
 	Processes map[string]jaegerProcess `json:"processes"`
-	Warnings  []string               `json:"warnings"`
+	Warnings  []string                 `json:"warnings"`
 }
 
 type jaegerSpan struct {

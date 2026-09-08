@@ -23,8 +23,6 @@ var draftUpdateUsage = u.Usage{
 	u.File,
 }
 
-
-
 var draftRemoveUsage = u.Usage{
 	u.ID,
 }
@@ -44,7 +42,7 @@ func (c *cmdDraft) command() *cobra.Command {
 	cmd.Short = i18n.G("Manage WeChat drafts")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),
-	i18n.G(`Manage WeChat public account drafts.
+		i18n.G(`Manage WeChat public account drafts.
 
 The "add" command saves the returned media_id to a sidecar YAML file
 (<file>.yaml) alongside the HTML file. Subsequent "update" commands

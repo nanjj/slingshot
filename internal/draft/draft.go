@@ -25,7 +25,6 @@ var (
 	DeleteURL = "https://api.weixin.qq.com/cgi-bin/draft/delete"
 )
 
-
 // Article represents a single article in a WeChat draft.
 type Article struct {
 	Title              string `json:"title"`

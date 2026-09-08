@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/nanjj/clog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nanjj/clog"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 

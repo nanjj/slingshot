@@ -35,8 +35,8 @@ type NodeInfo struct {
 	Type       string     `json:"type"`
 	StartByte  uint32     `json:"startByte"`
 	EndByte    uint32     `json:"endByte"`
-	StartPoint [2]uint32 `json:"startPoint"`
-	EndPoint   [2]uint32 `json:"endPoint"`
+	StartPoint [2]uint32  `json:"startPoint"`
+	EndPoint   [2]uint32  `json:"endPoint"`
 	Text       string     `json:"text,omitempty"`
 	IsNamed    bool       `json:"isNamed"`
 	IsError    bool       `json:"isError"`
@@ -59,7 +59,7 @@ type Tag struct {
 
 // QueryMatch represents a tree-sitter query match result.
 type QueryMatch struct {
-	Pattern  int                  `json:"pattern"`
+	Pattern  int                   `json:"pattern"`
 	Captures map[string][]NodeInfo `json:"captures"`
 }
 

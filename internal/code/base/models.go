@@ -15,8 +15,8 @@ type Node struct {
 	ID                  int64  `json:"id"`
 	ProjectID           int64  `json:"projectId"`
 	QualifiedName       string `json:"qualifiedName"`
-	Kind                string `json:"kind"`    // function, method, class, struct, interface, module, file, variable
-	Name                string `json:"name"`    // short name (without package prefix)
+	Kind                string `json:"kind"` // function, method, class, struct, interface, module, file, variable
+	Name                string `json:"name"` // short name (without package prefix)
 	FilePath            string `json:"filePath"`
 	Line                uint32 `json:"line"`
 	Col                 uint32 `json:"col"`
@@ -40,13 +40,13 @@ type Node struct {
 
 // Edge represents a relationship between two code symbols.
 type Edge struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"projectId"`
-	SourceQN    string `json:"sourceQN"`
-	TargetQN    string `json:"targetQN"`
-	EdgeType    string `json:"edgeType"` // CALLS, IMPLEMENTS, CONTAINS, IMPORTS, REFERENCES, DATA_FLOWS
-	Metadata    string `json:"metadata,omitempty"` // JSON blob for extra data (e.g., arg expressions for DATA_FLOWS)
-	CreatedAt   string `json:"createdAt,omitempty"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"projectId"`
+	SourceQN  string `json:"sourceQN"`
+	TargetQN  string `json:"targetQN"`
+	EdgeType  string `json:"edgeType"`           // CALLS, IMPLEMENTS, CONTAINS, IMPORTS, REFERENCES, DATA_FLOWS
+	Metadata  string `json:"metadata,omitempty"` // JSON blob for extra data (e.g., arg expressions for DATA_FLOWS)
+	CreatedAt string `json:"createdAt,omitempty"`
 }
 
 // ProjectInfo describes an indexed project.
@@ -55,7 +55,7 @@ type ProjectInfo struct {
 	Name      string `json:"name"`
 	Root      string `json:"root"`
 	IndexedAt string `json:"indexedAt"`
-	Status    string `json:"status"` // indexing, ready, error
+	Status    string `json:"status"`         // indexing, ready, error
 	Meta      string `json:"meta,omitempty"` // JSON blob
 	NodeCount int    `json:"nodeCount,omitempty"`
 	EdgeCount int    `json:"edgeCount,omitempty"`
@@ -80,10 +80,10 @@ type TraceHop struct {
 	Depth    int    `json:"depth"`
 	File     string `json:"file,omitempty"`
 	Line     uint32 `json:"line,omitempty"`
-	Args     string `json:"args,omitempty"`     // call arguments (data_flow mode)
-	Method   string `json:"method,omitempty"`   // HTTP method (cross_service mode)
-	URLPath  string `json:"urlPath,omitempty"`  // URL path (cross_service mode)
-	Risk     string `json:"risk,omitempty"`     // risk label (risk_labels mode)
+	Args     string `json:"args,omitempty"`    // call arguments (data_flow mode)
+	Method   string `json:"method,omitempty"`  // HTTP method (cross_service mode)
+	URLPath  string `json:"urlPath,omitempty"` // URL path (cross_service mode)
+	Risk     string `json:"risk,omitempty"`    // risk label (risk_labels mode)
 }
 
 // TracePathRequest encapsulates all parameters for TracePath.

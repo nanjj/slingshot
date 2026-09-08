@@ -174,17 +174,17 @@ func (ed *Editor) OpenDocument(uri string, source []byte, languageName string) e
 
 	// 7. 构建 Document
 	doc := &Document{
-		uri:        uri,
-		language:   parser.Language(),
-		source:     initSource,
-		tree:       tree,
-		parser:     parser,
-		bound:      gotreesitter.Bind(tree),
-		lineIdx:    NewLineIndex(initSource),
-		encoding:   detectEncoding(initSource),
+		uri:          uri,
+		language:     parser.Language(),
+		source:       initSource,
+		tree:         tree,
+		parser:       parser,
+		bound:        gotreesitter.Bind(tree),
+		lineIdx:      NewLineIndex(initSource),
+		encoding:     detectEncoding(initSource),
 		origFilePath: filePath,
-		createdAt:  time.Now(),
-		modifiedAt: time.Now(),
+		createdAt:    time.Now(),
+		modifiedAt:   time.Now(),
 	}
 	if fileExists {
 		doc.origFileMode = fileInfo.Mode()

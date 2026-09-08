@@ -71,11 +71,11 @@ func TestExtractTags(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"sample-add":        "definition.function",
-		"sample-double":     "definition.function",
-		"sample-when":       "definition.function",
-		"sample-version":    "definition.variable",
-		"sample-max-items":  "definition.constant",
+		"sample-add":       "definition.function",
+		"sample-double":    "definition.function",
+		"sample-when":      "definition.function",
+		"sample-version":   "definition.variable",
+		"sample-max-items": "definition.constant",
 	}
 	got := map[string]string{}
 	for _, tag := range tagger.TagTree(tree) {

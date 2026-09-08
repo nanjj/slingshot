@@ -131,9 +131,10 @@ func parsePO(data string) map[string]string {
 // unescapePO handles common .po escape sequences.
 //
 // Must handle \\ before \" and \n to avoid double-unescaping:
-//   \\  →  literal backslash
-//   \"  →  literal double-quote
-//   \n  →  newline
+//
+//	\\  →  literal backslash
+//	\"  →  literal double-quote
+//	\n  →  newline
 func unescapePO(s string) string {
 	s = strings.ReplaceAll(s, `\\`, "\x00")
 	s = strings.ReplaceAll(s, `\"`, `"`)

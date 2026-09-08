@@ -245,4 +245,3 @@ func TestUploadThumb(t *testing.T) {
 		}
 	})
 }
-

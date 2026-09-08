@@ -161,7 +161,6 @@ func TestRemoveCJCSpace(t *testing.T) {
 	}
 }
 
-
 func TestSanitizeHTML_removeCJCSpace(t *testing.T) {
 	// Test that SanitizeHTML removes spaces between CJK chars in text nodes
 	// but preserves them in HTML-safe ways.

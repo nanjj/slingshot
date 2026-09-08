@@ -183,4 +183,3 @@ func resolveID(token, idStr string) (string, error) {
 	}
 	return resp.Items[idx-1].MediaID, nil
 }
-

@@ -279,7 +279,7 @@ func TestExtractVirtualPath(t *testing.T) {
 		{"scratch:///test.go", "/test.go"},
 		{"scratch:///path/to/file.go", "/path/to/file.go"},
 		{"scratch:///snippet", "/snippet"},
-		{"file:///real/path.go", "/real/path.go"},  // extracts from any ://
+		{"file:///real/path.go", "/real/path.go"}, // extracts from any ://
 		{"invalid-uri", ""},
 		{"", ""},
 	}
