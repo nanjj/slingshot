@@ -46,8 +46,10 @@ commands inside it — a tikzpicture wrapper is added automatically when
 missing. \usetikzlibrary lines are hoisted above the environment.
 
 Packages are loaded automatically by content detection (tkz-euclide,
-tikz-cd, pgfplots, circuitikz, forest, ...); explicit \usepackage lines
-in the input are hoisted into the preamble.
+tikz-cd, pgfplots, circuitikz, tikzlings, forest, ...); explicit \usepackage
+lines in the input are hoisted into the preamble. A tcblisting documentation
+box loads tcolorbox with the listings library and \tcbset{tikz lower}, so
+TikZ code inside the box is executed in a picture.
 
 The output format is determined by the output file extension.
 Pipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript
@@ -499,6 +501,82 @@ var tikzExtraPackages = []struct{ marker, pkg string }{
 	{`\tdplotsetrotatedcoords`, "tikz-3dplot"},
 	{`\smartdiagram`, "smartdiagram"},
 	{`\begin{venndiagram}`, "venndiagram"},
+	{`\begin{tcblisting}`, "tcolorbox"}, // 手册示例常用的 "代码 + 编译结果" 盒子
+}
+
+// tikzlingsCommands 把 tikzlings 的命令映射到提供它的宏包。
+// 动物列表取自 tikzlings-list.sty 的 <name>/<package> 表 (权威来源);
+// 上游把 \mole 改名为 \moles 以避开 siunitx 的 \mole。
+// \tikzling (随机动物) 由基础宏包 tikzlings 提供 (它加载全部动物),
+// \thing (配饰) 由 tikzlings-addons 提供, 各动物宏包都会 \RequirePackage 它。
+var tikzlingsCommands = []struct{ cmd, pkg string }{
+	{`\tikzling`, "tikzlings"},
+	{`\thing`, "tikzlings-addons"},
+	{`\anteater`, "tikzlings-anteaters"},
+	{`\ape`, "tikzlings-apes"},
+	{`\bat`, "tikzlings-bats"},
+	{`\bear`, "tikzlings-bears"},
+	{`\bee`, "tikzlings-bees"},
+	{`\bug`, "tikzlings-bugs"},
+	{`\cat`, "tikzlings-cats"},
+	{`\chicken`, "tikzlings-chickens"},
+	{`\coati`, "tikzlings-coatis"},
+	{`\dog`, "tikzlings-dogs"},
+	{`\elephant`, "tikzlings-elephants"},
+	{`\hippo`, "tikzlings-hippos"},
+	{`\koala`, "tikzlings-koalas"},
+	{`\marmot`, "tikzlings-marmots"},
+	{`\meerkat`, "tikzlings-meerkats"},
+	{`\mouse`, "tikzlings-mice"},
+	{`\moles`, "tikzlings-moles"},
+	{`\owl`, "tikzlings-owls"},
+	{`\panda`, "tikzlings-pandas"},
+	{`\penguin`, "tikzlings-penguins"},
+	{`\pig`, "tikzlings-pigs"},
+	{`\rhino`, "tikzlings-rhinos"},
+	{`\sheep`, "tikzlings-sheep"},
+	{`\sloth`, "tikzlings-sloths"},
+	{`\snowman`, "tikzlings-snowmen"},
+	{`\squirrel`, "tikzlings-squirrels"},
+	{`\turkey`, "tikzlings-turkeys"},
+	{`\wolf`, "tikzlings-wolves"},
+}
+
+// detectTikzlings 返回内容用到的 tikzlings 宏包 (按表顺序, 去重)。
+func detectTikzlings(content string) []string {
+	var pkgs []string
+	seen := make(map[string]bool)
+	for _, e := range tikzlingsCommands {
+		if seen[e.pkg] || !containsCommand(content, e.cmd) {
+			continue
+		}
+		seen[e.pkg] = true
+		pkgs = append(pkgs, e.pkg)
+	}
+	return pkgs
+}
+
+// containsCommand 报告内容中是否使用了命令 cmd (含前导反斜杠)。
+// 要求匹配后紧跟的不是命令名字符: \bear 命中 "\bear[hat]",
+// 但不命中 bearwear 宏包里的 \bearwear。
+func containsCommand(content, cmd string) bool {
+	for off := 0; off < len(content); {
+		i := strings.Index(content[off:], cmd)
+		if i < 0 {
+			return false
+		}
+		off += i + len(cmd)
+		if off >= len(content) || !isCommandChar(content[off]) {
+			return true
+		}
+	}
+	return false
+}
+
+// isCommandChar 报告字节能否作为命令名的一部分 (字母 / 数字 / @)。
+func isCommandChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' ||
+		c >= '0' && c <= '9' || c == '@'
 }
 
 // tikzExtraLibraries 是 "内容特征 → 需要额外加载的 tikz 库" 探测表。
@@ -591,6 +669,13 @@ func detectTikzPackages(content string, legacyIEC bool) []string {
 		seen[e.pkg] = true
 		pkgs = append(pkgs, e.pkg)
 	}
+	for _, p := range detectTikzlings(content) {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		pkgs = append(pkgs, p)
+	}
 	return pkgs
 }
 
@@ -650,12 +735,16 @@ var usetikzlibraryRe = regexp.MustCompile(`\\usetikzlibrary\{[^}]*\}\r?\n?`)
 // tikzSelfContainedEnvs 是自身即为完整 TikZ 环境的顶层环境。
 // circuitikz / tikzcd / forest 内部都会再开 tikzpicture，
 // 把它们包进外层 tikzpicture 会造成嵌套错误 (内容缺失/布局错乱)。
+// tcblisting 不是 TikZ 环境, 而是 tcolorbox 的盒子环境 (内部由 tikz lower
+// 自建 picture); 包进外层 tikzpicture 会因 pgf 包围盒不含盒子而被裁切,
+// 同样不能包。
 // 注意: axis / venndiagram 等不是自包含环境, 必须在 tikzpicture 内, 不能加入。
 var tikzSelfContainedEnvs = []string{
 	`\begin{tikzpicture}`,
 	`\begin{circuitikz}`,
 	`\begin{tikzcd}`,
 	`\begin{forest}`,
+	`\begin{tcblisting}`,
 }
 
 // tkzpictureBeginRe 匹配 tkz-base 风格的 tkzpicture 环境 (可带可选参数)。
@@ -991,9 +1080,30 @@ func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 	return shims
 }
 
+// tcblistingSetup 为 tcblisting 文档示例注入 tcolorbox 配置, 未命中返回空串。
+// tcblisting 是 tcolorbox 的 "代码 + 编译结果" 环境, TikZ 手册常用它展示示例:
+//   - \tcbuselibrary{listings} 提供 tcblisting 环境 (listings 引擎,
+//     不需要 --shell-escape);
+//   - \tcbset{tikz lower} 让 "text" 部分在 tikzpicture 内执行 —— TikZ 只在
+//     tikzpicture 内安装 \path / \draw / scope 等命令, 而 tcblisting 的 text
+//     部分默认在 tikzpicture 之外, \marmot 这类以 \begin{scope} 开头的宏会报
+//     "Environment scope undefined"; tikzlings 手册的 preamble 里正是
+//     \tcbset{tikz lower} (tikzlings-doc.tex)。
+//
+// 仅当内容使用 tcblisting 且 tcolorbox 确实会被加载时注入。
+func tcblistingSetup(raw string, pkgs []string) string {
+	if !strings.Contains(raw, `\begin{tcblisting}`) {
+		return ""
+	}
+	if !slices.Contains(pkgs, "tcolorbox") {
+		return ""
+	}
+	return "\\tcbuselibrary{listings}\n\\tcbset{tikz lower}\n"
+}
+
 // normalizeTikz 保证输入包含完整的环境:
-// 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
-// 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
+// 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest / tcblisting)
+// 则原样返回; 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
 // (它在 document body 中有效, 但在 tikzpicture 内行为不受保证)。
 //
 // p 控制 legacy 翻译: 只对 tectonic profile 启用 tkz-euclide 5.x → 4.051b
@@ -1135,8 +1245,9 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		}
 		cjkPreamble = "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n"
 	}
-	// 兼容 shim 按后端 profile 组装 (见 tikzShims)。
-	shims := tikzShims(profile, raw, pkgs)
+	// 兼容 shim 按后端 profile 组装 (见 tikzShims); tcblisting 的 tcolorbox
+	// 配置与后端无关, 命中时追加。
+	shims := tikzShims(profile, raw, pkgs) + tcblistingSetup(raw, pkgs)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
 		[]byte(normalizeTikz(raw, profile)), 0644); err != nil {

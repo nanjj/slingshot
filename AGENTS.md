@@ -93,6 +93,15 @@ apollonius/IEC）；xe/pdf/lua profile 全 false，不启用这些翻译与 shim
 IEC 风格在 xe 上注入 \usetikzlibrary{circuits.ee.IEC}（真库），tectonic 上用 circuitikz shim。
 motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元件（圆圈 + M），只能定制补齐。
 
+内容探测（`tikzExtraPackages` / `tikzlingsCommands`）：命中特征即加载对应宏包。tikzlings
+的动物命令映射到各自子宏包（`tikzlings-marmots` 等，表取自 tikzlings-list.sty），`\tikzling`
+走基础宏包、`\thing` 走 tikzlings-addons；命令匹配带词边界，`\bearwear` 不会命中 `\bear`。
+手册示例常用的 `tcblisting` 盒子由 `tcblistingSetup` 注入 `\tcbuselibrary{listings}` +
+`\tcbset{tikz lower}`：tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
+内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；
+`tikzSelfContainedEnvs` 同时收录 `tcblisting`，避免再套外层 tikzpicture（套了会被 pgf
+包围盒裁切）。两个后端都支持（2021 bundle 自带 tcolorbox + listings）。
+
 CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic bundle 自带 xeCJK，
 无需探测）；仅 xe 在探测阶段用 kpsewhich 检查 xeCJK.sty。字体可用 `TIKZ_CJK_FONT`
 环境变量覆盖（默认 Noto Sans CJK SC）；该值必须是有效字体族名，不要包含 `{` `}` `%` `\`

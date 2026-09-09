@@ -50,6 +50,11 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\begin{forest}\n[A [B]]\n\\end{forest}\n",
 		},
 		{
+			name:  "tcblisting passed through, not wrapped in tikzpicture",
+			input: "\\begin{tcblisting}{title={Basic}}\n\\marmot\n\\end{tcblisting}\n",
+			want:  "\\begin{tcblisting}{title={Basic}}\n\\marmot\n\\end{tcblisting}\n",
+		},
+		{
 			name:  "axis still wrapped (needs tikzpicture)",
 			input: "\\begin{axis}\\addplot {x};\n\\end{axis}",
 			want:  "\\begin{tikzpicture}\n\\begin{axis}\\addplot {x};\n\\end{axis}\n\\end{tikzpicture}\n",
@@ -896,6 +901,39 @@ func TestDetectTikzPackages(t *testing.T) {
 			name:    "mu without up prefix",
 			content: "\\node {$\\mu$};",
 		},
+		{
+			name:    "tcblisting loads tcolorbox and tikzlings subpackage",
+			content: "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
+			want:    []string{"tcolorbox", "tikzlings-marmots"},
+		},
+		{
+			name:    "tikzlings animal loads its subpackage",
+			content: "\\penguin[rotate=30,scale=0.5]",
+			want:    []string{"tikzlings-penguins"},
+		},
+		{
+			name:    "tikzlings animals in table order",
+			content: "\\marmot\n\\bear[hat]",
+			want:    []string{"tikzlings-bears", "tikzlings-marmots"},
+		},
+		{
+			name:    "random tikzling loads base package",
+			content: "\\tikzling[body=blue]",
+			want:    []string{"tikzlings"},
+		},
+		{
+			name:    "thing accessory loads addons",
+			content: "\\owl\n\\thing[tophat, scale=1.5]",
+			want:    []string{"tikzlings-addons", "tikzlings-owls"},
+		},
+		{
+			name:    "bearwear is not bear",
+			content: "\\bearwear",
+		},
+		{
+			name:    "marmotx is not marmot",
+			content: "\\marmotx",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1326,6 +1364,65 @@ func TestTikzShims(t *testing.T) {
 	for _, want := range []string{tikzBuzzerShim, tikzConverterShim, tikzApolloniusShim, tikzIecShim, tikzSiunitxShim} {
 		if !strings.Contains(legacy, want) {
 			t.Errorf("tectonic shims missing 2021-bundle shim %q", want)
+		}
+	}
+}
+
+// TestTcblistingSetup 验证 tcblisting 的 tcolorbox 配置注入条件:
+// 必须同时命中 tcblisting 与 tcolorbox 宏包, 否则返回空串。
+func TestTcblistingSetup(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		pkgs []string
+		want string
+	}{
+		{
+			name: "tcblisting with tcolorbox",
+			raw:  "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
+			pkgs: []string{"tcolorbox", "tikzlings-marmots"},
+			want: "\\tcbuselibrary{listings}\n\\tcbset{tikz lower}\n",
+		},
+		{
+			name: "plain tikz needs nothing",
+			raw:  "\\draw (0,0) -- (1,1);",
+			pkgs: []string{"tcolorbox"},
+		},
+		{
+			name: "tcblisting without tcolorbox loaded",
+			raw:  "\\begin{tcblisting}{}x\\end{tcblisting}",
+			pkgs: []string{"tikz"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tcblistingSetup(tt.raw, tt.pkgs); got != tt.want {
+				t.Errorf("tcblistingSetup() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestContainsCommand 验证命令匹配的词边界: \bear 不能命中 \bearwear,
+// 但 \bear[ / \bear} 等分隔符都要命中。
+func TestContainsCommand(t *testing.T) {
+	tests := []struct {
+		content string
+		cmd     string
+		want    bool
+	}{
+		{content: "\\bear[hat]", cmd: "\\bear", want: true},
+		{content: "\\bear", cmd: "\\bear", want: true},
+		{content: "\\bear;", cmd: "\\bear", want: true},
+		{content: "\\bearwear", cmd: "\\bear", want: false},
+		{content: "\\marmotx \\marmot", cmd: "\\marmot", want: true},
+		{content: "\\marmotx", cmd: "\\marmot", want: false},
+		{content: "\\bear", cmd: "\\marmot", want: false},
+		{content: "\\thing@hat", cmd: "\\thing", want: false},
+	}
+	for _, tt := range tests {
+		if got := containsCommand(tt.content, tt.cmd); got != tt.want {
+			t.Errorf("containsCommand(%q, %q) = %v, want %v", tt.content, tt.cmd, got, tt.want)
 		}
 	}
 }
