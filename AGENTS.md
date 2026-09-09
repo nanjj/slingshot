@@ -79,6 +79,7 @@ circuitikz 1.4.x bundle）后备 → 两者都不可用时明确报错。`--engi
 兼容 shim 按后端 profile 门控（`tikz_engine.go` 的 `tikzProfile`）：
 tectonic 上做 tkz-euclide 5.x → 4.051b 语法翻译、2021-bundle 兼容 shim（buzzer/converter/
 apollonius/IEC）；latexmk profile 全 false，不启用这些翻译与 shim（否则在新语法上「反向出错」）。
+IEC 风格在 latexmk 上注入 \usetikzlibrary{circuits.ee.IEC}（真库），tectonic 上用 circuitikz shim。
 motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元件（圆圈 + M），只能定制补齐。
 
 CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic bundle 自带 xeCJK，

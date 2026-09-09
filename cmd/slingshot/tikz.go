@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/fatih/color"
@@ -380,6 +381,29 @@ func circuitikzIecShim(content string) string {
 		return tikzIecShim + "\n"
 	}
 	return ""
+}
+
+// iecNeedsLibrary 报告是否要为 circuit ee IEC 风格注入 circuits.ee.IEC 库加载行。
+//
+// 手册片段 (pgf/circuitikz 手册) 常只给 tikzpicture 主体, 不自己
+// \usetikzlibrary{circuits.ee.IEC}; TL 后端必须加载真库 (否则 pgfkeys 报未知
+// key '/tikz/circuit ee IEC'), tectonic bundle 缺该库, 由 IEC shim 映射到
+// circuitikz (profile.legacyIEC), 不加载库。
+//
+// latexmk 上一律注入, 不检测内容是否已自行加载: pgf 对同一库重复加载幂等
+// (TL2026 实测 rc=0 无警告), 而"检测已加载"一旦误判 (注释/verbatim/节点文本
+// 里出现库名) 就会漏注入, 重新引入本函数要修的回归。
+func iecNeedsLibrary(p tikzProfile, content string) bool {
+	return !p.legacyIEC && circuitEeIECRe.MatchString(content)
+}
+
+// tikzLibraries 返回需要注入前导的 tikz 库: 内容特征探测 + IEC 风格的原生真库。
+func tikzLibraries(p tikzProfile, content string) []string {
+	libs := detectTikzLibraries(content)
+	if iecNeedsLibrary(p, content) && !slices.Contains(libs, "circuits.ee.IEC") {
+		libs = append(libs, "circuits.ee.IEC")
+	}
+	return libs
 }
 
 // converterShapeRe 匹配 AC-DC / DC-AC 三相转换器 shape 名 (手册示例写法)。
@@ -939,9 +963,10 @@ func fixDefLineTangent(content string) string {
 //
 // motor shim 与后端无关: circuitikz 上游 (含 1.8.5) 从来没有 motor 元件,
 // 只能由 shim 提供 (圆圈 + M), 因此两个后端都注入。
-// buzzer / converter / apollonius / IEC 是 2021 bundle (tkz-euclide 4.051b /
+// buzzer / converter / apollonius 是 2021 bundle (tkz-euclide 4.051b /
 // circuitikz 1.4.x) 的兼容处理, 只在 tectonic profile 上注入; 在 latexmk
-// (TL2026 新版语法) 下注入会"反向出错"或覆盖新版原生实现。
+// (TL2026 新版语法) 下注入会"反向出错"或覆盖新版原生实现。IEC 在 latexmk
+// 上不是「不需要」, 而是改为注入真库加载行, 见 iecNeedsLibrary。
 // siunitx alias shim 与后端无关 (siunitx v3 行为), 两个后端都保留。
 func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 	var shims string
@@ -1072,7 +1097,7 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	}
 	explicitPkgs, raw := extractUserPackages(raw)
 	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw, profile.legacyIEC))
-	libs := detectTikzLibraries(raw)
+	libs := tikzLibraries(profile, raw)
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
 		return fmt.Errorf("resolving output path: %w", err)

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -1053,6 +1054,65 @@ func TestDetectTikzLibraries(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestIecNeedsLibrary(t *testing.T) {
+	// want=true 表示要注入 \usetikzlibrary{circuits.ee.IEC} 加载行, 与内容是否
+	// 已自行加载无关: latexmk 上一律注入 (pgf 重复加载幂等), 漏注入才会复现回归。
+	bare := "\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
+	loaded := "\\usetikzlibrary{circuits.ee.IEC}\n" + bare
+	commaLoaded := "\\usetikzlibrary{calc,circuits.ee.IEC}\n" + bare
+	commented := "% \\usetikzlibrary{circuits.ee.IEC}\n" + bare
+	plain := "\\draw (0,0) -- (1,1);"
+	tests := []struct {
+		name    string
+		profile tikzProfile
+		content string
+		want    bool
+	}{
+		{name: "bare latexmk", profile: latexmkProfile(), content: bare, want: true},
+		{name: "bare tectonic", profile: tectonicProfile(), content: bare, want: false},
+		{name: "loaded latexmk", profile: latexmkProfile(), content: loaded, want: true},
+		{name: "comma loaded latexmk", profile: latexmkProfile(), content: commaLoaded, want: true},
+		{name: "commented out load latexmk", profile: latexmkProfile(), content: commented, want: true},
+		{name: "no iec latexmk", profile: latexmkProfile(), content: plain, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := iecNeedsLibrary(tt.profile, tt.content); got != tt.want {
+				t.Errorf("iecNeedsLibrary() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTikzLibraries(t *testing.T) {
+	bare := "\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
+	loaded := "\\usetikzlibrary{circuits.ee.IEC}\n" + bare
+	calcAndIEC := "\\begin{tikzpicture}[circuit ee IEC]\n\\draw ($(0,0)$) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
+	gotBare := tikzLibraries(latexmkProfile(), bare)
+	if !slices.Contains(gotBare, "circuits.ee.IEC") {
+		t.Errorf("tikzLibraries(latexmk, bare) = %v, want circuits.ee.IEC", gotBare)
+	}
+	gotTectonic := tikzLibraries(tectonicProfile(), bare)
+	if slices.Contains(gotTectonic, "circuits.ee.IEC") {
+		t.Errorf("tikzLibraries(tectonic, bare) = %v, must not contain circuits.ee.IEC", gotTectonic)
+	}
+	// 内容自带加载行时仍注入一次, 但绝不能重复 (pgf 幂等, 重复也无害, 只为整洁)。
+	gotLoaded := tikzLibraries(latexmkProfile(), loaded)
+	n := 0
+	for _, lib := range gotLoaded {
+		if lib == "circuits.ee.IEC" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("tikzLibraries(latexmk, loaded) = %v, want exactly one circuits.ee.IEC, got %d", gotLoaded, n)
+	}
+	gotCalcAndIEC := tikzLibraries(latexmkProfile(), calcAndIEC)
+	if !slices.Contains(gotCalcAndIEC, "calc") || !slices.Contains(gotCalcAndIEC, "circuits.ee.IEC") {
+		t.Errorf("tikzLibraries(latexmk, calc+IEC) = %v, want calc and circuits.ee.IEC", gotCalcAndIEC)
 	}
 }
 

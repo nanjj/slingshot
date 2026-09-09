@@ -30,7 +30,7 @@ type tikzProfile struct {
 	legacyNextTo     bool // \tkzInterLC[next to=..] -> near
 	legacyTangentAt  bool // \tkzDefLine[tangent at=X](O) -> \tkzTgtAt
 	legacyApollonius bool // 覆盖 \tkzDefApolloniusCircle
-	legacyIEC        bool // 丢弃 \usetikzlibrary{circuits.ee.IEC} + 注入 IEC shim
+	legacyIEC        bool // tectonic: 丢弃 \usetikzlibrary{circuits.ee.IEC} + 注入 IEC shim; latexmk: 注入真库加载行, 见 iecNeedsLibrary
 	legacyBuzzer     bool // buzzer shim
 	legacyConverter  bool // tacdc/tdcac mnemonic anchor shim
 }

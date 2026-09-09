@@ -238,9 +238,25 @@ var tikzIntegrationSamples = map[string]string{
 \draw (0,0) to[motor] (2,0);
 \end{circuitikz}
 `,
-	"circuit_ee_iec": `\usetikzlibrary{circuits.ee.IEC}
+	"circuit_ee_iec": `\begin{tikzpicture}[circuit ee IEC]
+\draw (0,0) to[resistor={name=R}] (0,2)
+to[diode={name=D}] (3,2);
+\end{tikzpicture}
+`,
+	// circuit_ee_iec_loaded: 内容自带 \usetikzlibrary{circuits.ee.IEC}。latexmk 上
+	// 仍会再注入一次 (pgf 重复加载幂等, 覆盖该场景), tectonic 上丢弃加载行走 shim。
+	"circuit_ee_iec_loaded": `\usetikzlibrary{circuits.ee.IEC}
 \begin{tikzpicture}[circuit ee IEC]
-\draw (0,0) to[resistor={name=R}] (0,2);
+\draw (0,0) to[resistor={name=R}] (0,2)
+to[diode={name=D}] (3,2);
+\end{tikzpicture}
+`,
+	"circuit_ee_iec_compat": `\begin{tikzpicture}[circuit ee IEC]
+ \draw (0,0) to [resistor={name=R}] (0,2)
+  to[diode={name=D}] (3,2);
+  \draw (0,0) to[*R=$R_1$] (1.5,0)
+  to[*Tnpn] (3,0)
+   to[*D](3,2);
 \end{tikzpicture}
 `,
 }
