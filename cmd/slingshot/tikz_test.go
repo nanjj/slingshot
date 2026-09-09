@@ -1197,6 +1197,15 @@ func TestTikzDocColorShims(t *testing.T) {
 			name:    "providecolor self defined not injected",
 			content: "\\providecolor{themecolor}{RGB}{1,2,3}\n\\draw[themecolor] (0,0) -- (1,1);",
 		},
+		{
+			name:    "colorlet same prefix name still injected",
+			content: "\\colorlet{themecolorfoo}{red}\n\\draw[themecolor] (0,0) -- (1,1);",
+			want:    "\\providecolor{themecolor}{RGB}{136,46,114}\n",
+		},
+		{
+			name:    "providecolor optional model not injected",
+			content: "\\providecolor[RGB]{themecolor}{1,2,3}\n\\draw[themecolor] (0,0) -- (1,1);",
+		},
 		{name: "unreferenced empty", content: "\\draw (0,0) -- (1,1);"},
 		{name: "empty input", content: ""},
 	}

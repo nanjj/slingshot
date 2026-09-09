@@ -601,7 +601,9 @@ var tikzExtraLibraries = []struct {
 	// pgf 的 3d 库定义 (tex/generic/pgf/frontendlayer/tikz/libraries/
 	// tikzlibrary3d.code.tex 的 \tikzoption, 第 42–75 行); tikzlings 手册的
 	// z-order/rhino 示例 (分层切片) 就用它。库只定义坐标系/选项, 对现有片段无副作用。
-	{regexp.MustCompile(`\bcanvas\s+is\s+(?:[a-z]{2}\s+plane\s+at|plane)\b`), "3d"},
+	// 该正则刻意放宽: 散文里的 "canvas is plane" 也会命中; 3d 库无副作用,
+	// 宁可多加载也不漏加载。
+	{regexp.MustCompile(`\bcanvas\s+is\s+(?:(?:xy|yx|xz|zx|yz|zy)\s+plane\s+at|plane)\b`), "3d"},
 	{regexp.MustCompile(`(?:to|edge)\s*\["`), "quotes"},
 	{regexp.MustCompile(`node\s*\[[^\]]*\b(?:ellipse|diamond|cylinder|regular\s+polygon|star|cloud|trapezium)\b`), "shapes.geometric"},
 }
@@ -1118,14 +1120,16 @@ var tikzDocColors = []struct{ name, def string }{
 
 // tikzDocColorShims 为内容引用但未自行定义的文档局部颜色注入 \providecolor 定义。
 // 注入条件: 内容出现 \b<name>\b (如 themecolor, 用作 pgf key / 颜色名) 且没有
-// 自己定义它 —— \definecolor/\providecolor{<name>} 或 \colorlet{<name>…}。
-// 未引用或已定义时返回空串。名称经 regexp.QuoteMeta 转义。
+// 自己定义它 —— \definecolor/\providecolor{<name>} (可带 [model] 可选参数) 或
+// \colorlet{<name>}。未引用或已定义时返回空串。名称经 regexp.QuoteMeta 转义。
+// 已知限制: 该守卫不做 TeX 注释/verbatim 剥离, 注释掉的 \definecolor{themecolor}
+// 仍会被当作"已定义"而抑制兜底 (接受这一保守误判, 宁缺勿滥地注入)。
 func tikzDocColorShims(content string) string {
 	var shims string
 	for _, c := range tikzDocColors {
 		name := regexp.QuoteMeta(c.name)
 		referenced := regexp.MustCompile(`\b` + name + `\b`)
-		defined := regexp.MustCompile(`\\(?:define|provide)color\s*\{\s*` + name + `\s*\}|\\colorlet\s*\{?\s*` + name + `\s*`)
+		defined := regexp.MustCompile(`\\(?:define|provide)color(?:\s*\[[^\]]*\])?\s*\{\s*` + name + `\s*\}|\\colorlet\s*\{\s*` + name + `\s*\}`)
 		if referenced.MatchString(content) && !defined.MatchString(content) {
 			shims += c.def + "\n"
 		}
