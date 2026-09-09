@@ -1079,6 +1079,10 @@ func TestDetectTikzLibraries(t *testing.T) {
 		{name: "to path without dash not arrows", content: "\\draw (0,0) to (1,1);"},
 		{name: "node text LaTeX not arrows.meta", content: "\\node {LaTeX};"},
 		{name: "plain text fit not option", content: "\\node {a fit b};"},
+		{name: "canvas zy plane at", content: "\\begin{scope}[canvas is zy plane at x=\\thelayer*1.8]", want: []string{"3d"}},
+		{name: "canvas xy plane at", content: "\\begin{scope}[canvas is xy plane at z=1]", want: []string{"3d"}},
+		{name: "canvas bare plane", content: "\\begin{scope}[canvas is plane={O(0,0) x(1,0) y(0,1)}]", want: []string{"3d"}},
+		{name: "canvas text only not 3d", content: "\\node {the canvas is plain};"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1152,6 +1156,11 @@ func TestTikzLibraries(t *testing.T) {
 	if !slices.Contains(gotCalcAndIEC, "calc") || !slices.Contains(gotCalcAndIEC, "circuits.ee.IEC") {
 		t.Errorf("tikzLibraries(latexmk, calc+IEC) = %v, want calc and circuits.ee.IEC", gotCalcAndIEC)
 	}
+	canvas := "\\begin{scope}[canvas is zy plane at x=\\thelayer*1.8]"
+	gotCanvas := tikzLibraries(latexmkProfile(), canvas)
+	if !slices.Contains(gotCanvas, "3d") {
+		t.Errorf("tikzLibraries(canvas is zy plane at) = %v, want 3d", gotCanvas)
+	}
 }
 
 func TestTikzLibraryLines(t *testing.T) {
@@ -1163,6 +1172,45 @@ func TestTikzLibraryLines(t *testing.T) {
 	}
 	if got := tikzLibraryLines([]string{"fit", "calc"}); got != "\\usetikzlibrary{fit,calc}\n" {
 		t.Errorf("tikzLibraryLines multiple = %q", got)
+	}
+}
+func TestTikzDocColorShims(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "referenced and undefined injected",
+			content: "\\draw[themecolor] (0,0) -- (1,1);",
+			want:    "\\providecolor{themecolor}{RGB}{136,46,114}\n",
+		},
+		{
+			name:    "definecolor self defined not injected",
+			content: "\\definecolor{themecolor}{RGB}{1,2,3}\n\\draw[themecolor] (0,0) -- (1,1);",
+		},
+		{
+			name:    "colorlet self defined not injected",
+			content: "\\colorlet{themecolor}{red}\n\\draw[themecolor] (0,0) -- (1,1);",
+		},
+		{
+			name:    "providecolor self defined not injected",
+			content: "\\providecolor{themecolor}{RGB}{1,2,3}\n\\draw[themecolor] (0,0) -- (1,1);",
+		},
+		{name: "unreferenced empty", content: "\\draw (0,0) -- (1,1);"},
+		{name: "empty input", content: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tikzDocColorShims(tt.content)
+			if got != tt.want {
+				t.Fatalf("tikzDocColorShims() = %q, want %q", got, tt.want)
+			}
+			// 注入时必须恰好一行 \providecolor, 不重复。
+			if n := strings.Count(got, "\\providecolor"); n > 1 {
+				t.Fatalf("tikzDocColorShims() returned %d providecolor lines, want at most 1", n)
+			}
+		})
 	}
 }
 

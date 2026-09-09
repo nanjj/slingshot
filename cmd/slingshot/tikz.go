@@ -597,6 +597,11 @@ var tikzExtraLibraries = []struct {
 	{regexp.MustCompile(`\bdecorate\b|\bdecoration\s*=`), "decorations.pathreplacing"},
 	{regexp.MustCompile(`\bsnake\b`), "decorations.pathmorphing"},
 	{regexp.MustCompile(`\bname\s+intersections\b`), "intersections"},
+	// canvas is <xy|yx|xz|zx|yz|zy> plane at <axis>= 与裸 canvas is plane 由
+	// pgf 的 3d 库定义 (tex/generic/pgf/frontendlayer/tikz/libraries/
+	// tikzlibrary3d.code.tex 的 \tikzoption, 第 42–75 行); tikzlings 手册的
+	// z-order/rhino 示例 (分层切片) 就用它。库只定义坐标系/选项, 对现有片段无副作用。
+	{regexp.MustCompile(`\bcanvas\s+is\s+(?:[a-z]{2}\s+plane\s+at|plane)\b`), "3d"},
 	{regexp.MustCompile(`(?:to|edge)\s*\["`), "quotes"},
 	{regexp.MustCompile(`node\s*\[[^\]]*\b(?:ellipse|diamond|cylinder|regular\s+polygon|star|cloud|trapezium)\b`), "shapes.geometric"},
 }
@@ -1101,6 +1106,33 @@ func tcblistingSetup(raw string, pkgs []string) string {
 	return "\\tcbuselibrary{listings}\n\\tcbset{tikz lower}\n"
 }
 
+// tikzDocColors 是 "文档局部颜色 → 缺失定义" 的兜底表, 与 ensureNewStyle 同类:
+// 手册示例常引用源文档 preamble 里自定义的颜色, 抄成自包含片段后名称未定义,
+// pgfkeys 报 "I do not know the key '/tikz/themecolor'"。themecolor 即
+// tikzlings-doc-settings.sty 的 \colorlet{themecolor}{#1}, tikzlings-doc.tex 设为
+// samviolet = RGB(136,46,114), 与 tikzlings 手册的 z-order/rhino 示例一致。
+// 定义用 \providecolor 注入, 因此片段里自己的 \definecolor / \colorlet 优先。
+var tikzDocColors = []struct{ name, def string }{
+	{name: "themecolor", def: `\providecolor{themecolor}{RGB}{136,46,114}`},
+}
+
+// tikzDocColorShims 为内容引用但未自行定义的文档局部颜色注入 \providecolor 定义。
+// 注入条件: 内容出现 \b<name>\b (如 themecolor, 用作 pgf key / 颜色名) 且没有
+// 自己定义它 —— \definecolor/\providecolor{<name>} 或 \colorlet{<name>…}。
+// 未引用或已定义时返回空串。名称经 regexp.QuoteMeta 转义。
+func tikzDocColorShims(content string) string {
+	var shims string
+	for _, c := range tikzDocColors {
+		name := regexp.QuoteMeta(c.name)
+		referenced := regexp.MustCompile(`\b` + name + `\b`)
+		defined := regexp.MustCompile(`\\(?:define|provide)color\s*\{\s*` + name + `\s*\}|\\colorlet\s*\{?\s*` + name + `\s*`)
+		if referenced.MatchString(content) && !defined.MatchString(content) {
+			shims += c.def + "\n"
+		}
+	}
+	return shims
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest / tcblisting)
 // 则原样返回; 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
@@ -1246,8 +1278,8 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		cjkPreamble = "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n"
 	}
 	// 兼容 shim 按后端 profile 组装 (见 tikzShims); tcblisting 的 tcolorbox
-	// 配置与后端无关, 命中时追加。
-	shims := tikzShims(profile, raw, pkgs) + tcblistingSetup(raw, pkgs)
+	// 配置与文档局部颜色兜底 (tikzDocColorShims) 均与后端无关, 命中时追加。
+	shims := tikzShims(profile, raw, pkgs) + tcblistingSetup(raw, pkgs) + tikzDocColorShims(raw)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
 		[]byte(normalizeTikz(raw, profile)), 0644); err != nil {

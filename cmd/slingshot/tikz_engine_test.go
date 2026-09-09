@@ -335,6 +335,14 @@ to[diode={name=D}] (3,2);
    to[*D](3,2);
 \end{tikzpicture}
 `,
+	"zorder_3d_themecolor": `\begin{tikzpicture}[scale=0.5]
+  \begin{scope}[canvas is zy plane at x=0]
+    \fill[themecolor, opacity=0.4] (-1,-1) rectangle (1,1);
+    \node[font=\footnotesize\ttfamily] at (0,0) {zorder};
+  \end{scope}
+  \rhino
+\end{tikzpicture}
+`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。
@@ -366,7 +374,10 @@ func TestRenderTikzIntegrationXe(t *testing.T) {
 	}
 	for name, sample := range tikzIntegrationSamples {
 		t.Run(name, func(t *testing.T) {
-			renderTikzSample(t, "xe", name, sample)
+			pdf := renderTikzSample(t, "xe", name, sample)
+			if name == "zorder_3d_themecolor" {
+				assertPDFContainsText(t, pdf, "zorder")
+			}
 		})
 	}
 }
@@ -380,7 +391,10 @@ func TestRenderTikzIntegrationTectonic(t *testing.T) {
 	}
 	for name, sample := range tikzIntegrationSamples {
 		t.Run(name, func(t *testing.T) {
-			renderTikzSample(t, "tectonic", name, sample)
+			pdf := renderTikzSample(t, "tectonic", name, sample)
+			if name == "zorder_3d_themecolor" {
+				assertPDFContainsText(t, pdf, "zorder")
+			}
 		})
 	}
 	cjk := `\begin{tikzpicture}

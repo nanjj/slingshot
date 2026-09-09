@@ -102,6 +102,17 @@ motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元�
 `tikzSelfContainedEnvs` 同时收录 `tcblisting`，避免再套外层 tikzpicture（套了会被 pgf
 包围盒裁切）。两个后端都支持（2021 bundle 自带 tcolorbox + listings）。
 
+pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|zy> plane at
+<axis>=` 与裸 `canvas is plane` 坐标系/选项，由 `tikzExtraLibraries` 的内容特征正则自动加载
+（命中即注入 `\usetikzlibrary{3d}`，库本身只定义坐标系、对现有片段无副作用）；tikzlings
+手册的 z-order/rhino 分层切片示例依赖它。
+
+文档局部颜色兜底（`tikzDocColors` / `tikzDocColorShims`，与 `ensureNewStyle` 同类）：手册
+片段若引用了源文档 preamble 自定义的颜色（如 tikzlings 的 `themecolor`，其值 samviolet =
+RGB(136,46,114)），工具会在内容引用该名称且未自行定义时注入 `\providecolor{themecolor}
+{RGB}{136,46,114}`；`\providecolor` 语义保证片段里自己的 `\definecolor` / `\colorlet` 优先
+（显式定义同名颜色即覆盖兜底值）。
+
 CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic bundle 自带 xeCJK，
 无需探测）；仅 xe 在探测阶段用 kpsewhich 检查 xeCJK.sty。字体可用 `TIKZ_CJK_FONT`
 环境变量覆盖（默认 Noto Sans CJK SC）；该值必须是有效字体族名，不要包含 `{` `}` `%` `\`
