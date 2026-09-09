@@ -1044,3 +1044,18 @@ msgstr "将 TikZ 片段渲染为图片文件（.png / .jpg / .svg / .pdf）。\n
 
 msgid "invalid engine %q (want auto, latexmk or tectonic)"
 msgstr "无效引擎 %q（可选 auto、latexmk 或 tectonic）"
+
+msgid "Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).\n\nThe input file may contain a full tikzpicture environment or just the\ncommands inside it — a tikzpicture wrapper is added automatically when\nmissing. \\usetikzlibrary lines are hoisted above the environment.\n\nPackages are loaded automatically by content detection (tkz-euclide,\ntikz-cd, pgfplots, circuitikz, forest, ...); explicit \\usepackage lines\nin the input are hoisted into the preamble.\n\nThe output format is determined by the output file extension.\nPipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript\nrasterization. --engine picks the TeX engine: xe (XeLaTeX, default),\ntectonic (bundled 2021 packages), auto (xe preferred, tectonic fallback).\npdf (pdfLaTeX) and lua (LuaLaTeX) are reserved values, not implemented yet.\nExternal commands are killed after TIKZ_TIMEOUT (Go duration, default 1m).\nChinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be\noverridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).\n\nExamples:\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
+msgstr "将 TikZ 片段渲染为图片文件（.png / .jpg / .svg / .pdf）。\n\n输入文件可以包含完整的 tikzpicture 环境，也可以只包含其中的命令——\n缺失 tikzpicture 外壳时自动补全。\\usetikzlibrary 行会被提升到环境之外。\n\n包通过内容探测自动加载（tkz-euclide、tikz-cd、pgfplots、circuitikz、\nforest 等）；输入中显式的 \\usepackage 行会被提升到导言区。\n\n输出格式由输出文件扩展名决定。\n管线：latexmk -xelatex（默认）→ PDF → mutool / ghostscript\n栅格化。--engine 选择 TeX 引擎：xe（XeLaTeX，默认）、\ntectonic（内置 2021 年旧包）、auto（优先 xe，回退 tectonic）。\npdf（pdfLaTeX）与 lua（LuaLaTeX）为保留取值，尚未实现。\n外部命令超过 TIKZ_TIMEOUT（Go duration 语法，默认 1m）会被杀掉。\n中文（CJK）文本通过 xeCJK 支持（内容含 CJK 时注入）；字体可用 TIKZ_CJK_FONT\n环境变量覆盖（默认：Noto Sans CJK SC）。\n\n示例：\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
+
+msgid "TeX engine: xe (XeLaTeX, default), tectonic, auto (xe preferred, tectonic fallback); pdf and lua are not implemented yet"
+msgstr "TeX 引擎：xe（XeLaTeX，默认）、tectonic、auto（优先 xe，回退 tectonic）；pdf 与 lua 尚未实现"
+
+msgid "engine %q is not implemented yet; use xe or tectonic"
+msgstr "引擎 %q 尚未实现；请使用 xe 或 tectonic"
+
+msgid "invalid engine %q (want xe, tectonic, pdf, lua or auto)"
+msgstr "非法引擎 %q（可选：xe、tectonic、pdf、lua 或 auto）"
+
+msgid "use --engine tectonic to fall back to the bundled tectonic engine"
+msgstr "可用 --engine tectonic 回退到内置的 tectonic 引擎"

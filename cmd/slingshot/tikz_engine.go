@@ -11,10 +11,14 @@ import (
 // tikzEngine 标识 tikz 子命令使用的 LaTeX 编译后端。
 type tikzEngine string
 
+// --engine 的取值命名的是 TeX 引擎而不是驱动: xe/pdf/lua 都由 latexmk 驱动
+// (latexmk -xelatex / -pdf / -lualatex), tectonic 自带驱动与 bundle。
 const (
-	engineAuto     tikzEngine = "auto"
-	engineLatexmk  tikzEngine = "latexmk"
-	engineTectonic tikzEngine = "tectonic"
+	engineXe       tikzEngine = "xe"       // xelatex (默认)
+	engineTectonic tikzEngine = "tectonic" // tectonic bundle (2021, 旧版语法)
+	enginePDF      tikzEngine = "pdf"      // pdflatex — 尚未实现
+	engineLua      tikzEngine = "lua"      // lualatex — 尚未实现
+	engineAuto     tikzEngine = "auto"     // xe 优先, tectonic 回退
 )
 
 // tikzProfile 选择某个后端需要的兼容处理。
@@ -53,10 +57,23 @@ func tectonicProfile() tikzProfile {
 	}
 }
 
+// latexmkEngineFlag 返回 latexmk 驱动 eng 所需的标志。
+// pdf/lua 尚未接入 (selectTikzEngine 提前报错), 但标志先就位, 将来只需放开校验。
+func latexmkEngineFlag(eng tikzEngine) string {
+	switch eng {
+	case enginePDF:
+		return "-pdf"
+	case engineLua:
+		return "-lualatex"
+	default:
+		return "-xelatex"
+	}
+}
+
 // latexmkCompileArgs 是 latexmk 后端的固定编译参数。
 // 绝不加 -shell-escape。
-func latexmkCompileArgs() []string {
-	return []string{"-xelatex", "-interaction=nonstopmode", "-halt-on-error", "input.tex"}
+func latexmkCompileArgs(eng tikzEngine) []string {
+	return []string{latexmkEngineFlag(eng), "-interaction=nonstopmode", "-halt-on-error", "input.tex"}
 }
 
 // lookPathFn 是 exec.LookPath 的可测试 seam。
@@ -105,15 +122,23 @@ func tectonicAvailable() error {
 
 // selectTikzEngine 根据请求值与内容选择渲染后端。
 //
-// - auto: latexmk 可用则 latexmk; 否则 tectonic 可用则 tectonic; 都不可用报错(两个安装提示都给出)
-// - latexmk/tectonic: 显式指定时探测失败直接报错, 不静默回退
+// - xe (默认)/tectonic: 显式指定时探测失败直接报错, 不静默回退
+// - auto: xe 可用则 xe; 否则 tectonic 可用则 tectonic; 都不可用报错(两个安装提示都给出)
+// - pdf/lua: 保留取值但尚未实现, 明确报错而不是当成非法值
 func selectTikzEngine(requested, content string) (tikzEngine, error) {
 	switch requested {
-	case "", "auto":
+	case "", string(engineXe):
+		if err := latexmkAvailable(contentHasCJK(content)); err != nil {
+			// 默认引擎不再静默回退, 所以这里必须指出替代方案。
+			return engineXe, fmt.Errorf("latexmk unavailable: %w; %s",
+				err, i18n.G("use --engine tectonic to fall back to the bundled tectonic engine"))
+		}
+		return engineXe, nil
+	case string(engineAuto):
 		needCJK := contentHasCJK(content)
 		lmkErr := latexmkAvailable(needCJK)
 		if lmkErr == nil {
-			return engineLatexmk, nil
+			return engineXe, nil
 		}
 		tectErr := tectonicAvailable()
 		if tectErr == nil {
@@ -121,18 +146,15 @@ func selectTikzEngine(requested, content string) (tikzEngine, error) {
 		}
 		return engineAuto, fmt.Errorf("latexmk unavailable: %v; %s; %s",
 			lmkErr, latexmkInstallHint(needCJK), tectErr)
-	case "latexmk":
-		if err := latexmkAvailable(contentHasCJK(content)); err != nil {
-			return engineLatexmk, fmt.Errorf("latexmk unavailable: %w", err)
-		}
-		return engineLatexmk, nil
-	case "tectonic":
+	case string(engineTectonic):
 		if err := tectonicAvailable(); err != nil {
 			return engineTectonic, fmt.Errorf("tectonic unavailable: %w", err)
 		}
 		return engineTectonic, nil
+	case string(enginePDF), string(engineLua):
+		return tikzEngine(requested), fmt.Errorf(i18n.G("engine %q is not implemented yet; use xe or tectonic"), requested)
 	default:
-		return engineAuto, fmt.Errorf(i18n.G("invalid engine %q (want auto, latexmk or tectonic)"), requested)
+		return "", fmt.Errorf(i18n.G("invalid engine %q (want xe, tectonic, pdf, lua or auto)"), requested)
 	}
 }
 

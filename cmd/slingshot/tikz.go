@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -48,9 +50,11 @@ tikz-cd, pgfplots, circuitikz, forest, ...); explicit \usepackage lines
 in the input are hoisted into the preamble.
 
 The output format is determined by the output file extension.
-Pipeline: latexmk -xelatex (preferred) -> tectonic (fallback) -> PDF ->
-mutool / ghostscript rasterization. Pick a backend explicitly with
---engine latexmk or --engine tectonic.
+Pipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript
+rasterization. --engine picks the TeX engine: xe (XeLaTeX, default),
+tectonic (bundled 2021 packages), auto (xe preferred, tectonic fallback).
+pdf (pdfLaTeX) and lua (LuaLaTeX) are reserved values, not implemented yet.
+External commands are killed after TIKZ_TIMEOUT (Go duration, default 1m).
 Chinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be
 overridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).
 
@@ -61,8 +65,8 @@ Examples:
 	)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
-	cmd.Flags().StringVar(&c.engine, "engine", "auto",
-		i18n.G("LaTeX engine: auto (latexmk preferred, tectonic fallback), latexmk, tectonic"))
+	cmd.Flags().StringVar(&c.engine, "engine", string(engineXe),
+		i18n.G("TeX engine: xe (XeLaTeX, default), tectonic, auto (xe preferred, tectonic fallback); pdf and lua are not implemented yet"))
 	return cmd
 }
 
@@ -1061,10 +1065,17 @@ func tikzOutputFormat(outFile string) (string, error) {
 }
 
 // renderTikz 渲染 inFile 为 outFile 指定格式的图片。
-// engine 选择编译后端 (auto / latexmk / tectonic); 在临时目录中工作
+// engine 选择 TeX 引擎 (xe / tectonic / auto, 见 selectTikzEngine); 在临时目录中工作
 // (LaTeX 引擎会产出 aux 文件); 失败时保留现场便于调试。
 func renderTikz(inFile, outFile, engine string) (err error) {
 	format, err := tikzOutputFormat(outFile)
+	if err != nil {
+		return err
+	}
+	// 外部命令 (latexmk / tectonic / mutool / gs) 的超时上限。死循环的 TikZ
+	// (例如 pgfkeys 把 circle through 的逗号参数拆开) 会 100% CPU 挂死且不产出
+	// 任何诊断, 必须靠超时兜底, 而不是等用户 Ctrl-C。
+	cmdTimeout, err := tikzCmdTimeout()
 	if err != nil {
 		return err
 	}
@@ -1083,10 +1094,10 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	if err != nil {
 		return err
 	}
-	var profile tikzProfile
-	if eng == engineLatexmk {
-		profile = latexmkProfile()
-	} else {
+	// tectonic bundle 内置 2021 年的旧包, 需要 tkz-euclide / circuitikz 5.x → 旧版
+	// 语法翻译与 shim; xe/pdf/lua 走 TeX Live 新版语法, profile 全 false。
+	profile := latexmkProfile()
+	if eng == engineTectonic {
 		profile = tectonicProfile()
 	}
 	compat := circuitikzCompatDetected(raw)
@@ -1137,14 +1148,22 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
+	// run 执行一条外部命令并施加超时; ctx 到期时 runCmd 会杀掉整个进程组
+	// (latexmk 会派生 xelatex, 只杀父进程会留下孤儿)。
+	run := func(name string, args ...string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+		defer cancel()
+		return runCmd(ctx, tmpDir, name, args...)
+	}
+
 	// 编译 input.tex -> input.pdf; 编译失败不自动改用另一个后端。
 	pdf := filepath.Join(tmpDir, "input.pdf")
-	compileErr := func(eng tikzEngine) error {
+	compileErr := func() error {
 		var err error
 		if eng == engineTectonic {
-			err = runCmd(tmpDir, "tectonic", "input.tex")
+			err = run("tectonic", "input.tex")
 		} else {
-			err = runCmd(tmpDir, "latexmk", latexmkCompileArgs()...)
+			err = run("latexmk", latexmkCompileArgs(eng)...)
 		}
 		// 退出码 0 也可能没有产物; 两个后端统一显式报错, 避免下游出现
 		// "文件不存在" 这类难以定位的错误。
@@ -1153,7 +1172,7 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		}
 		return texLogErr(err, tmpDir)
 	}
-	if err := compileErr(eng); err != nil {
+	if err := compileErr(); err != nil {
 		return fmt.Errorf("%s failed (workdir kept: %s, log: %s): %w",
 			eng, tmpDir, filepath.Join(tmpDir, "input.log"), err)
 	}
@@ -1163,17 +1182,17 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	case "pdf":
 		produced = pdf
 	case "png":
-		if err := runCmd(tmpDir, "mutool", "draw", "-o", base+".png", "-r", "150", "input.pdf"); err != nil {
+		if err := run("mutool", "draw", "-o", base+".png", "-r", "150", "input.pdf"); err != nil {
 			return fmt.Errorf("mutool draw failed (workdir kept: %s): %w", tmpDir, err)
 		}
 		produced = resolveMutoolOutput(base + ".png")
 	case "svg":
-		if err := runCmd(tmpDir, "mutool", "convert", "-o", base+".svg", "input.pdf"); err != nil {
+		if err := run("mutool", "convert", "-o", base+".svg", "input.pdf"); err != nil {
 			return fmt.Errorf("mutool convert failed (workdir kept: %s): %w", tmpDir, err)
 		}
 		produced = resolveMutoolOutput(base + ".svg")
 	case "jpg":
-		if err := runCmd(tmpDir, "gs", "-sDEVICE=jpeg", "-r150", "-o", base+".jpg", "input.pdf"); err != nil {
+		if err := run("gs", "-sDEVICE=jpeg", "-r150", "-o", base+".jpg", "input.pdf"); err != nil {
 			return fmt.Errorf("ghostscript failed (workdir kept: %s): %w", tmpDir, err)
 		}
 		produced = resolveMutoolOutput(base + ".jpg")
@@ -1199,20 +1218,53 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	return out.Close()
 }
 
+// defaultTikzCmdTimeout 是单条外部命令的默认超时上限。
+const defaultTikzCmdTimeout = time.Minute
+
+// tikzCmdTimeout 返回单条外部命令 (latexmk / tectonic / mutool / gs) 的超时上限:
+// TIKZ_TIMEOUT (Go duration 语法, 如 "90s"、"3m"), 默认 1m。
+// 非法值直接报错而不是静默回退默认值, 避免拼写错误被吞掉。
+func tikzCmdTimeout() (time.Duration, error) {
+	raw := strings.TrimSpace(os.Getenv("TIKZ_TIMEOUT"))
+	if raw == "" {
+		return defaultTikzCmdTimeout, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid TIKZ_TIMEOUT %q: %w", raw, err)
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("invalid TIKZ_TIMEOUT %q: must be positive", raw)
+	}
+	return d, nil
+}
+
 // runCmd 在 dir 中执行命令, 失败时返回包含输出的错误。
 // LaTeX 引擎的日志可能很长, 只保留尾部 (错误汇总通常在末尾)。
-func runCmd(dir, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+//
+// ctx 到期 (或取消) 时杀掉整个进程组: latexmk 派生 xelatex、xelatex 又派生
+// xdvipdfmx, 只杀直接子进程会留下孤儿继续吃 CPU。WaitDelay 则保证孙进程
+// 仍持有 stdout 管道时 CombinedOutput 不会永久阻塞。
+func runCmd(ctx context.Context, dir, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	setProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
+	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if len(msg) > 2000 {
-			msg = "..." + msg[len(msg)-2000:]
-		}
-		return fmt.Errorf("%s: %v\n%s", name, err, msg)
+	if err == nil {
+		return nil
 	}
-	return nil
+	msg := strings.TrimSpace(string(out))
+	if len(msg) > 2000 {
+		msg = "..." + msg[len(msg)-2000:]
+	}
+	// 超时/取消优先报出: 此时 err 通常只是 "signal: killed", 没有诊断价值。
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("%s: %w (process group killed; raise TIKZ_TIMEOUT if the document is genuinely slow)\n%s",
+			name, ctxErr, msg)
+	}
+	return fmt.Errorf("%s: %v\n%s", name, err, msg)
 }
 
 // texLogErr 构造 LaTeX 引擎 (latexmk / tectonic) 编译失败的简明诊断: 附带

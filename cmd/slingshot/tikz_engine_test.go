@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestContentHasCJK(t *testing.T) {
@@ -62,24 +63,55 @@ func TestSelectTikzEngine(t *testing.T) {
 		wantEngine tikzEngine
 		wantErr    bool
 	}{
-		// auto: latexmk 优先。
+		// xe: 默认引擎; 显式指定时探测失败直接报错, 不静默回退。
 		{
-			name:      "auto prefer latexmk no cjk",
-			requested: "auto", content: "\\draw (0,0);",
+			name:      "empty requested defaults to xe",
+			requested: "", content: "\\draw (0,0);",
 			latexmk: true, xelatex: true, tectonic: true,
-			wantEngine: engineLatexmk,
+			wantEngine: engineXe,
 		},
 		{
-			name:      "auto latexmk missing cjk falls to tectonic",
+			name:      "explicit xe ok",
+			requested: "xe", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true,
+			wantEngine: engineXe,
+		},
+		{
+			name:      "explicit xe cjk complete",
+			requested: "xe", content: "\\node {中文};",
+			latexmk: true, xelatex: true, xecjk: true, tectonic: true,
+			wantEngine: engineXe,
+		},
+		{
+			name:      "explicit xe cjk missing xecjk errors",
+			requested: "xe", content: "\\node {中文};",
+			latexmk: true, xelatex: true, xecjk: false, tectonic: true,
+			wantErr: true,
+		},
+		{
+			name:      "explicit xe latexmk missing errors",
+			requested: "xe", content: "\\draw (0,0);",
+			latexmk: false, xelatex: true, tectonic: true,
+			wantErr: true,
+		},
+		// auto: xe 优先, 缺失时回退 tectonic。
+		{
+			name:      "auto prefer xe no cjk",
+			requested: "auto", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true, tectonic: true,
+			wantEngine: engineXe,
+		},
+		{
+			name:      "auto xe unusable cjk falls to tectonic",
 			requested: "auto", content: "\\node {中文};",
 			latexmk: true, xelatex: true, xecjk: false, tectonic: true,
 			wantEngine: engineTectonic,
 		},
 		{
-			name:      "auto latexmk with cjk complete",
+			name:      "auto xe with cjk complete",
 			requested: "auto", content: "\\node {中文};",
 			latexmk: true, xelatex: true, xecjk: true, tectonic: true,
-			wantEngine: engineLatexmk,
+			wantEngine: engineXe,
 		},
 		{
 			name:      "auto latexmk absent falls to tectonic",
@@ -99,25 +131,6 @@ func TestSelectTikzEngine(t *testing.T) {
 			latexmk: false, xelatex: false, tectonic: false,
 			wantErr: true,
 		},
-		// 显式 latexmk: 探测失败直接报错, 不静默回退。
-		{
-			name:      "explicit latexmk ok",
-			requested: "latexmk", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true,
-			wantEngine: engineLatexmk,
-		},
-		{
-			name:      "explicit latexmk cjk missing xecjk errors",
-			requested: "latexmk", content: "\\node {中文};",
-			latexmk: true, xelatex: true, xecjk: false, tectonic: true,
-			wantErr: true,
-		},
-		{
-			name:      "explicit latexmk missing errors",
-			requested: "latexmk", content: "\\draw (0,0);",
-			latexmk: false, xelatex: true, tectonic: true,
-			wantErr: true,
-		},
 		// 显式 tectonic: 探测失败直接报错, 不静默回退。
 		{
 			name:      "explicit tectonic ok",
@@ -131,18 +144,31 @@ func TestSelectTikzEngine(t *testing.T) {
 			latexmk: true, xelatex: true, tectonic: false,
 			wantErr: true,
 		},
-		// 非法值。
+		// pdf/lua: 取值已保留, 但尚未实现 —— 必须明确报 "未实现", 不能当成非法值。
+		{
+			name:      "pdf not implemented",
+			requested: "pdf", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true, tectonic: true,
+			wantErr: true,
+		},
+		{
+			name:      "lua not implemented",
+			requested: "lua", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true, tectonic: true,
+			wantErr: true,
+		},
+		// 旧取值 latexmk 命名的是驱动而不是引擎, 已随 --engine 语义调整移除。
+		{
+			name:      "legacy latexmk value rejected",
+			requested: "latexmk", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true, tectonic: true,
+			wantErr: true,
+		},
 		{
 			name:      "invalid engine",
 			requested: "bogus", content: "\\draw (0,0);",
 			latexmk: true, xelatex: true, tectonic: true,
 			wantErr: true,
-		},
-		{
-			name:      "empty requested treated as auto",
-			requested: "", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
-			wantEngine: engineLatexmk,
 		},
 	}
 
@@ -178,15 +204,65 @@ func TestSelectTikzEngine(t *testing.T) {
 	}
 }
 
-func TestLatexmkCompileArgsNoShellEscape(t *testing.T) {
-	args := latexmkCompileArgs()
-	joined := strings.Join(args, " ")
-	if strings.Contains(joined, "shell-escape") {
-		t.Fatalf("latexmk args must not contain -shell-escape: %v", args)
+// TestLatexmkCompileArgs 钉住每个引擎对应的 latexmk 标志, 并确保永不出现
+// -shell-escape (它会把 LaTeX 文档变成任意命令执行)。
+func TestLatexmkCompileArgs(t *testing.T) {
+	tests := []struct {
+		engine tikzEngine
+		want   string
+	}{
+		{engine: engineXe, want: "-xelatex"},
+		{engine: enginePDF, want: "-pdf"},
+		{engine: engineLua, want: "-lualatex"},
+		{engine: engineAuto, want: "-xelatex"}, // auto 最终解析成 xe 或 tectonic
 	}
-	if args[0] != "-xelatex" || args[len(args)-1] != "input.tex" {
-		t.Fatalf("unexpected latexmk args: %v", args)
+	for _, tt := range tests {
+		args := latexmkCompileArgs(tt.engine)
+		joined := strings.Join(args, " ")
+		if strings.Contains(joined, "shell-escape") {
+			t.Fatalf("latexmk args must not contain -shell-escape: %v", args)
+		}
+		if args[0] != tt.want || args[len(args)-1] != "input.tex" {
+			t.Fatalf("latexmkCompileArgs(%q) = %v, want %q ... input.tex", tt.engine, args, tt.want)
+		}
 	}
+}
+
+// TestTikzCmdTimeout 覆盖 TIKZ_TIMEOUT 的解析: 未设置取默认值, 合法 duration
+// 生效, 非法值报错 (不静默回退)。
+func TestTikzCmdTimeout(t *testing.T) {
+	t.Run("unset uses default", func(t *testing.T) {
+		t.Setenv("TIKZ_TIMEOUT", "")
+		got, err := tikzCmdTimeout()
+		if err != nil {
+			t.Fatalf("tikzCmdTimeout() unexpected error: %v", err)
+		}
+		if got != defaultTikzCmdTimeout {
+			t.Fatalf("tikzCmdTimeout() = %s, want %s", got, defaultTikzCmdTimeout)
+		}
+	})
+	t.Run("valid override", func(t *testing.T) {
+		t.Setenv("TIKZ_TIMEOUT", "90s")
+		got, err := tikzCmdTimeout()
+		if err != nil {
+			t.Fatalf("tikzCmdTimeout() unexpected error: %v", err)
+		}
+		if got != 90*time.Second {
+			t.Fatalf("tikzCmdTimeout() = %s, want 90s", got)
+		}
+	})
+	t.Run("invalid value errors", func(t *testing.T) {
+		t.Setenv("TIKZ_TIMEOUT", "2 minutes")
+		if _, err := tikzCmdTimeout(); err == nil {
+			t.Fatal("tikzCmdTimeout() = nil error, want a parse error")
+		}
+	})
+	t.Run("non positive errors", func(t *testing.T) {
+		t.Setenv("TIKZ_TIMEOUT", "0s")
+		if _, err := tikzCmdTimeout(); err == nil {
+			t.Fatal("tikzCmdTimeout() = nil error, want a positive-duration error")
+		}
+	})
 }
 
 // --- Integration: real engines (skipped when missing) ---
@@ -282,14 +358,15 @@ func renderTikzSample(t *testing.T, engine, name, sample string) []byte {
 	return data
 }
 
-// TestRenderTikzIntegrationLatexmk 真跑 latexmk (可用时); 覆盖本改动的回归用例。
-func TestRenderTikzIntegrationLatexmk(t *testing.T) {
+// TestRenderTikzIntegrationXe 真跑 xe 引擎 (latexmk -xelatex, 可用时);
+// 覆盖本改动的回归用例。
+func TestRenderTikzIntegrationXe(t *testing.T) {
 	if err := latexmkAvailable(false); err != nil {
 		t.Skipf("latexmk unavailable: %v", err)
 	}
 	for name, sample := range tikzIntegrationSamples {
 		t.Run(name, func(t *testing.T) {
-			renderTikzSample(t, "latexmk", name, sample)
+			renderTikzSample(t, "xe", name, sample)
 		})
 	}
 }
@@ -315,7 +392,7 @@ func TestRenderTikzIntegrationTectonic(t *testing.T) {
 	})
 }
 
-// TestRenderTikzIntegrationCJK 真跑 latexmk + xelatex + xeCJK 三者齐备时渲染 CJK。
+// TestRenderTikzIntegrationCJK 真跑 xe 引擎 + xelatex + xeCJK 三者齐备时渲染 CJK。
 func TestRenderTikzIntegrationCJK(t *testing.T) {
 	if err := latexmkAvailable(true); err != nil {
 		t.Skipf("latexmk + xelatex + xeCJK unavailable: %v", err)
@@ -324,7 +401,7 @@ func TestRenderTikzIntegrationCJK(t *testing.T) {
 \node at (0,0) {\text{中文}};
 \end{tikzpicture}
 `
-	assertPDFContainsText(t, renderTikzSample(t, "latexmk", "cjk", sample), "中文")
+	assertPDFContainsText(t, renderTikzSample(t, "xe", "cjk", sample), "中文")
 }
 
 // assertPDFContainsText 用 pdftotext 提取 PDF 文本并断言包含 want。
@@ -386,7 +463,7 @@ func TestRenderTikzEngineExit0WithoutPDF(t *testing.T) {
 		}
 	})
 
-	t.Run("auto selects latexmk", func(t *testing.T) {
+	t.Run("auto resolves to xe", func(t *testing.T) {
 		if _, err := exec.LookPath("xelatex"); err != nil {
 			t.Skipf("xelatex unavailable: %v", err)
 		}
@@ -396,8 +473,8 @@ func TestRenderTikzEngineExit0WithoutPDF(t *testing.T) {
 		if err == nil {
 			t.Fatal("renderTikz() = nil, want an explicit error when the engine produces no PDF")
 		}
-		if !strings.Contains(err.Error(), "latexmk exited successfully but") {
-			t.Fatalf("error = %v, want the selected engine (latexmk), not the --engine flag value (auto)", err)
+		if !strings.Contains(err.Error(), "xe exited successfully but") {
+			t.Fatalf("error = %v, want the resolved engine (xe), not the --engine flag value (auto)", err)
 		}
 	})
 }

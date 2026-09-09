@@ -16,7 +16,9 @@ cmd/slingshot/                      # 主入口 + 子命令
 ├── skill.go                        # skill 子命令 (含 embedded skills)
 ├── amap.go                         # amap 子命令 (高德地图 MCP)
 ├── tikz.go                         # tikz 子命令 (TikZ → png/jpg/svg/pdf)
-├── tikz_engine.go                  # tikz 引擎选择 (latexmk/tectonic) + 兼容 profile
+├── tikz_engine.go                  # tikz 引擎选择 (xe/tectonic/auto) + 兼容 profile
+├── tikz_proc_unix.go               # 进程组超时清理 (unix)
+├── tikz_proc_other.go              # 进程组超时清理 (windows 退化实现)
 └── embedded_skills/weixin/SKILL.md  # 内置 skill (嵌入 binary)
 internal/
 ├── cmd/shared.go                   # 共享 CLI 工具
@@ -41,7 +43,7 @@ slingshot
 ├── config list|show|get|set|unset
 ├── meterial add|list|remove|show
 ├── skill list|install
-├── tikz <in-file> <out-file> [--engine auto|latexmk|tectonic]
+├── tikz <in-file> <out-file> [--engine xe|tectonic|auto]
 └── amap search|around|detail|geo|regeo|driving|walking|bicycling|transit|distance|ip
 ```
 
@@ -68,22 +70,31 @@ slingshot
 
 ## TikZ 渲染管线
 
-`slingshot tikz <in-file> <out-file> [--engine auto|latexmk|tectonic]` 把 TikZ 片段渲染成
+`slingshot tikz <in-file> <out-file> [--engine xe|tectonic|auto]` 把 TikZ 片段渲染成
 png/jpg/svg/pdf。输出格式由输出文件扩展名决定（PDF 直接产出；png/svg 走 mutool，
 jpg 走 ghostscript 栅格化）。
 
-编译后端：latexmk -xelatex（TL2026 新版语法）为主 → tectonic（内置旧版 tkz-euclide 4.051b /
-circuitikz 1.4.x bundle）后备 → 两者都不可用时明确报错。`--engine` 显式指定时探测失败直接报错，
-编译失败不自动换后端；只有 `auto` 才在 latexmk 缺失时回退 tectonic。
+`--engine` 的值命名的是 **TeX 引擎**而不是驱动：`xe`（默认）经 `latexmk -xelatex`
+走 TeX Live 2026 新版语法；`tectonic` 用内置的 2021 年旧版 tkz-euclide 4.051b /
+circuitikz 1.4.x bundle；`auto` 优先 xe、不可用时回退 tectonic；`pdf` / `lua` 是保留
+取值，`selectTikzEngine` 直接报「尚未实现」。显式指定引擎时探测失败直接报错，编译失败
+不自动换后端；只有 `auto` 才在 xe 不可用时回退 tectonic。
+
+外部命令（latexmk / tectonic / mutool / gs）每条都有超时上限：`TIKZ_TIMEOUT`
+（Go duration，默认 `1m`）。超时由 `runCmd` 的 `context.WithTimeout` 触发，杀掉**整个
+进程组**（`tikz_proc_unix.go` 的 `Setpgid` + `kill(-pid, SIGKILL)`）——latexmk → xelatex
+→ xdvipdfmx 是进程树，只杀直接子进程会留下孤儿。Windows 上退化为杀直接子进程。
+这条兜底是必需的：旧语法 `\tkzDrawCircle[circum](A,B,C)` 会让 pgfkeys 无限自展开
+（100% CPU、无任何输出），没有超时就会挂死调用方。
 
 兼容 shim 按后端 profile 门控（`tikz_engine.go` 的 `tikzProfile`）：
 tectonic 上做 tkz-euclide 5.x → 4.051b 语法翻译、2021-bundle 兼容 shim（buzzer/converter/
-apollonius/IEC）；latexmk profile 全 false，不启用这些翻译与 shim（否则在新语法上「反向出错」）。
-IEC 风格在 latexmk 上注入 \usetikzlibrary{circuits.ee.IEC}（真库），tectonic 上用 circuitikz shim。
+apollonius/IEC）；xe/pdf/lua profile 全 false，不启用这些翻译与 shim（否则在新语法上「反向出错」）。
+IEC 风格在 xe 上注入 \usetikzlibrary{circuits.ee.IEC}（真库），tectonic 上用 circuitikz shim。
 motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元件（圆圈 + M），只能定制补齐。
 
 CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic bundle 自带 xeCJK，
-无需探测）；仅 latexmk 在探测阶段用 kpsewhich 检查 xeCJK.sty。字体可用 `TIKZ_CJK_FONT`
+无需探测）；仅 xe 在探测阶段用 kpsewhich 检查 xeCJK.sty。字体可用 `TIKZ_CJK_FONT`
 环境变量覆盖（默认 Noto Sans CJK SC）；该值必须是有效字体族名，不要包含 `{` `}` `%` `\`
 等 TeX 特殊字符（会直接拼进 `\setCJKmainfont{...}`）。字体缺失时 fontspec 会报错退出。
 
