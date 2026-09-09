@@ -111,13 +111,16 @@ func selectTikzEngine(requested, content string) (tikzEngine, error) {
 	switch requested {
 	case "", "auto":
 		needCJK := contentHasCJK(content)
-		if latexmkAvailable(needCJK) == nil {
+		lmkErr := latexmkAvailable(needCJK)
+		if lmkErr == nil {
 			return engineLatexmk, nil
 		}
-		if tectonicAvailable() == nil {
+		tectErr := tectonicAvailable()
+		if tectErr == nil {
 			return engineTectonic, nil
 		}
-		return engineAuto, fmt.Errorf("%s; %s", latexmkInstallHint(needCJK), tectonicAvailable())
+		return engineAuto, fmt.Errorf("latexmk unavailable: %v; %s; %s",
+			lmkErr, latexmkInstallHint(needCJK), tectErr)
 	case "latexmk":
 		if err := latexmkAvailable(contentHasCJK(content)); err != nil {
 			return engineLatexmk, fmt.Errorf("latexmk unavailable: %w", err)

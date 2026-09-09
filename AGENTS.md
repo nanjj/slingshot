@@ -81,8 +81,10 @@ tectonic 上做 tkz-euclide 5.x → 4.051b 语法翻译、2021-bundle 兼容 shi
 apollonius/IEC）；latexmk profile 全 false，不启用这些翻译与 shim（否则在新语法上「反向出错」）。
 motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元件（圆圈 + M），只能定制补齐。
 
-CJK：仅内容含 CJK 且走 latexmk 时才注入 fontspec + xeCJK 前导并检查 xeCJK.sty；
-tectonic 后端不要求 xeCJK。字体可用 `TIKZ_CJK_FONT` 环境变量覆盖（默认 Noto Sans CJK SC）。
+CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic bundle 自带 xeCJK，
+无需探测）；仅 latexmk 在探测阶段用 kpsewhich 检查 xeCJK.sty。字体可用 `TIKZ_CJK_FONT`
+环境变量覆盖（默认 Noto Sans CJK SC）；该值必须是有效字体族名，不要包含 `{` `}` `%` `\`
+等 TeX 特殊字符（会直接拼进 `\setCJKmainfont{...}`）。字体缺失时 fontspec 会报错退出。
 
 ## 构建与测试
 

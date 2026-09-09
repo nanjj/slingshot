@@ -911,6 +911,19 @@ func TestDetectTikzPackages(t *testing.T) {
 	}
 }
 
+// TestDetectTikzPackagesLegacyIEC 验证 circuit ee IEC 内容在非 legacy (latexmk)
+// 模式下不再额外引入 circuitikz: TL2026 自带真的 circuits.ee.IEC 库, 不需要
+// circuitikz 兜底; 只有 tectonic (2021 bundle 缺该库) 才需要。
+func TestDetectTikzPackagesLegacyIEC(t *testing.T) {
+	content := "\\usetikzlibrary{circuits.ee.IEC}\n\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
+	if got := detectTikzPackages(content, false); len(got) != 0 {
+		t.Errorf("detectTikzPackages(legacyIEC=false) = %v, want none", got)
+	}
+	if got := detectTikzPackages(content, true); len(got) != 1 || got[0] != "circuitikz" {
+		t.Errorf("detectTikzPackages(legacyIEC=true) = %v, want [circuitikz]", got)
+	}
+}
+
 func TestExtractUserPackages(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1225,6 +1238,43 @@ func TestCircuitikzIecShim(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("circuitikzIecShim() missing %q in:\n%s", want, got)
 		}
+	}
+}
+
+func TestTikzShims(t *testing.T) {
+	// 同时命中 buzzer / converter / apollonius / IEC / motor 的内容。
+	raw := "\\begin{circuitikz}\n\\draw (0,0) to[buzzer] (0,2);\n\\end{circuitikz}\n" +
+		"\\begin{tikzpicture}[circuit ee IEC]\n\\node[tacdcshape]{};\n\\end{tikzpicture}\n" +
+		"\\tkzDefCircle[apollonius,K=2](A,B)\n\\draw (0,0) to[motor] (2,0);"
+	pkgs := []string{"circuitikz", "siunitx", "tkz-euclide"}
+
+	// latexmk (TL2026) profile: 只注入与后端无关的 motor 与 siunitx shim。
+	modern := tikzShims(latexmkProfile(), raw, pkgs)
+	for _, want := range []string{tikzMotorShim, tikzSiunitxShim} {
+		if !strings.Contains(modern, want) {
+			t.Errorf("latexmk shims missing backend-independent shim %q", want)
+		}
+	}
+	for _, banned := range []string{tikzBuzzerShim, tikzConverterShim, tikzApolloniusShim, tikzIecShim} {
+		if strings.Contains(modern, banned) {
+			t.Errorf("latexmk shims must not inject 2021-bundle shim %q", banned)
+		}
+	}
+
+	// tectonic (2021 bundle) profile: 全部兼容 shim 都要注入。
+	legacy := tikzShims(tectonicProfile(), raw, pkgs)
+	for _, want := range []string{tikzBuzzerShim, tikzConverterShim, tikzApolloniusShim, tikzIecShim, tikzSiunitxShim} {
+		if !strings.Contains(legacy, want) {
+			t.Errorf("tectonic shims missing 2021-bundle shim %q", want)
+		}
+	}
+}
+
+// TestTexLogErrNil 钉住 texLogErr 的契约: nil 错误原样返回 nil,
+// 不产生 "%!w(<nil>)" 之类的伪错误。
+func TestTexLogErrNil(t *testing.T) {
+	if err := texLogErr(nil, t.TempDir()); err != nil {
+		t.Errorf("texLogErr(nil) = %v, want nil", err)
 	}
 }
 

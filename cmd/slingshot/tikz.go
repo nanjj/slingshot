@@ -50,7 +50,7 @@ The output format is determined by the output file extension.
 Pipeline: latexmk -xelatex (preferred) -> tectonic (fallback) -> PDF ->
 mutool / ghostscript rasterization. Pick a backend explicitly with
 --engine latexmk or --engine tectonic.
-Chinese (CJK) text is supported via xeCJK (latexmk only); the font can be
+Chinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be
 overridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).
 
 Examples:
@@ -84,7 +84,7 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 
 // tikzWrapper 是 LaTeX 编译用的 standalone 模板。
 // 四个 %s 依次为: 额外加载的包、自动探测的 tikz 库、兼容 shim、CJK 前导
-// (fontspec + xeCJK + \setCJKmainfont, 仅内容含 CJK 时由 latexmk 后端注入;
+// (fontspec + xeCJK + \setCJKmainfont; 内容含 CJK 时两个后端都注入,
 // 其余情况为空串)。shim 与 CJK 前导均可为空。
 // \usetikzlibrary 放在所有 \usepackage 之后、\begin{document} 之前,
 // 确保 fit / calc 等库在输入内容执行前生效。
@@ -935,6 +935,33 @@ func fixDefLineTangent(content string) string {
 	return b.String()
 }
 
+// tikzShims 按后端 profile 组装需要注入前导的兼容 shim。
+//
+// motor shim 与后端无关: circuitikz 上游 (含 1.8.5) 从来没有 motor 元件,
+// 只能由 shim 提供 (圆圈 + M), 因此两个后端都注入。
+// buzzer / converter / apollonius / IEC 是 2021 bundle (tkz-euclide 4.051b /
+// circuitikz 1.4.x) 的兼容处理, 只在 tectonic profile 上注入; 在 latexmk
+// (TL2026 新版语法) 下注入会"反向出错"或覆盖新版原生实现。
+// siunitx alias shim 与后端无关 (siunitx v3 行为), 两个后端都保留。
+func tikzShims(p tikzProfile, raw string, pkgs []string) string {
+	var shims string
+	shims += circuitikzMotorShim(raw)
+	if p.legacyBuzzer {
+		shims += circuitikzBuzzerShim(raw)
+	}
+	if p.legacyConverter {
+		shims += circuitikzConverterShim(raw)
+	}
+	if p.legacyApollonius {
+		shims += tkzApolloniusShimFor(raw)
+	}
+	if p.legacyIEC {
+		shims += circuitikzIecShim(raw)
+	}
+	shims += siunitxAliasShim(pkgs)
+	return shims
+}
+
 // normalizeTikz 保证输入包含完整的环境:
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
@@ -1023,9 +1050,11 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	}
 	// 提升显式 \usepackage + 自动探测内容所需的包和 tikz 库
 	// (tkz-euclide / circuitikz / fit / calc 等)。
-	raw := string(content)
-	// 用原始内容判断 CJK、选择引擎 (引擎探测先于任何归一化)。
-	eng, err := selectTikzEngine(engine, raw)
+	// orig 是未经任何归一化的原始内容: 引擎选择与 CJK 判断都基于它,
+	// 避免后续 extractUserPackages / IEC 剥离改变判断结果。
+	orig := string(content)
+	raw := orig
+	eng, err := selectTikzEngine(engine, orig)
 	if err != nil {
 		return err
 	}
@@ -1060,28 +1089,18 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		}
 	}()
 
-	// CJK 前导: 内容含 CJK 且走 latexmk(需要 xeCJK) 时注入 fontspec+xeCJK。
+	// CJK 前导: 内容含 CJK 时两个后端都注入 fontspec+xeCJK。tectonic bundle 自带
+	// xeCJK, 但同样需要 \setCJKmainfont 才能正确排版中文字形, 否则会出 tofu。
 	var cjkPreamble string
-	if eng == engineLatexmk && contentHasCJK(raw) {
+	if contentHasCJK(orig) {
 		font := os.Getenv("TIKZ_CJK_FONT")
 		if font == "" {
 			font = "Noto Sans CJK SC"
 		}
 		cjkPreamble = "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n"
 	}
-	var shims string
-	// motor shim 两个后端都保留: circuitikz 上游(含 1.8.5)从来没有 motor 元件。
-	shims += circuitikzMotorShim(raw)
-	// buzzer / converter / apollonius shim 只在 tectonic 旧库上需要; 守卫宏保证
-	// 即使误注入也不会重复定义。
-	shims += circuitikzBuzzerShim(raw)
-	shims += circuitikzConverterShim(raw)
-	shims += tkzApolloniusShimFor(raw)
-	if profile.legacyIEC {
-		shims += circuitikzIecShim(raw)
-	}
-	// siunitx alias shim 与后端无关 (v3 行为), 两个后端都保留。
-	shims += siunitxAliasShim(pkgs)
+	// 兼容 shim 按后端 profile 组装 (见 tikzShims)。
+	shims := tikzShims(profile, raw, pkgs)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
 		[]byte(normalizeTikz(raw, profile)), 0644); err != nil {
@@ -1095,16 +1114,23 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 
 	// 编译 input.tex -> input.pdf; 编译失败不自动改用另一个后端。
 	pdf := filepath.Join(tmpDir, "input.pdf")
-	if eng == engineLatexmk {
-		if err := runCmd(tmpDir, "latexmk", latexmkCompileArgs()...); err != nil ||
-			!fileExists(pdf) {
-			return fmt.Errorf("latexmk failed (workdir kept: %s, log: %s): %w",
-				tmpDir, filepath.Join(tmpDir, "input.log"), latexErr(err, tmpDir))
+	compileErr := func(eng tikzEngine) error {
+		var err error
+		if eng == engineTectonic {
+			err = runCmd(tmpDir, "tectonic", "input.tex")
+		} else {
+			err = runCmd(tmpDir, "latexmk", latexmkCompileArgs()...)
 		}
-	} else {
-		if err := runCmd(tmpDir, "tectonic", "input.tex"); err != nil {
-			return fmt.Errorf("tectonic failed (workdir kept: %s): %w", tmpDir, err)
+		// 退出码 0 也可能没有产物; 两个后端统一显式报错, 避免下游出现
+		// "文件不存在" 这类难以定位的错误。
+		if err == nil && !fileExists(pdf) {
+			err = fmt.Errorf("%s exited successfully but %s was not produced", eng, pdf)
 		}
+		return texLogErr(err, tmpDir)
+	}
+	if err := compileErr(eng); err != nil {
+		return fmt.Errorf("%s failed (workdir kept: %s, log: %s): %w",
+			eng, tmpDir, filepath.Join(tmpDir, "input.log"), err)
 	}
 	base := filepath.Join(tmpDir, "out")
 	var produced string
@@ -1164,9 +1190,13 @@ func runCmd(dir, name string, args ...string) error {
 	return nil
 }
 
-// latexErr 构造 latexmk 编译失败的简明诊断: 附带包装错误、workdir 的 input.log
-// 中提取的 ^! 行 (最多 ~10 行)。找不到 input.log 时退回原错误。
-func latexErr(err error, tmpDir string) error {
+// texLogErr 构造 LaTeX 引擎 (latexmk / tectonic) 编译失败的简明诊断: 附带
+// workdir 的 input.log 中提取的 ^! 行 (最多 ~10 行)。找不到 input.log 时
+// 退回原错误。
+func texLogErr(err error, tmpDir string) error {
+	if err == nil {
+		return nil
+	}
 	log := filepath.Join(tmpDir, "input.log")
 	data, readErr := os.ReadFile(log)
 	if readErr != nil || len(data) == 0 {

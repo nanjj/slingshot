@@ -242,7 +242,7 @@ func renderSVG(tex string, display bool) (string, error) {
 // --- PNG fallback ---
 
 const (
-	// renderDPI is the PDF→PNG resolution for the tectonic fallback.
+	// renderDPI is the PDF→PNG resolution for the formula fallback.
 	renderDPI = 300
 	// formulaBorder is the standalone-class padding around the math content.
 	formulaBorder = 4
@@ -307,10 +307,9 @@ func renderPNG(tex string, display bool, outDir string) (string, error) {
 	}
 
 	// Compile formula.tex → formula.pdf. Prefer latexmk -pdf; fall back to
-	// tectonic when latexmk/pdflatex are missing or the latexmk run fails.
-	// A failed latexmk run must not be silently retried on a per-formula
-	// basis only when the engine itself is unavailable — keep the error
-	// visible when latexmk exists but the TeX is invalid.
+	// tectonic only when latexmk/pdflatex (or just pdflatex) is unavailable.
+	// A latexmk run that starts but fails is reported, not retried with
+	// tectonic: retrying would mask real TeX errors in the formula.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	pdfPath := filepath.Join(tmpDir, "formula.pdf")
@@ -318,7 +317,11 @@ func renderPNG(tex string, display bool, outDir string) (string, error) {
 		if _, pdfErr := exec.LookPath("pdflatex"); pdfErr == nil {
 			cmd := exec.CommandContext(ctx, lmk, "-pdf", "-interaction=nonstopmode", "-halt-on-error", "formula.tex")
 			cmd.Dir = tmpDir
-			if out, err := cmd.CombinedOutput(); err != nil || !fileExists(pdfPath) {
+			out, err := cmd.CombinedOutput()
+			if err == nil && !fileExists(pdfPath) {
+				err = fmt.Errorf("latexmk exited successfully but %s was not produced", pdfPath)
+			}
+			if err != nil {
 				// latexmk exists but failed — do not fall back; report the error.
 				return "", fmt.Errorf("latexmk failed: %w\n%s", err, truncate(out))
 			}
@@ -341,6 +344,10 @@ func renderPNG(tex string, display bool, outDir string) (string, error) {
 		if err := runTectonic(ctx, tectonic, tmpDir); err != nil {
 			return "", err
 		}
+	}
+	// 引擎退出 0 也校验 formula.pdf 存在, 避免静默失败 (之前 %!w(<nil>) 边界)。
+	if !fileExists(pdfPath) {
+		return "", fmt.Errorf("TeX engine exited successfully but %s was not produced", pdfPath)
 	}
 
 	// PDF → PNG (single page → formula-1.png)

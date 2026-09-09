@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -276,12 +278,25 @@ func TestRenderTikzIntegrationLatexmk(t *testing.T) {
 	}
 }
 
-// TestRenderTikzIntegrationTectonic 真跑 tectonic (可用时)。
+// TestRenderTikzIntegrationTectonic 真跑 tectonic (可用时)。legacy 翻译与
+// 2021-bundle shim 全部挂在 tectonic profile 上, 因此覆盖全部样例, 并额外
+// 覆盖含 CJK 的片段 (tectonic bundle 自带 xeCJK)。
 func TestRenderTikzIntegrationTectonic(t *testing.T) {
 	if err := tectonicAvailable(); err != nil {
 		t.Skipf("tectonic unavailable: %v", err)
 	}
-	renderTikzSample(t, "tectonic", "motor", tikzIntegrationSamples["motor"])
+	for name, sample := range tikzIntegrationSamples {
+		t.Run(name, func(t *testing.T) {
+			renderTikzSample(t, "tectonic", name, sample)
+		})
+	}
+	cjk := `\begin{tikzpicture}
+\node at (0,0) {\text{中文}};
+\end{tikzpicture}
+`
+	t.Run("cjk", func(t *testing.T) {
+		assertPDFContainsText(t, renderTikzSample(t, "tectonic", "cjk", cjk), "中文")
+	})
 }
 
 // TestRenderTikzIntegrationCJK 真跑 latexmk + xelatex + xeCJK 三者齐备时渲染 CJK。
@@ -293,5 +308,80 @@ func TestRenderTikzIntegrationCJK(t *testing.T) {
 \node at (0,0) {\text{中文}};
 \end{tikzpicture}
 `
-	renderTikzSample(t, "latexmk", "cjk", sample)
+	assertPDFContainsText(t, renderTikzSample(t, "latexmk", "cjk", sample), "中文")
+}
+
+// assertPDFContainsText 用 pdftotext 提取 PDF 文本并断言包含 want。
+// pdftotext 不可用时只记日志: 该断言用于捕获 "PDF 有效但字形丢失 (tofu)"
+// 这类回归 (CJK 前导被丢弃时就是如此), 缺失工具不应让测试失败。
+func assertPDFContainsText(t *testing.T, pdf []byte, want string) {
+	t.Helper()
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		t.Logf("pdftotext unavailable, skipping text assertion: %v", err)
+		return
+	}
+	path := filepath.Join(t.TempDir(), "rendered.pdf")
+	if err := os.WriteFile(path, pdf, 0644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("pdftotext", path, "-").Output()
+	if err != nil {
+		t.Fatalf("pdftotext failed: %v", err)
+	}
+	if !strings.Contains(string(out), want) {
+		t.Fatalf("rendered PDF text does not contain %q; got %q", want, string(out))
+	}
+}
+
+// TestRenderTikzEngineExit0WithoutPDF 钉住 "引擎退出 0 但没有产物" 的显式报错,
+// 并断言错误里出现的是**实际选中的引擎**而不是 --engine 的原始取值:
+// 用只 exit 0 的假引擎走完整 renderTikz 路径 (真实引擎很难构造该场景)。
+func TestRenderTikzEngineExit0WithoutPDF(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake engine script requires a POSIX shell")
+	}
+	writeInput := func(t *testing.T) (string, string) {
+		t.Helper()
+		in := filepath.Join(t.TempDir(), "in.tikz")
+		out := filepath.Join(t.TempDir(), "out.pdf")
+		if err := os.WriteFile(in, []byte("\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return in, out
+	}
+	fakeEngine := func(t *testing.T, name string) {
+		t.Helper()
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
+
+	t.Run("explicit tectonic", func(t *testing.T) {
+		fakeEngine(t, "tectonic")
+		in, out := writeInput(t)
+		err := renderTikz(in, out, "tectonic")
+		if err == nil {
+			t.Fatal("renderTikz() = nil, want an explicit error when the engine produces no PDF")
+		}
+		if !strings.Contains(err.Error(), "tectonic exited successfully but") {
+			t.Fatalf("error = %v, want it to name the selected engine tectonic", err)
+		}
+	})
+
+	t.Run("auto selects latexmk", func(t *testing.T) {
+		if _, err := exec.LookPath("xelatex"); err != nil {
+			t.Skipf("xelatex unavailable: %v", err)
+		}
+		fakeEngine(t, "latexmk")
+		in, out := writeInput(t)
+		err := renderTikz(in, out, "auto")
+		if err == nil {
+			t.Fatal("renderTikz() = nil, want an explicit error when the engine produces no PDF")
+		}
+		if !strings.Contains(err.Error(), "latexmk exited successfully but") {
+			t.Fatalf("error = %v, want the selected engine (latexmk), not the --engine flag value (auto)", err)
+		}
+	})
 }
