@@ -32,7 +32,7 @@ msgstr ""
 msgid "Convert Markdown to WeChat public account HTML"
 msgstr ""
 
-msgid "Convert a Markdown file to HTML format suitable for WeChat public accounts.\n\nThe conversion process:\n  1. Parse the Markdown file using goldmark (supports GFM tables, strikethrough)\n  2. Inject inline CSS styles on every element (required by WeChat)\n  3. Save the result as <filename>.html\n\nWith --upload:\n  4. Parse local image references from the HTML\n  5. Upload images to WeChat material management (with caching via images.yaml)\n  6. Update image URLs in the HTML\n\nWeChat only supports inline styles and a limited set of HTML elements.\nThis command handles all common Markdown syntax:\n  - Headings (h1-h4), paragraphs, blockquotes\n  - Bold, italic, inline code, strikethrough\n  - Fenced code blocks with syntax highlighting\n  - Links and images\n  - Ordered and unordered lists\n  - Tables (GFM-style)\n  - Thematic breaks (hr)\n  - Raw HTML passthrough (footnotes, etc.)\n\nLaTeX formulas are rendered to inline SVG (MathJax, the format WeChat\nsupports — same as mdnice) by default, falling back to PNG images\n(tectonic) when MathJax is unavailable. Use --math=text to keep formulas\nas literal LaTeX text."
+msgid "Convert a Markdown (.md) or Org (.org) file to HTML format suitable for WeChat public accounts.\n\nThe conversion process:\n  1. If the input is a .org file, convert to Markdown using Emacs batch mode\n  2. Parse the Markdown using goldmark (supports GFM tables, strikethrough)\n  3. Inject inline CSS styles on every element (required by WeChat)\n  4. Save the result as <filename>.html\n\nWith --upload:\n  5. Parse local image references from the HTML\n  6. Upload images to WeChat material management (with caching via images.yaml)\n  7. Update image URLs in the HTML\n  8. If the YAML front matter or sidecar YAML contains 'thumb_media_id: <path>', upload the\n     thumbnail image as permanent material and replace with the real media_id\n\nWeChat only supports inline styles and a limited set of HTML elements.\nThis command handles all common syntax:\n  - Headings (h1-h4), paragraphs, blockquotes\n  - Bold, italic, inline code, strikethrough\n  - Fenced code blocks with syntax highlighting\n  - Links and images\n  - Ordered and unordered lists\n  - Tables (GFM-style)\n  - Thematic breaks (hr)\n  - Raw HTML passthrough (footnotes, etc.)\n\nLaTeX formulas are rendered to inline SVG (MathJax, the format WeChat\nsupports — same as mdnice) by default, falling back to PNG images\n(latexmk/pdflatex, tectonic fallback) when MathJax is unavailable. Use\n--math=text to keep formulas as literal LaTeX text."
 msgstr ""
 
 msgid "expected a file argument"
@@ -325,8 +325,23 @@ msgstr ""
 msgid "either --touser or --towxname is required for preview"
 msgstr ""
 
-msgid "Formula handling: auto (SVG via MathJax, PNG via tectonic fallback), svg, png, text (keep LaTeX as-is)"
+msgid "Formula handling: auto (SVG via MathJax, PNG via latexmk/pdflatex with tectonic fallback), svg, png, text (keep LaTeX as-is)"
 msgstr ""
 
 msgid "Preview sent for %s\n"
 msgstr ""
+msgid "For CJK also: Arch: sudo pacman -S texlive-langcjk; Debian: sudo apt install texlive-lang-chinese"
+msgstr ""
+
+msgid "Install TeX Live: Arch: sudo pacman -S texlive-binextra texlive-bin texlive-core; Debian: sudo apt install latexmk texlive-xetex texlive-latex-base; macOS/Windows: install TeX Live or MiKTeX (MiKTeX auto-installs packages)"
+msgstr ""
+
+msgid "LaTeX engine: auto (latexmk preferred, tectonic fallback), latexmk, tectonic"
+msgstr ""
+
+msgid "invalid engine %q (want auto, latexmk or tectonic)"
+msgstr ""
+
+msgid "Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).\n\nThe input file may contain a full tikzpicture environment or just the\ncommands inside it — a tikzpicture wrapper is added automatically when\nmissing. \\usetikzlibrary lines are hoisted above the environment.\n\nPackages are loaded automatically by content detection (tkz-euclide,\ntikz-cd, pgfplots, circuitikz, forest, ...); explicit \\usepackage lines\nin the input are hoisted into the preamble.\n\nThe output format is determined by the output file extension.\nPipeline: latexmk -xelatex (preferred) -> tectonic (fallback) -> PDF ->\nmutool / ghostscript rasterization. Pick a backend explicitly with\n--engine latexmk or --engine tectonic.\nChinese (CJK) text is supported via xeCJK (latexmk only); the font can be\noverridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).\n\nExamples:\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
+msgstr ""
+

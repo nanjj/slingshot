@@ -241,8 +241,67 @@ func TestNormalizeTikz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeTikz(tt.input); got != tt.want {
+			if got := normalizeTikz(tt.input, tectonicProfile()); got != tt.want {
 				t.Errorf("normalizeTikz() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeTikzLatexmkProfile 是 latexmk profile 的对照用例:
+// legacy 翻译 (tkz-euclide 5.x → 4.051b) 在 TL2026 下必须原样保留,
+// 否则会"反向出错"。与 TestNormalizeTikz 的 tectonic profile 行为一一对照。
+func TestNormalizeTikzLatexmkProfile(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "veclen key preserved for TL2026",
+			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\begin{scope}[veclen]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "through center..angle..point order preserved",
+			input: "\\begin{tikzpicture}\n\\tkzDefPointOnCircle[through= center K1 angle 30 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefPointOnCircle[through= center K1 angle 30 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "def circle R preserved",
+			input: "\\begin{tikzpicture}\n\\tkzDefCircle[R](A,1) \\tkzGetPoint{a}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefCircle[R](A,1) \\tkzGetPoint{a}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "next to preserved",
+			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=A](A,B)(C,D) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzInterLC[next to=A](A,B)(C,D) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "tangent at preserved",
+			input: "\\begin{tikzpicture}\n\\tkzDefLine[tangent at=T](B) \\tkzGetPoint{h}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefLine[tangent at=T](B) \\tkzGetPoint{h}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "apollonius preserved",
+			input: "\\begin{tikzpicture}\n\\tkzDefCircle[apollonius,K=2](A,B) \\tkzGetPoints{K1}{k}\n\\end{tikzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefCircle[apollonius,K=2](A,B) \\tkzGetPoints{K1}{k}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "tkzpicture still normalized (both backends)",
+			input: "\\begin{tkzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tkzpicture}\n",
+			want:  "\\begin{tikzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tikzpicture}\n",
+		},
+		{
+			name:  "new style injected (both backends)",
+			input: "\\begin{tikzpicture}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeTikz(tt.input, latexmkProfile()); got != tt.want {
+				t.Errorf("normalizeTikz(latexmk) = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -839,7 +898,7 @@ func TestDetectTikzPackages(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detectTikzPackages(tt.content)
+			got := detectTikzPackages(tt.content, true)
 			if len(got) != len(tt.want) {
 				t.Fatalf("detectTikzPackages() = %v, want %v", got, tt.want)
 			}

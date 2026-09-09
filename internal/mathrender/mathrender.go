@@ -10,7 +10,8 @@
 //     vector (crisp on retina), baseline-aligned (MathJax emits
 //     vertical-align in ex units), and needs no upload at all.
 //
-//  2. PNG (fallback): render via tectonic + pdftoppm to <dir>/formula-<md5>.png
+//  2. PNG (fallback): render via latexmk -pdf (tectonic fallback) + pdftoppm to
+//     <dir>/formula-<md5>.png
 //     and inject an <img> tag. The image flows through the existing upload
 //     pipeline (ExtractImagePaths → uploadcache md5 → WeChat CDN URL), so
 //     identical formulas across articles reuse the same uploaded URL.
@@ -30,7 +31,9 @@
 // System dependencies (auto-detected, degrade gracefully):
 //
 //	SVG: node + mathjax-full   — npm install --prefix ~/.local mathjax-full
-//	PNG: tectonic + pdftoppm   — apt install tectonic poppler-utils
+//	PNG: latexmk + pdflatex (tectonic fallback) + pdftoppm
+//	     Arch: sudo pacman -S texlive-binextra texlive-bin texlive-core poppler
+//	     Debian: sudo apt install latexmk texlive-latex-base poppler-utils
 package mathrender
 
 import (
@@ -171,15 +174,20 @@ func findMathJaxRootErr() error {
 	return nil
 }
 
-// pngEnginesAvailable reports whether tectonic + pdftoppm are usable.
+// pngEnginesAvailable reports whether a usable TeX engine ((latexmk && pdflatex)
+// or tectonic) plus pdftoppm are usable.
 func pngEnginesAvailable() error {
-	if _, err := exec.LookPath("tectonic"); err != nil {
-		return fmt.Errorf("tectonic not found (install via 'apt install tectonic'): %w", err)
-	}
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
 		return fmt.Errorf("pdftoppm not found (install via 'apt install poppler-utils'): %w", err)
 	}
-	return nil
+	_, lmkErr := exec.LookPath("latexmk")
+	_, pdfErr := exec.LookPath("pdflatex")
+	_, tectErr := exec.LookPath("tectonic")
+	if (lmkErr == nil && pdfErr == nil) || tectErr == nil {
+		return nil
+	}
+	return fmt.Errorf("no TeX engine found (latexmk: %v; pdflatex: %v; tectonic: %v) — Arch: sudo pacman -S texlive-binextra texlive-bin texlive-core; Debian: sudo apt install latexmk texlive-latex-base; macOS/Windows: install TeX Live or MiKTeX (tectonic alternative: apt install tectonic)",
+		lmkErr, pdfErr, tectErr)
 }
 
 // renderSVG renders a formula to a self-contained MathJax SVG and returns
@@ -285,9 +293,10 @@ func renderPNG(tex string, display bool, outDir string) (string, error) {
 
 	// Inline math renders as $...$; display math must also use inline math
 	// syntax with \displaystyle — the standalone class's preview package is
-	// broken for \[...\], $$...$$ and math environments under XeTeX
-	// ("Missing $ inserted"). Multi-line environments are converted to their
-	// aligned/gathered inline equivalents, which are valid in $...$.
+	// broken for \[...\], $$...$$ and math environments under both pdflatex
+	// and xelatex ("Missing $ inserted", engine independent). Multi-line
+	// environments are converted to their aligned/gathered inline equivalents,
+	// which are valid in $...$.
 	mathBody := "$" + tex + "$"
 	if display {
 		mathBody = displayBody(tex)
@@ -297,13 +306,41 @@ func renderPNG(tex string, display bool, outDir string) (string, error) {
 		return "", fmt.Errorf("writing formula.tex: %w", err)
 	}
 
-	// tectonic → PDF. The first run downloads packages; give it room.
+	// Compile formula.tex → formula.pdf. Prefer latexmk -pdf; fall back to
+	// tectonic when latexmk/pdflatex are missing or the latexmk run fails.
+	// A failed latexmk run must not be silently retried on a per-formula
+	// basis only when the engine itself is unavailable — keep the error
+	// visible when latexmk exists but the TeX is invalid.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	tectonic := exec.CommandContext(ctx, "tectonic", "formula.tex")
-	tectonic.Dir = tmpDir
-	if out, err := tectonic.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("tectonic failed: %w\n%s", err, truncate(out))
+	pdfPath := filepath.Join(tmpDir, "formula.pdf")
+	if lmk, lmkErr := exec.LookPath("latexmk"); lmkErr == nil {
+		if _, pdfErr := exec.LookPath("pdflatex"); pdfErr == nil {
+			cmd := exec.CommandContext(ctx, lmk, "-pdf", "-interaction=nonstopmode", "-halt-on-error", "formula.tex")
+			cmd.Dir = tmpDir
+			if out, err := cmd.CombinedOutput(); err != nil || !fileExists(pdfPath) {
+				// latexmk exists but failed — do not fall back; report the error.
+				return "", fmt.Errorf("latexmk failed: %w\n%s", err, truncate(out))
+			}
+			// Success via latexmk.
+		} else {
+			// latexmk exists but pdflatex missing → tectonic.
+			tectonic, texErr := exec.LookPath("tectonic")
+			if texErr != nil {
+				return "", fmt.Errorf("pdflatex not found and tectonic not found: %w", texErr)
+			}
+			if err := runTectonic(ctx, tectonic, tmpDir); err != nil {
+				return "", err
+			}
+		}
+	} else {
+		tectonic, texErr := exec.LookPath("tectonic")
+		if texErr != nil {
+			return "", fmt.Errorf("latexmk not found and tectonic not found: %w", texErr)
+		}
+		if err := runTectonic(ctx, tectonic, tmpDir); err != nil {
+			return "", err
+		}
 	}
 
 	// PDF → PNG (single page → formula-1.png)
@@ -326,9 +363,27 @@ func renderPNG(tex string, display bool, outDir string) (string, error) {
 	return pngTag(pngPath, tex, display), nil
 }
 
-// displayBody wraps display-mode formula content for the tectonic fallback:
-// $\displaystyle ...$ (standalone + XeTeX cannot handle \[...\]/$$/math
-// environments, see renderPNG). Multi-line environments are converted to
+// runTectonic compiles formula.tex in tmpDir via tectonic. The first run may
+// download packages; give it room with the provided timeout.
+func runTectonic(ctx context.Context, tectonic, tmpDir string) error {
+	cmd := exec.CommandContext(ctx, tectonic, "formula.tex")
+	cmd.Dir = tmpDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("tectonic failed: %w\n%s", err, truncate(out))
+	}
+	return nil
+}
+
+// fileExists reports whether the file at p exists.
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// displayBody wraps display-mode formula content for the LaTeX fallback:
+// $\displaystyle ...$ (the standalone class's preview package cannot handle
+// \[...\]/$$/math environments under both pdflatex and xelatex — engine
+// independent, see renderPNG). Multi-line environments are converted to
 // their inline equivalents so they are valid inside $...$.
 func displayBody(tex string) string {
 	body := strings.TrimSpace(tex)

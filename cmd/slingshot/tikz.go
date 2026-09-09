@@ -27,6 +27,7 @@ var tikzUsage = u.Usage{
 // cmdTikz 实现 "slingshot tikz" 子命令: 把 TikZ 片段渲染成图片。
 type cmdTikz struct {
 	global *cmdGlobal
+	engine string
 }
 
 func (c *cmdTikz) command() *cobra.Command {
@@ -46,9 +47,11 @@ tikz-cd, pgfplots, circuitikz, forest, ...); explicit \usepackage lines
 in the input are hoisted into the preamble.
 
 The output format is determined by the output file extension.
-Pipeline: tectonic -> PDF -> mutool / ghostscript rasterization.
-Chinese (CJK) text is supported via xeCJK; the font can be overridden
-with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).
+Pipeline: latexmk -xelatex (preferred) -> tectonic (fallback) -> PDF ->
+mutool / ghostscript rasterization. Pick a backend explicitly with
+--engine latexmk or --engine tectonic.
+Chinese (CJK) text is supported via xeCJK (latexmk only); the font can be
+overridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).
 
 Examples:
   slingshot tikz fig.tikz fig.png
@@ -57,6 +60,8 @@ Examples:
 	)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
+	cmd.Flags().StringVar(&c.engine, "engine", "auto",
+		i18n.G("LaTeX engine: auto (latexmk preferred, tectonic fallback), latexmk, tectonic"))
 	return cmd
 }
 
@@ -70,26 +75,24 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 	}
 	inFile := parsed[0].String
 	outFile := parsed[1].String
-	if err := renderTikz(inFile, outFile); err != nil {
+	if err := renderTikz(inFile, outFile, c.engine); err != nil {
 		return err
 	}
 	fmt.Fprintf(color.Output, "%s %s\n", i18n.G("Wrote"), color.GreenString(outFile))
 	return nil
 }
 
-// tikzWrapper 是 tectonic 编译用的 standalone 模板。
-// 四个 %s 依次为: 额外加载的包、自动探测的 tikz 库、兼容 shim、CJK 字体名
-// (后两者可为空; 字体由 TIKZ_CJK_FONT 控制, 默认 Noto Sans CJK SC)。
+// tikzWrapper 是 LaTeX 编译用的 standalone 模板。
+// 四个 %s 依次为: 额外加载的包、自动探测的 tikz 库、兼容 shim、CJK 前导
+// (fontspec + xeCJK + \setCJKmainfont, 仅内容含 CJK 时由 latexmk 后端注入;
+// 其余情况为空串)。shim 与 CJK 前导均可为空。
 // \usetikzlibrary 放在所有 \usepackage 之后、\begin{document} 之前,
 // 确保 fit / calc 等库在输入内容执行前生效。
 const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{amsmath}
-%s%s%s\usepackage{fontspec}
-\usepackage{xeCJK}
-\setCJKmainfont{%s}
-\begin{document}
+%s%s%s%s\begin{document}
 \input{input.tikz}
 \end{document}
 `
@@ -518,26 +521,29 @@ func tikzLibraryLines(libs []string) string {
 // \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 // 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
 var tikzExtraPackageRes = []struct {
-	re  *regexp.Regexp
-	pkg string
+	re        *regexp.Regexp
+	pkg       string
+	legacyIEC bool // 仅 tectonic 后端才成立 (bundle 缺 IEC 库 → 映射到 circuitikz)
 }{
 	// siunitx: \micro \farad \ohm 等前缀/单位命令只能由 siunitx 提供,
 	// circuitikz 标签 l=10<\micro\farad> 是典型用法。\b 边界排除内核命令:
 	// \sin \sigma \sim 不是 \si, \number \numexpr 不是 \num, \unitlength 不是 \unit。
-	{regexp.MustCompile(`\\(?:micro|nano|pico|milli|kilo|mega|giga|farad|ohm|henry|volt|ampere|metre|second|hertz)\b`), "siunitx"},
-	{regexp.MustCompile(`\\(?:SI|si|num|qty|unit|sisetup)\b`), "siunitx"},
+	{re: regexp.MustCompile(`\\(?:micro|nano|pico|milli|kilo|mega|giga|farad|ohm|henry|volt|ampere|metre|second|hertz)\b`), pkg: "siunitx"},
+	{re: regexp.MustCompile(`\\(?:SI|si|num|qty|unit|sisetup)\b`), pkg: "siunitx"},
 	// \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 	// 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
-	{regexp.MustCompile(`\\up(?:alpha|beta|gamma|delta|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega)\b`), "upgreek"},
+	{re: regexp.MustCompile(`\\up(?:alpha|beta|gamma|delta|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega)\b`), pkg: "upgreek"},
 	// circuit ee IEC 是 TikZ circuits.ee.IEC 库提供的风格; bundle 缺该库,
 	// tikzIecShim 把它映射到 circuitikz 元件, 所以需要加载 circuitikz。
-	{regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`), "circuitikz"},
+	{re: regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`), pkg: "circuitikz", legacyIEC: true},
 	// to[*R=$R_1$] 是 circuitikz [compatibility] 的星号元件写法 (老式语法)。
-	{regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`), "circuitikz"},
+	{re: regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`), pkg: "circuitikz"},
 }
 
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。
-func detectTikzPackages(content string) []string {
+// legacyIEC 为真时 (tectonic bundle 缺 circuits.ee.IEC 库) 把 circuit ee IEC
+// 风格映射到 circuitikz; latexmk (TL2026 真库) 下不映射, 让真库处理。
+func detectTikzPackages(content string, legacyIEC bool) []string {
 	var pkgs []string
 	seen := make(map[string]bool)
 	for _, e := range tikzExtraPackages {
@@ -548,6 +554,9 @@ func detectTikzPackages(content string) []string {
 		pkgs = append(pkgs, e.pkg)
 	}
 	for _, e := range tikzExtraPackageRes {
+		if e.legacyIEC && !legacyIEC {
+			continue // 真库后端 (latexmk) 不把 IEC 风格映射到 circuitikz
+		}
 		if !e.re.MatchString(content) || seen[e.pkg] {
 			continue
 		}
@@ -930,27 +939,40 @@ func fixDefLineTangent(content string) string {
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest) 则原样返回;
 // 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
 // (它在 document body 中有效, 但在 tikzpicture 内行为不受保证)。
-func normalizeTikz(content string) string {
+//
+// p 控制 legacy 翻译: 只对 tectonic profile 启用 tkz-euclide 5.x → 4.051b
+// 的语法翻译, latexmk (TL2026 新版语法) 下必须原样保留, 否则会"反向出错"。
+func normalizeTikz(content string, p tikzProfile) string {
 	// % 续行陷阱: 手册示例靠续行缩进提供空格, 抄写丢缩进时 P' 与下一项
 	// 粘合成 P'N; 在 \tkz 参数区内删除行尾 % 让换行还原为空格 (见上)。
 	content = fixTkzPercentJoins(content)
-	// next to (tkz-euclide 2.x 旧选项名) 翻译为 4.051b 的 common。
-	content = fixNextToKeys(content)
-	// through= center … angle … point … (2.x/5.x 参数顺序) 重排为
-	// 4.051b 的 angle → center → point 顺序。
-	content = fixDefPointOnCircleThrough(content)
-	// \tkzDefCircle[R](A,1) (5.x 语法, /tkzcircle 家族 4.051b 没有 R key)
-	// 翻译为 4.051b 内置宏的等价序列, 保持 5.x 的圆上点语义 (见上)。
-	content = fixDefCircleR(content)
-	// \tkzDefLine[tangent at=X](O) (5.x 语法): 4.051b 的 \tkz@DefLine key 分派
-	// 在 bundle 的 pgfkeys 下失效 (\pgfqkeys 把 .cd 当路径前缀), 选项被忽略后
-	// 误走 MediatorLine 分支吞掉后续代码, 翻译为 4.051b 直调宏 \tkzTgtAt。
-	content = fixDefLineTangent(content)
+	if p.legacyNextTo {
+		// next to (tkz-euclide 2.x 旧选项名) 翻译为 4.051b 的 common。
+		content = fixNextToKeys(content)
+	}
+	if p.legacyThrough {
+		// through= center … angle … point … (2.x/5.x 参数顺序) 重排为
+		// 4.051b 的 angle → center → point 顺序。
+		content = fixDefPointOnCircleThrough(content)
+	}
+	if p.legacyDefCircleR {
+		// \tkzDefCircle[R](A,1) (5.x 语法, /tkzcircle 家族 4.051b 没有 R key)
+		// 翻译为 4.051b 内置宏的等价序列, 保持 5.x 的圆上点语义 (见上)。
+		content = fixDefCircleR(content)
+	}
+	if p.legacyTangentAt {
+		// \tkzDefLine[tangent at=X](O) (5.x 语法): 4.051b 的 \tkz@DefLine key 分派
+		// 在 bundle 的 pgfkeys 下失效 (\pgfqkeys 把 .cd 当路径前缀), 选项被忽略后
+		// 误走 MediatorLine 分支吞掉后续代码, 翻译为 4.051b 直调宏 \tkzTgtAt。
+		content = fixDefLineTangent(content)
+	}
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
-	// veclen (tkz-euclide 5.x 的 xfp key 新名) 归一化为 4.051b 认识的 xfp。
-	content = veclenKeyRe.ReplaceAllString(content, `${1}xfp${2}`)
+	if p.legacyVeclen {
+		// veclen (tkz-euclide 5.x 的 xfp key 新名) 归一化为 4.051b 认识的 xfp。
+		content = veclenKeyRe.ReplaceAllString(content, `${1}xfp${2}`)
+	}
 	// 剥掉误包的空外壳, 避免 pgf 嵌套 picture 崩溃。
 	content = stripOuterTikzShells(content)
 	// new (tkz-euclide 文档自定义的高亮样式) 未定义时注入文档同款定义。
@@ -987,8 +1009,9 @@ func tikzOutputFormat(outFile string) (string, error) {
 }
 
 // renderTikz 渲染 inFile 为 outFile 指定格式的图片。
-// 在临时目录中工作 (tectonic 会产出 aux 文件); 失败时保留现场便于调试。
-func renderTikz(inFile, outFile string) (err error) {
+// engine 选择编译后端 (auto / latexmk / tectonic); 在临时目录中工作
+// (LaTeX 引擎会产出 aux 文件); 失败时保留现场便于调试。
+func renderTikz(inFile, outFile, engine string) (err error) {
 	format, err := tikzOutputFormat(outFile)
 	if err != nil {
 		return err
@@ -1001,11 +1024,25 @@ func renderTikz(inFile, outFile string) (err error) {
 	// 提升显式 \usepackage + 自动探测内容所需的包和 tikz 库
 	// (tkz-euclide / circuitikz / fit / calc 等)。
 	raw := string(content)
+	// 用原始内容判断 CJK、选择引擎 (引擎探测先于任何归一化)。
+	eng, err := selectTikzEngine(engine, raw)
+	if err != nil {
+		return err
+	}
+	var profile tikzProfile
+	if eng == engineLatexmk {
+		profile = latexmkProfile()
+	} else {
+		profile = tectonicProfile()
+	}
 	compat := circuitikzCompatDetected(raw)
-	// bundle 无 circuits.ee.IEC 库 (tikzIecShim 提供等价 IEC 组件), 丢弃显式加载行。
-	raw = usetikzlibraryIECRe.ReplaceAllString(raw, "")
+	// 仅 tectonic bundle 无 circuits.ee.IEC 库 (tikzIecShim 提供等价 IEC 组件),
+	// 丢弃显式加载行; TL2026 有真库, 保留原样。
+	if profile.legacyIEC {
+		raw = usetikzlibraryIECRe.ReplaceAllString(raw, "")
+	}
 	explicitPkgs, raw := extractUserPackages(raw)
-	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw))
+	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw, profile.legacyIEC))
 	libs := detectTikzLibraries(raw)
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
@@ -1023,27 +1060,52 @@ func renderTikz(inFile, outFile string) (err error) {
 		}
 	}()
 
-	font := os.Getenv("TIKZ_CJK_FONT")
-	if font == "" {
-		font = "Noto Sans CJK SC"
+	// CJK 前导: 内容含 CJK 且走 latexmk(需要 xeCJK) 时注入 fontspec+xeCJK。
+	var cjkPreamble string
+	if eng == engineLatexmk && contentHasCJK(raw) {
+		font := os.Getenv("TIKZ_CJK_FONT")
+		if font == "" {
+			font = "Noto Sans CJK SC"
+		}
+		cjkPreamble = "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n"
 	}
+	var shims string
+	// motor shim 两个后端都保留: circuitikz 上游(含 1.8.5)从来没有 motor 元件。
+	shims += circuitikzMotorShim(raw)
+	// buzzer / converter / apollonius shim 只在 tectonic 旧库上需要; 守卫宏保证
+	// 即使误注入也不会重复定义。
+	shims += circuitikzBuzzerShim(raw)
+	shims += circuitikzConverterShim(raw)
+	shims += tkzApolloniusShimFor(raw)
+	if profile.legacyIEC {
+		shims += circuitikzIecShim(raw)
+	}
+	// siunitx alias shim 与后端无关 (v3 行为), 两个后端都保留。
+	shims += siunitxAliasShim(pkgs)
+
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
-		[]byte(normalizeTikz(raw)), 0644); err != nil {
+		[]byte(normalizeTikz(raw, profile)), 0644); err != nil {
 		return fmt.Errorf("writing input.tikz: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
-			tikzLibraryLines(libs),
-			circuitikzBuzzerShim(raw)+circuitikzMotorShim(raw)+circuitikzIecShim(raw)+circuitikzConverterShim(raw)+siunitxAliasShim(pkgs)+tkzApolloniusShimFor(raw), font), 0644); err != nil {
+			tikzLibraryLines(libs), shims, cjkPreamble), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
 
-	// tectonic input.tex -> input.pdf
-	if err := runCmd(tmpDir, "tectonic", "input.tex"); err != nil {
-		return fmt.Errorf("tectonic failed (workdir kept: %s): %w", tmpDir, err)
-	}
-
+	// 编译 input.tex -> input.pdf; 编译失败不自动改用另一个后端。
 	pdf := filepath.Join(tmpDir, "input.pdf")
+	if eng == engineLatexmk {
+		if err := runCmd(tmpDir, "latexmk", latexmkCompileArgs()...); err != nil ||
+			!fileExists(pdf) {
+			return fmt.Errorf("latexmk failed (workdir kept: %s, log: %s): %w",
+				tmpDir, filepath.Join(tmpDir, "input.log"), latexErr(err, tmpDir))
+		}
+	} else {
+		if err := runCmd(tmpDir, "tectonic", "input.tex"); err != nil {
+			return fmt.Errorf("tectonic failed (workdir kept: %s): %w", tmpDir, err)
+		}
+	}
 	base := filepath.Join(tmpDir, "out")
 	var produced string
 	switch format {
@@ -1100,6 +1162,29 @@ func runCmd(dir, name string, args ...string) error {
 		return fmt.Errorf("%s: %v\n%s", name, err, msg)
 	}
 	return nil
+}
+
+// latexErr 构造 latexmk 编译失败的简明诊断: 附带包装错误、workdir 的 input.log
+// 中提取的 ^! 行 (最多 ~10 行)。找不到 input.log 时退回原错误。
+func latexErr(err error, tmpDir string) error {
+	log := filepath.Join(tmpDir, "input.log")
+	data, readErr := os.ReadFile(log)
+	if readErr != nil || len(data) == 0 {
+		return err
+	}
+	var lines []string
+	for _, l := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(l, "!") {
+			lines = append(lines, l)
+			if len(lines) >= 10 {
+				break
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return err
+	}
+	return fmt.Errorf("%w\nlog errors:\n%s", err, strings.Join(lines, "\n"))
 }
 
 // resolveMutoolOutput 处理 mutool 的页码后缀命名:

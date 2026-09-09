@@ -15,6 +15,8 @@ cmd/slingshot/                      # 主入口 + 子命令
 ├── meterial.go                     # meterial 子命令
 ├── skill.go                        # skill 子命令 (含 embedded skills)
 ├── amap.go                         # amap 子命令 (高德地图 MCP)
+├── tikz.go                         # tikz 子命令 (TikZ → png/jpg/svg/pdf)
+├── tikz_engine.go                  # tikz 引擎选择 (latexmk/tectonic) + 兼容 profile
 └── embedded_skills/weixin/SKILL.md  # 内置 skill (嵌入 binary)
 internal/
 ├── cmd/shared.go                   # 共享 CLI 工具
@@ -27,6 +29,7 @@ internal/
 ├── mdtowx/mdtowx.go               # Markdown → 微信 HTML (goldmark + inline styles)
 ├── uploadcache/uploadcache.go      # 图片上传缓存 (images.yaml, 按 md5 去重)
 ├── uploadimage/                    # 微信图片上传 (文章内/封面)
+├── mathrender/mathrender.go        # 公式渲染 (MathJax SVG + latexmk/tectonic PNG 兜底)
 └── usage/                          # 声明式 Atom 参数解析器
 ```
 
@@ -38,6 +41,7 @@ slingshot
 ├── config list|show|get|set|unset
 ├── meterial add|list|remove|show
 ├── skill list|install
+├── tikz <in-file> <out-file> [--engine auto|latexmk|tectonic]
 └── amap search|around|detail|geo|regeo|driving|walking|bicycling|transit|distance|ip
 ```
 
@@ -61,6 +65,24 @@ slingshot
 4. 提取 `<img src="...">` → 上传到微信获取 `mmbiz.qpic.cn` URL（含 `images.yaml` 缓存）
 5. 替换 HTML 中 `src`
 6. front matter 中封面路径自动上传为永久素材
+
+## TikZ 渲染管线
+
+`slingshot tikz <in-file> <out-file> [--engine auto|latexmk|tectonic]` 把 TikZ 片段渲染成
+png/jpg/svg/pdf。输出格式由输出文件扩展名决定（PDF 直接产出；png/svg 走 mutool，
+jpg 走 ghostscript 栅格化）。
+
+编译后端：latexmk -xelatex（TL2026 新版语法）为主 → tectonic（内置旧版 tkz-euclide 4.051b /
+circuitikz 1.4.x bundle）后备 → 两者都不可用时明确报错。`--engine` 显式指定时探测失败直接报错，
+编译失败不自动换后端；只有 `auto` 才在 latexmk 缺失时回退 tectonic。
+
+兼容 shim 按后端 profile 门控（`tikz_engine.go` 的 `tikzProfile`）：
+tectonic 上做 tkz-euclide 5.x → 4.051b 语法翻译、2021-bundle 兼容 shim（buzzer/converter/
+apollonius/IEC）；latexmk profile 全 false，不启用这些翻译与 shim（否则在新语法上「反向出错」）。
+motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元件（圆圈 + M），只能定制补齐。
+
+CJK：仅内容含 CJK 且走 latexmk 时才注入 fontspec + xeCJK 前导并检查 xeCJK.sty；
+tectonic 后端不要求 xeCJK。字体可用 `TIKZ_CJK_FONT` 环境变量覆盖（默认 Noto Sans CJK SC）。
 
 ## 构建与测试
 

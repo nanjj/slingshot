@@ -66,15 +66,15 @@ This command handles all common syntax:
 
 LaTeX formulas are rendered to inline SVG (MathJax, the format WeChat
 supports — same as mdnice) by default, falling back to PNG images
-(tectonic) when MathJax is unavailable. Use --math=text to keep formulas
-as literal LaTeX text.`),
+(latexmk/pdflatex, tectonic fallback) when MathJax is unavailable. Use
+--math=text to keep formulas as literal LaTeX text.`),
 	)
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	cmd.Flags().BoolVarP(&c.upload, "upload", "u", false,
 		i18n.G("Upload images to WeChat and update URLs in the HTML"))
 	cmd.Flags().StringVar(&c.mathMode, "math", "auto",
-		i18n.G("Formula handling: auto (SVG via MathJax, PNG via tectonic fallback), svg, png, text (keep LaTeX as-is)"))
+		i18n.G("Formula handling: auto (SVG via MathJax, PNG via latexmk/pdflatex with tectonic fallback), svg, png, text (keep LaTeX as-is)"))
 
 	return cmd
 }

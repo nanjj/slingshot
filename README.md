@@ -37,8 +37,36 @@ slingshot
 ├── draft    list|add|update|remove|show|convert <file>
 ├── config   list|show|get|set|unset
 ├── meterial add|list|remove|show
-└── skill    list|install
+├── skill    list|install
+└── tikz     <in-file> <out-file> [--engine auto|latexmk|tectonic]
 ```
+
+### tikz（TikZ/LaTeX → png/jpg/svg/pdf）
+
+把 TikZ 片段渲染成图片或 PDF，输出格式由输出文件扩展名决定。输入可以是一个完整的
+`tikzpicture` / `circuitikz` / `tikzcd` / `forest` 环境，也可以只是环境内部的命令
+（自动补 `tikzpicture` 外壳）；`\usetikzlibrary` 与显式 `\usepackage` 会被提升到导言区。
+
+```bash
+slingshot tikz fig.tikz fig.png     # latexmk → mutool 栅格化 150dpi
+slingshot tikz fig.tikz fig.svg
+slingshot tikz fig.tikz fig.pdf
+slingshot tikz fig.tikz fig.png --engine tectonic   # 显式指定后端
+```
+
+`--engine` 默认 `auto`：优先 latexmk（`-xelatex`，TeX Live 2026 新版语法），缺失时回退 tectonic
+（内置旧版 tkz-euclide / circuitikz bundle）；显式指定 latexmk/tectonic 时探测失败直接报错，
+不静默回退。含中文（CJK）的片段通过 xeCJK 排版，字体可用 `TIKZ_CJK_FONT` 覆盖
+（默认 Noto Sans CJK SC）。
+
+依赖（缺省时命令会给出安装提示）：
+
+- **Arch**: `sudo pacman -S texlive-binextra texlive-bin texlive-core`
+  （CJK 再加 `texlive-langcjk`；也可用 `texlive-langchinese`）
+- **Debian/Ubuntu**: `sudo apt install latexmk texlive-xetex texlive-latex-base`
+  （CJK 再加 `texlive-lang-chinese`）
+- **macOS/Windows**: 安装 TeX Live 或 MiKTeX（MiKTeX 会自动按需装包）；
+  tectonic 也可从 <https://tectonic-typesetting.github.io> 安装
 
 ### amap（高德地图）
 
