@@ -343,6 +343,17 @@ to[diode={name=D}] (3,2);
   \rhino
 \end{tikzpicture}
 `,
+	// tikzlings_pics: pic 语法 (pic{bear} / pic[coati/body=..]{coati} /
+	// pic[thing/hat=red]{penguin}) 的回归样例 (此前 pgfkeys 报未知键
+	// "I do not know the key '/tikz/pics/bear'"): xe (latexmk) 上由
+	// \usetikzlibrary{tikzlings} 提供 pic 定义; tectonic bundle (tikzlings v0.8)
+	// 没有该库文件, 走动物子宏包 + tikzlingsPicShim。
+	"tikzlings_pics": `\begin{tikzpicture}
+\path (1,0) pic{bear}
+      (2,1) pic[coati/body=blue, scale=0.5]{coati}
+      (3,2) pic[thing/hat=red]{penguin};
+\end{tikzpicture}
+`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。

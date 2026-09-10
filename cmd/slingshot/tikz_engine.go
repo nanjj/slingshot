@@ -37,6 +37,7 @@ type tikzProfile struct {
 	legacyIEC        bool // tectonic: 丢弃 \usetikzlibrary{circuits.ee.IEC} + 注入 IEC shim; latexmk: 注入真库加载行, 见 iecNeedsLibrary
 	legacyBuzzer     bool // buzzer shim
 	legacyConverter  bool // tacdc/tdcac mnemonic anchor shim
+	legacyTikzlings  bool // tectonic: bundle 无 tikzlings TikZ 库 (v0.8) — pic 语法改用子宏包 + tikzlingsPicShim; latexmk: 注入 \usetikzlibrary{tikzlings}
 }
 
 // latexmkProfile 是 TL2026 主后端: 全 false, 不做 legacy 翻译。
@@ -54,6 +55,7 @@ func tectonicProfile() tikzProfile {
 		legacyIEC:        true,
 		legacyBuzzer:     true,
 		legacyConverter:  true,
+		legacyTikzlings:  true,
 	}
 }
 

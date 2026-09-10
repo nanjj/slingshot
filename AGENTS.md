@@ -92,10 +92,19 @@ tectonic 上做 tkz-euclide 5.x → 4.051b 语法翻译、2021-bundle 兼容 shi
 apollonius/IEC）；xe/pdf/lua profile 全 false，不启用这些翻译与 shim（否则在新语法上「反向出错」）。
 IEC 风格在 xe 上注入 \usetikzlibrary{circuits.ee.IEC}（真库），tectonic 上用 circuitikz shim。
 motor shim 两个后端都保留——上游 circuitikz 从来没有 motor 元件（圆圈 + M），只能定制补齐。
+tikzlings 的 pic 语法在 xe 上注入 `\usetikzlibrary{tikzlings}`（真库，v2.x 才有）；tectonic
+bundle（v0.8）没有该库文件，改用动物子宏包 + `tikzlingsPicShim`（复刻库的 `<name>/.pic`
+与 `thing/.search also`；缺 `thing/.search also` 时 `pic[thing/hat=..]` 报 "I do not know
+the key '/tikz/thing/hat'"）。
 
 内容探测（`tikzExtraPackages` / `tikzlingsCommands`）：命中特征即加载对应宏包。tikzlings
 的动物命令映射到各自子宏包（`tikzlings-marmots` 等，表取自 tikzlings-list.sty），`\tikzling`
 走基础宏包、`\thing` 走 tikzlings-addons；命令匹配带词边界，`\bearwear` 不会命中 `\bear`。
+tikzlings 的 pic 语法（`pic{bear}` / `pic[coati/body=blue, scale=0.5]{coati}` /
+`pic[thing/hat=red]{penguin}`）由 `tikzPicRe` / `detectTikzlingsPics` 单独探测：`/tikz/pics/<name>`
+键只由 TikZ 库文件（`tikzlibrarytikzlings.code.tex`）定义，动物子宏包不带 pic 定义——漏检时
+pgfkeys 报 "I do not know the key '/tikz/pics/bear'"；legacy 后端要加载的动物子宏包由
+`tikzlingsPicPackages` 提供。
 手册示例常用的 `tcblisting` 盒子由 `tcblistingSetup` 注入 `\tcbuselibrary{listings}` +
 `\tcbset{tikz lower}`：tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
 内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；

@@ -1099,6 +1099,88 @@ func TestDetectTikzLibraries(t *testing.T) {
 	}
 }
 
+// TestDetectTikzlingsPics 验证 pic 语法 (pic{bear} / pic[opts]{coati}) 的名字探测:
+// 只认表内名字 (含 tikzling, 不含没有 pic 定义的 thing), 词边界排除
+// picnic / picture / topic, 大小写敏感, 按表顺序去重。
+func TestDetectTikzlingsPics(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{name: "bare pic", content: `\path (1,0) pic{bear};`, want: []string{"bear"}},
+		{name: "space before name", content: `\path pic {penguin};`, want: []string{"penguin"}},
+		{name: "options", content: `pic[coati/body=blue, scale=0.5]{coati}`, want: []string{"coati"}},
+		{name: "options multiline", content: "pic[\n  thing/hat=red\n]{penguin}", want: []string{"penguin"}},
+		{name: "backslash pic command", content: `\pic{bear};`, want: []string{"bear"}},
+		{name: "brace spacing", content: `pic{ bear }`, want: []string{"bear"}},
+		{name: "random tikzling", content: `pic{tikzling}`, want: []string{"tikzling"}},
+		{name: "table order and dedup", content: `pic{penguin} pic{bear} pic{bear}`, want: []string{"bear", "penguin"}},
+		{name: "thing has no pic", content: `pic{thing}`, want: nil},
+		{name: "unknown name", content: `pic{seagull}`, want: nil},
+		{name: "picnic is not pic", content: `picnic{penguin}`, want: nil},
+		{name: "picture is not pic", content: `picture{penguin}`, want: nil},
+		{name: "topic is not pic", content: `topic {penguin}`, want: nil},
+		{name: "case sensitive", content: `pic{Bear}`, want: nil},
+		{name: "empty name", content: `pic{}`, want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectTikzlingsPics(tt.content); !slices.Equal(got, tt.want) {
+				t.Errorf("detectTikzlingsPics(%q) = %v, want %v", tt.content, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestTikzlingsPicPackages 验证 legacy 后端 pic 语法要加载的动物子宏包 (表顺序)。
+func TestTikzlingsPicPackages(t *testing.T) {
+	got := tikzlingsPicPackages(`pic{penguin} pic{bear} pic{seagull}`)
+	want := []string{"tikzlings-bears", "tikzlings-penguins"}
+	if !slices.Equal(got, want) {
+		t.Errorf("tikzlingsPicPackages() = %v, want %v", got, want)
+	}
+	if got := tikzlingsPicPackages(`\draw (0,0) -- (1,1);`); got != nil {
+		t.Errorf("tikzlingsPicPackages(plain) = %v, want nil", got)
+	}
+}
+
+// TestTikzLibrariesTikzlingsPics 验证 pic 语法只在非 legacy 后端注入 tikzlings
+// 库 (legacy bundle 没有该库文件, 走动物子宏包 + tikzlingsPicShim)。
+func TestTikzLibrariesTikzlingsPics(t *testing.T) {
+	pic := "\\begin{tikzpicture}\n\\path (1,0) pic{bear};\n\\end{tikzpicture}"
+	if got := tikzLibraries(latexmkProfile(), pic); !slices.Contains(got, "tikzlings") {
+		t.Errorf("tikzLibraries(latexmk, pic{bear}) = %v, want tikzlings", got)
+	}
+	if got := tikzLibraries(tectonicProfile(), pic); slices.Contains(got, "tikzlings") {
+		t.Errorf("tikzLibraries(tectonic, pic{bear}) = %v, must not contain tikzlings (bundle lacks the library)", got)
+	}
+	if got := tikzLibraries(latexmkProfile(), `\path pic{seagull};`); slices.Contains(got, "tikzlings") {
+		t.Errorf("tikzLibraries(latexmk, pic{seagull}) = %v, must not contain tikzlings", got)
+	}
+}
+
+// TestTikzShimsTikzlingsPic 验证 legacy 的 pic shim: 复刻库文件的 <name>/.pic
+// 与 thing/.search also (缺后者时 pic[thing/hat=red] 报未知键); latexmk 不注入。
+func TestTikzShimsTikzlingsPic(t *testing.T) {
+	picRaw := `\path (1,0) pic{bear};`
+	got := tikzShims(tectonicProfile(), picRaw, nil)
+	for _, want := range []string{
+		`\tikzset{thing/.search also={,/tikz,/pgf}}`,
+		`\tikzset{bear/.pic={\bear},bear/.search also={,/tikz,/pgf,/thing}}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tectonic shims missing tikzlings pic shim %q in:\n%s", want, got)
+		}
+	}
+	if got := tikzShims(tectonicProfile(), `\draw (0,0) -- (1,1);`, nil); strings.Contains(got, "/.pic=") {
+		t.Errorf("tectonic shims must not inject pic shim without pics: %q", got)
+	}
+	if got := tikzShims(latexmkProfile(), picRaw, nil); strings.Contains(got, "/.pic=") {
+		t.Errorf("latexmk shims must not inject tikzlings pic shim (uses the real library): %q", got)
+	}
+}
+
 func TestIecNeedsLibrary(t *testing.T) {
 	// want=true 表示要注入 \usetikzlibrary{circuits.ee.IEC} 加载行, 与内容是否
 	// 已自行加载无关: latexmk 上一律注入 (pgf 重复加载幂等), 漏注入才会复现回归。

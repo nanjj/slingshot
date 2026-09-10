@@ -403,11 +403,18 @@ func iecNeedsLibrary(p tikzProfile, content string) bool {
 	return !p.legacyIEC && circuitEeIECRe.MatchString(content)
 }
 
-// tikzLibraries 返回需要注入前导的 tikz 库: 内容特征探测 + IEC 风格的原生真库。
+// tikzLibraries 返回需要注入前导的 tikz 库: 内容特征探测 + IEC 风格的原生真库
+// + pic 语法需要的 tikzlings 库。
 func tikzLibraries(p tikzProfile, content string) []string {
 	libs := detectTikzLibraries(content)
 	if iecNeedsLibrary(p, content) && !slices.Contains(libs, "circuits.ee.IEC") {
 		libs = append(libs, "circuits.ee.IEC")
+	}
+	// pic{bear} 等 pic 语法的 /tikz/pics/<name> 键只由 tikzlings 的 TikZ 库提供。
+	// legacy (tectonic bundle v0.8) 没有该库文件, 不注入 — 改走动物子宏包 +
+	// tikzlingsPicShim (见 renderTikz / tikzShims), 否则编译报库文件不存在。
+	if !p.legacyTikzlings && len(detectTikzlingsPics(content)) > 0 && !slices.Contains(libs, "tikzlings") {
+		libs = append(libs, "tikzlings")
 	}
 	return libs
 }
@@ -577,6 +584,67 @@ func containsCommand(content, cmd string) bool {
 func isCommandChar(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' ||
 		c >= '0' && c <= '9' || c == '@'
+}
+
+// tikzlingsPics 把可由 pic 语法引用的名字映射到提供 \<name> 宏的子宏包。
+// tikzlings 的 TikZ 库 (tikzlibrarytikzlings.code.tex) 给动物列表里每个名字定义
+// <name>/.pic = {\<name>} 与 <name>/.search also, 另单独定义 tikzling/.pic;
+// \thing 只有命令形式 (它仅以 pic 选项键 thing/hat 等出现), 没有 pic 定义。
+// 名字与 tikzlingsCommands 同源 (tikzlings-list.sty), 保证两张探测表一致。
+var tikzlingsPics = func() map[string]string {
+	m := make(map[string]string, len(tikzlingsCommands))
+	for _, e := range tikzlingsCommands {
+		if name := strings.TrimPrefix(e.cmd, `\`); name != "thing" {
+			m[name] = e.pkg
+		}
+	}
+	return m
+}()
+
+// tikzPicRe 匹配 pic 语法的名字参数: pic{bear} / pic[coati/body=blue, scale=0.5]{coati}。
+// 选项列表允许跨行 ([^\]] 含换行), pic 与 ] 后的空白可有可无; \b 排除
+// picnic / picture / topic 等词 ("picture" 的 pic 后紧跟字母 t, 无词边界),
+// pic 前的反斜杠可有可无 (\pic 命令形式)。不做注释剥离: 注释/散文里的
+// pic{bear} 也会命中——多加载 tikzlings 无副作用 (库只定义 pic 与宏),
+// 与 3d 库同一取舍 (宁可多加载也不漏加载)。
+// 已知限制: 选项里含 ] (即使包在花括号内) 时该 pic 不匹配, 保守方向 (不误加载)。
+var tikzPicRe = regexp.MustCompile(`\bpic\b\s*(?:\[[^\]]*\]\s*)?\{\s*([A-Za-z]+)\s*\}`)
+
+// detectTikzlingsPics 返回内容中以 pic 语法引用的 tikzlings 名字 (按表顺序, 去重)。
+// pic{bear} 的 /tikz/pics/bear 键只由 TikZ 库定义: 动物子宏包不带 pic 定义,
+// 不加载时 pgfkeys 报 "I do not know the key '/tikz/pics/bear'"。
+func detectTikzlingsPics(content string) []string {
+	used := make(map[string]bool)
+	for _, m := range tikzPicRe.FindAllStringSubmatch(content, -1) {
+		if _, ok := tikzlingsPics[m[1]]; ok {
+			used[m[1]] = true
+		}
+	}
+	if len(used) == 0 {
+		return nil
+	}
+	var names []string
+	for _, e := range tikzlingsCommands {
+		if name := strings.TrimPrefix(e.cmd, `\`); used[name] {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// tikzlingsPicPackages 返回 legacy 后端上 pic 语法需要加载的动物子宏包 (表顺序, 去重)。
+// legacy bundle (tikzlings v0.8) 没有 TikZ 库文件, 由 tikzlingsPicShim 替它定义
+// <name>/.pic = {\<name>}; \<name> 宏由对应子宏包提供, 必须先加载。
+func tikzlingsPicPackages(content string) []string {
+	var pkgs []string
+	seen := make(map[string]bool)
+	for _, name := range detectTikzlingsPics(content) {
+		if pkg := tikzlingsPics[name]; !seen[pkg] {
+			seen[pkg] = true
+			pkgs = append(pkgs, pkg)
+		}
+	}
+	return pkgs
 }
 
 // tikzExtraLibraries 是 "内容特征 → 需要额外加载的 tikz 库" 探测表。
@@ -1067,6 +1135,8 @@ func fixDefLineTangent(content string) string {
 // circuitikz 1.4.x) 的兼容处理, 只在 tectonic profile 上注入; 在 latexmk
 // (TL2026 新版语法) 下注入会"反向出错"或覆盖新版原生实现。IEC 在 latexmk
 // 上不是「不需要」, 而是改为注入真库加载行, 见 iecNeedsLibrary。
+// tikzlings 的 pic shim 同样只在 tectonic 上注入 (bundle 无 TikZ 库文件,
+// 见 tikzlingsPicShim); latexmk 上提供 pic 定义的是 tikzlings 真库。
 // siunitx alias shim 与后端无关 (siunitx v3 行为), 两个后端都保留。
 func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 	var shims string
@@ -1083,8 +1153,39 @@ func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 	if p.legacyIEC {
 		shims += circuitikzIecShim(raw)
 	}
+	if p.legacyTikzlings {
+		shims += tikzlingsPicShim(raw)
+	}
 	shims += siunitxAliasShim(pkgs)
 	return shims
+}
+
+// tikzlingsPicShim 为 legacy 后端补齐 tikzlings 的 TikZ 库所定义的 pic 定义。
+// 该库 (tikzlibrarytikzlings.code.tex) 是 v2.x 才加入的; tectonic bundle 内置
+// v0.8, 既没有库文件也没有任何 pic 定义, 由本 shim 复刻 v2.5 库文件的语义:
+//
+//   - thing/.search also = {,/tikz,/pgf}: pic 选项 thing/hat=red 的键是
+//     /tikz/thing/hat; 把 /tikz/thing/* 的未命中查询导到 addons 定义的
+//     /thing/hat 家族 (并回退 /tikz、/pgf) 的搜索路径由库文件设置。
+//     缺这一行时 pgfkeys 报 "I do not know the key '/tikz/thing/hat'"。
+//   - <name>/.pic = {\<name>} 与 <name>/.search also = {,/tikz,/pgf,/thing}:
+//     pic 定义 + 把 pic 选项里的裸键 (如 hat=red) 兜到 /thing/hat。
+//
+// 上游用 \exp_not:c 在 .expanded 下烘焙 \name, 此处直接写 \name (使用时求值),
+// 等价且避免 \csname 在 edef 里继续展开 \<name> 宏本体。
+// 内容无 pic 引用时返回空串; 名字按表顺序去重 (每个名字一行)。
+func tikzlingsPicShim(content string) string {
+	names := detectTikzlingsPics(content)
+	if len(names) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\\tikzset{thing/.search also={,/tikz,/pgf}}\n")
+	for _, name := range names {
+		b.WriteString("\\tikzset{" + name + "/.pic={\\" + name + "}," +
+			name + "/.search also={,/tikz,/pgf,/thing}}\n")
+	}
+	return b.String()
 }
 
 // tcblistingSetup 为 tcblisting 文档示例注入 tcolorbox 配置, 未命中返回空串。
@@ -1254,6 +1355,11 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	}
 	explicitPkgs, raw := extractUserPackages(raw)
 	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw, profile.legacyIEC))
+	if profile.legacyTikzlings {
+		// legacy bundle (tikzlings v0.8) 没有 TikZ 库文件, pic 语法由
+		// tikzlingsPicShim 定义 <name>/.pic = {\<name>}; \<name> 宏随对应子宏包加载。
+		pkgs = mergeTikzPackages(pkgs, tikzlingsPicPackages(raw))
+	}
 	libs := tikzLibraries(profile, raw)
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
