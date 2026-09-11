@@ -354,6 +354,15 @@ to[diode={name=D}] (3,2);
       (3,2) pic[thing/hat=red]{penguin};
 \end{tikzpicture}
 `,
+	// tikzlings_bearwear: bearwear 宏包 (独立 CTAN 包, 给 tikzlings-bears 的熊提供服装)
+	// 的回归样例: 此前 \bearwear 未被探测到, 编译报 "Undefined control sequence"。
+	// TL2026 与 2021 bundle (bearwear v0.2) 均自带该包, 两后端走同一注入路径。
+	"tikzlings_bearwear": `\begin{tikzpicture}
+\bear
+\bearwear[long sleeves,
+  shirt=red!80!black]
+\end{tikzpicture}
+`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。

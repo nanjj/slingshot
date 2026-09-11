@@ -509,6 +509,10 @@ var tikzExtraPackages = []struct{ marker, pkg string }{
 	{`\smartdiagram`, "smartdiagram"},
 	{`\begin{venndiagram}`, "venndiagram"},
 	{`\begin{tcblisting}`, "tcolorbox"}, // 手册示例常用的 "代码 + 编译结果" 盒子
+	// bearwear (独立 CTAN 包, Bär / Ulrike Fischer): 给 tikzlings-bears 的熊穿衣服;
+	// 子串命中同时覆盖 \bearwear / \bearwearsetup / \bearwearlogo; 包内自行
+	// \RequirePackage{tikzlings-bears}。TL2026 与 2021 bundle 均自带, 两后端同路径。
+	{`\bearwear`, "bearwear"},
 }
 
 // tikzlingsCommands 把 tikzlings 的命令映射到提供它的宏包。

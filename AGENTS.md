@@ -100,6 +100,9 @@ the key '/tikz/thing/hat'"）。
 内容探测（`tikzExtraPackages` / `tikzlingsCommands`）：命中特征即加载对应宏包。tikzlings
 的动物命令映射到各自子宏包（`tikzlings-marmots` 等，表取自 tikzlings-list.sty），`\tikzling`
 走基础宏包、`\thing` 走 tikzlings-addons；命令匹配带词边界，`\bearwear` 不会命中 `\bear`。
+`\bearwear`（bearwear 宏包，独立 CTAN 包，给 tikzlings-bears 的熊提供服装）由 tikzExtraPackages
+的 `\bearwear` 子串命中（一并覆盖 `\bearwearsetup` / `\bearwearlogo`），注入 `\usepackage{bearwear}`；
+包内自行 `\RequirePackage{tikzlings-bears}`，两后端 bundle 均自带该包。
 tikzlings 的 pic 语法（`pic{bear}` / `pic[coati/body=blue, scale=0.5]{coati}` /
 `pic[thing/hat=red]{penguin}`）由 `tikzPicRe` / `detectTikzlingsPics` 单独探测：`/tikz/pics/<name>`
 键只由 TikZ 库文件（`tikzlibrarytikzlings.code.tex`）定义，动物子宏包不带 pic 定义——漏检时

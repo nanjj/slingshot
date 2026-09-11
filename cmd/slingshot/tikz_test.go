@@ -927,8 +927,23 @@ func TestDetectTikzPackages(t *testing.T) {
 			want:    []string{"tikzlings-addons", "tikzlings-owls"},
 		},
 		{
-			name:    "bearwear is not bear",
+			name:    "bearwear loads bearwear package, not tikzlings-bears",
 			content: "\\bearwear",
+			want:    []string{"bearwear"},
+		},
+		{
+			name:    "dressed bear example loads bearwear and bears",
+			content: "\\bear\n\\bearwear[long sleeves,\n  shirt=red!80!black]",
+			want:    []string{"bearwear", "tikzlings-bears"},
+		},
+		{
+			name:    "bearwearsetup loads bearwear package",
+			content: "\\bearwearsetup{shirt=red}",
+			want:    []string{"bearwear"},
+		},
+		{
+			name:    "bearwear in prose is not a command",
+			content: "the bearwear package provides clothes",
 		},
 		{
 			name:    "marmotx is not marmot",
