@@ -949,6 +949,33 @@ func TestDetectTikzPackages(t *testing.T) {
 			name:    "marmotx is not marmot",
 			content: "\\marmotx",
 		},
+		{
+			name:    "businessman node loads tikzpeople",
+			content: "\\node[businessman,minimum size=1.5cm] at (0,0) {};",
+			want:    []string{"tikzpeople"},
+		},
+		{
+			name:    "tikzpeople shape after comma",
+			content: "\\node[draw, alice] at (0,0) {};",
+			want:    []string{"tikzpeople"},
+		},
+		{
+			name:    "tikzpeople shape in multiline options",
+			content: "\\node[\n  businessman,\n  minimum size=1.5cm] at (0,0) {};",
+			want:    []string{"tikzpeople"},
+		},
+		{
+			name:    "businessman in prose is not a shape",
+			content: "the businessman walks home",
+		},
+		{
+			name:    "alice in node text is not a shape",
+			content: "\\node {alice};",
+		},
+		{
+			name:    "coordinate alice is not a shape",
+			content: "\\draw (alice) -- (bob);",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

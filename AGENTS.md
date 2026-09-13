@@ -108,6 +108,11 @@ the key '/tikz/thing/hat'"）。
 定义 `duck/.pic`，是宏包的超集）；TL2026（v2.2）与 2021 bundle（v1.5）均自带库文件，两后端同
 路径；`\b` 词边界避免误中 `\ducksay` 等其他宏包的命令。裸 `\duck` 片段由 `normalizeTikz` 自动补
 `tikzpicture` 外壳——`\duck` 内部的 `\begin{scope}` 依赖 picture。
+`businessman` 等 tikzpeople 人形是 node 选项键（`\node[businessman,minimum size=1.5cm]`），由
+`tikzExtraPackageRes` 的键位正则命中（`[` 或 `,` 之后 + 词边界；名单取自包内 29 个
+`\tikzpeople@declareshape` 调用；裸词会误中散文与节点文本故不取子串），注入 `\usepackage{tikzpeople}`；
+TL2026 与 2021 bundle 均自带 v0.4，其 `duck` shape 与 tikzducks 的鸭子无冲突（实测共存）。demo 专属
+命令（`\alltikzpeople` / `\tikzpeoplecolors`，需 `[demo]` 选项）非生产用途，暂不探测。
 tikzlings 的 pic 语法（`pic{bear}` / `pic[coati/body=blue, scale=0.5]{coati}` /
 `pic[thing/hat=red]{penguin}`）由 `tikzPicRe` / `detectTikzlingsPics` 单独探测：`/tikz/pics/<name>`
 键只由 TikZ 库文件（`tikzlibrarytikzlings.code.tex`）定义，动物子宏包不带 pic 定义——漏检时

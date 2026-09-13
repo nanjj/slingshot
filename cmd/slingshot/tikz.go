@@ -729,6 +729,12 @@ var tikzExtraPackageRes = []struct {
 	{re: regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`), pkg: "circuitikz", legacyIEC: true},
 	// to[*R=$R_1$] 是 circuitikz [compatibility] 的星号元件写法 (老式语法)。
 	{re: regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`), pkg: "circuitikz"},
+	// tikzpeople (独立 CTAN 包, Nils Fleischhacker): 29 个人形 node shape
+	// (businessman / alice / duck 等, 名单取自包内 \tikzpeople@declareshape 调用)。
+	// 形状名多为常用词, 裸子串会误中散文与节点文本, 故要求键位 ([ 或 , 之后 +
+	// 词边界)。TL2026 与 2021 bundle 均自带 v0.4, 两后端同路径; demo 专属命令
+	// (\alltikzpeople / \tikzpeoplecolors, 需 [demo] 选项) 非生产用途, 暂不探测。
+	{re: regexp.MustCompile(`[\[,]\s*(?:alice|bob|bride|builder|businessman|charlie|chef|conductor|cowboy|criminal|dave|devil|duck|graduate|groom|guard|jester|judge|maninblack|mexican|nun|nurse|physician|pilot|police|priest|sailor|santa|surgeon)\b`), pkg: "tikzpeople"},
 }
 
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。

@@ -378,6 +378,12 @@ body=lightgray,
 shift={(3,0.5)},
 scale=.3,
 ]`,
+	// tikzpeople: 人形 node shape (businessman / alice) 的回归样例 (此前报
+	// "I do not know the key '/tikz/businessman'"); 形状名由键位正则探测后注入
+	// \usepackage{tikzpeople}。样例保持原始片段形态 (裸 \node, 外壳自动补);
+	// TL2026 与 2021 bundle 均自带 v0.4, 两后端同路径。
+	"tikzpeople": `\node[businessman,minimum size=1.5cm] at (0,0) {};
+\node[alice,minimum size=1cm] at (2,0) {};`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。
