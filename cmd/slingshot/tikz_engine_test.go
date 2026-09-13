@@ -369,6 +369,7 @@ to[diode={name=D}] (3,2);
 	// 依赖 picture, 由 normalizeTikz 的外壳自动补上; TL2026 (v2.2) 与 2021 bundle
 	// (v1.5) 均自带库文件, 两后端同路径。
 	"tikzducks": `\duck
+\randuck
 \duck[
 shift={(2.5,1)},
 scale=.3,
@@ -384,6 +385,10 @@ scale=.3,
 	// TL2026 与 2021 bundle 均自带 v0.4, 两后端同路径。
 	"tikzpeople": `\node[businessman,minimum size=1.5cm] at (0,0) {};
 \node[alice,minimum size=1cm] at (2,0) {};`,
+	// tikzpeople_tikzducks_combo: 两个宏包共用 /tikz/duck 键空间 (tikzpeople 的 duck
+	// shape 与 tikzducks 的 duck pic/命令) 的共存样例——两包同时注入时无冲突。
+	"tikzpeople_tikzducks_combo": `\node[duck, minimum size=1cm] at (0,0) {};
+\duck[shift={(2,0)}, scale=0.5]`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。

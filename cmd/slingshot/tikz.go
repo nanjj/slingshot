@@ -682,7 +682,7 @@ var tikzExtraLibraries = []struct {
 	// 手册示例大量使用。注入手册推荐的加载形式 \usetikzlibrary{ducks} (库文件内部
 	// \usepackage{tikzducks} 并定义 duck/.pic, 是宏包的超集); TL2026 (v2.2) 与
 	// 2021 bundle (v1.5) 均自带库文件, 两后端同路径; \b 词边界避免误中
-	// \ducksay 等其他宏包的命令。
+	// \ducksay 等其他宏包的命令; 注释里的命中同 3d / pic 先例接受 (不剥离注释)。
 	{regexp.MustCompile(`\\(?:duck|randuck)\b`), "ducks"},
 }
 
@@ -708,6 +708,23 @@ func tikzLibraryLines(libs []string) string {
 	return `\usetikzlibrary{` + strings.Join(libs, ",") + "}\n"
 }
 
+// tikzpeopleShapes 是 tikzpeople 的全部人形 shape 名 (29 个, v0.4),
+// 取自包内 \tikzpeople@declareshape 调用 (tikzpeople.sty 第 808-836 行)。
+var tikzpeopleShapes = []string{
+	"alice", "bob", "bride", "builder", "businessman", "charlie", "chef",
+	"conductor", "cowboy", "criminal", "dave", "devil", "duck", "graduate",
+	"groom", "guard", "jester", "judge", "maninblack", "mexican", "nun",
+	"nurse", "physician", "pilot", "police", "priest", "sailor", "santa",
+	"surgeon",
+}
+
+// tikzpeopleShapeRe 匹配 node 选项键位置的人形名 ([ 或 , 之后 + 词边界);
+// 裸词会误中散文与节点文本。已知限制: 逗号后的坐标对 / 数据点 ((1,alice))
+// 也会命中——多加载无害, 与 3d 库同一取舍; 注释里的命中同样接受 (不剥离
+// 注释), 同 3d / pic 先例。
+var tikzpeopleShapeRe = regexp.MustCompile(
+	`[\[,]\s*(?:` + strings.Join(tikzpeopleShapes, "|") + `)\b`)
+
 // tikzExtraPackageRes 是正则匹配的额外包探测——子串匹配无法精确表达的条目。
 // \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 // 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
@@ -729,12 +746,11 @@ var tikzExtraPackageRes = []struct {
 	{re: regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`), pkg: "circuitikz", legacyIEC: true},
 	// to[*R=$R_1$] 是 circuitikz [compatibility] 的星号元件写法 (老式语法)。
 	{re: regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`), pkg: "circuitikz"},
-	// tikzpeople (独立 CTAN 包, Nils Fleischhacker): 29 个人形 node shape
-	// (businessman / alice / duck 等, 名单取自包内 \tikzpeople@declareshape 调用)。
-	// 形状名多为常用词, 裸子串会误中散文与节点文本, 故要求键位 ([ 或 , 之后 +
-	// 词边界)。TL2026 与 2021 bundle 均自带 v0.4, 两后端同路径; demo 专属命令
-	// (\alltikzpeople / \tikzpeoplecolors, 需 [demo] 选项) 非生产用途, 暂不探测。
-	{re: regexp.MustCompile(`[\[,]\s*(?:alice|bob|bride|builder|businessman|charlie|chef|conductor|cowboy|criminal|dave|devil|duck|graduate|groom|guard|jester|judge|maninblack|mexican|nun|nurse|physician|pilot|police|priest|sailor|santa|surgeon)\b`), pkg: "tikzpeople"},
+	// tikzpeople (独立 CTAN 包, Nils Fleischhacker): 人形 node shape 探测见
+	// tikzpeopleShapeRe (名单单一来源 tikzpeopleShapes)。TL2026 与 2021 bundle
+	// 均自带 v0.4, 两后端同路径; demo 专属命令 (\alltikzpeople /
+	// \tikzpeoplecolors, 需 [demo] 选项) 非生产用途, 暂不探测。
+	{re: tikzpeopleShapeRe, pkg: "tikzpeople"},
 }
 
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。

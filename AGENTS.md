@@ -111,7 +111,7 @@ the key '/tikz/thing/hat'"）。
 `businessman` 等 tikzpeople 人形是 node 选项键（`\node[businessman,minimum size=1.5cm]`），由
 `tikzExtraPackageRes` 的键位正则命中（`[` 或 `,` 之后 + 词边界；名单取自包内 29 个
 `\tikzpeople@declareshape` 调用；裸词会误中散文与节点文本故不取子串），注入 `\usepackage{tikzpeople}`；
-TL2026 与 2021 bundle 均自带 v0.4，其 `duck` shape 与 tikzducks 的鸭子无冲突（实测共存）。demo 专属
+TL2026 与 2021 bundle 均自带 v0.4，其 `duck` shape 与 tikzducks 的鸭子无冲突（`tikzpeople_tikzducks_combo` 双引擎样例固化）。demo 专属
 命令（`\alltikzpeople` / `\tikzpeoplecolors`，需 `[demo]` 选项）非生产用途，暂不探测。
 tikzlings 的 pic 语法（`pic{bear}` / `pic[coati/body=blue, scale=0.5]{coati}` /
 `pic[thing/hat=red]{penguin}`）由 `tikzPicRe` / `detectTikzlingsPics` 单独探测：`/tikz/pics/<name>`

@@ -976,6 +976,11 @@ func TestDetectTikzPackages(t *testing.T) {
 			name:    "coordinate alice is not a shape",
 			content: "\\draw (alice) -- (bob);",
 		},
+		{
+			name:    "comma coordinate pair accepted (known over-match)",
+			content: "\\draw (0,0) -- (1,alice);",
+			want:    []string{"tikzpeople"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -989,6 +994,20 @@ func TestDetectTikzPackages(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDetectTikzpeopleShapes 逐一验证全部 29 个人形名都能在键位被探测到,
+// 防止名单 / 正则 typo 使某个 shape 静默失效 (名单是正则的单一来源)。
+func TestDetectTikzpeopleShapes(t *testing.T) {
+	if len(tikzpeopleShapes) != 29 {
+		t.Errorf("tikzpeopleShapes has %d names, want 29", len(tikzpeopleShapes))
+	}
+	for _, name := range tikzpeopleShapes {
+		content := "\\node[" + name + "] at (0,0) {};"
+		if got := detectTikzPackages(content, true); !slices.Contains(got, "tikzpeople") {
+			t.Errorf("detectTikzPackages(%q) = %v, want tikzpeople", content, got)
+		}
 	}
 }
 
