@@ -389,6 +389,21 @@ scale=.3,
 	// shape 与 tikzducks 的 duck pic/命令) 的共存样例——两包同时注入时无冲突。
 	"tikzpeople_tikzducks_combo": `\node[duck, minimum size=1cm] at (0,0) {};
 \duck[shift={(2,0)}, scale=0.5]`,
+	// figchild: 裸命令 / 可选 TikZ 选项形式的回归样例 (此前探测不到 \fc*,
+	// 编译报 "Undefined control sequence"); 样例保持裸片段形态 (不套外壳,
+	// 命令自带 tikzpicture)。tectonic 上由 legacyFigchild 写入 vendored v3.1.1
+	// 覆盖 bundle 的 v1.1.1 老 API; xe 用系统 TeX Live 直接编译。
+	"figchild": `\fcBell
+\fcStar[scale=0.5]`,
+	// tikz_triminos: \tkztriminos 的回归样例。\tkz+大写 的收紧使 tkz-euclide
+	// 不被误加载 (旧 \tkz 子串会命中 \tkztriminos); tectonic 上走 vendored
+	// tikz-triminos.sty + fpeval shim (bundle 的 LaTeX 2021 缺 \fpeval),
+	// xe 用系统 TeX Live 直接编译。
+	"tikz_triminos": `\tkztriminos{value 1 § value 2 § a long long value 3}`,
+	// scsnowman: \scsnowman 家族的回归样例。命令名是 \scsnowman (不是
+	// tikzlings-snowmen 的 \snowman), 无同名冲突; TL2026 v1.3c 与 bundle
+	// v1.2d 键集一致, 两后端走同一注入路径 (无需 vendoring)。
+	"scsnowman": `\scsnowman[scale=2,hat=red,muffler=blue]`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。

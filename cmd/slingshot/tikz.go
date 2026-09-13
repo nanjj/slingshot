@@ -491,8 +491,10 @@ var usetikzlibraryIECRe = regexp.MustCompile(`(?m)^[ \t]*\\usetikzlibrary\{circu
 
 // tikzExtraPackages 是 "内容特征 → 需要额外加载的 LaTeX 包" 探测表。
 // 顺序即 \usepackage 的加载顺序; 命中特征说明 tikzpicture 用到了该包的命令/环境。
+// tkz-euclide 不在此表: 子串匹配无法把它与 tikz-triminos 的 \tkztriminos
+// 区分开 (会误加载 tkz-euclide), 改由 detectTikzPackages 前置用 tkzEuclideRe
+// (\tkz+大写) 检查——放在表前是为了保持 tkz-euclide 仍出现在包列表最前。
 var tikzExtraPackages = []struct{ marker, pkg string }{
-	{`\tkz`, "tkz-euclide"}, // \tkzDefPoint, \tkzDrawPoints, \tkzLabelPoints 等
 	{`\begin{tikzcd}`, "tikz-cd"},
 	{`\tikzcdset`, "tikz-cd"},
 	{`\begin{axis}`, "pgfplots"},
@@ -725,6 +727,37 @@ var tikzpeopleShapes = []string{
 var tikzpeopleShapeRe = regexp.MustCompile(
 	`[\[,]\s*(?:` + strings.Join(tikzpeopleShapes, "|") + `)\b`)
 
+// tkzEuclideRe 匹配 tkz-euclide 的用户命令族: \tkz + 大写字母。
+// tkz-euclide 的用户接口 (v5.x 文档与项目页) 全部是 \tkzDefPoint /
+// \tkzDrawPoints / \tkzLabelPoints 这类 \tkz+大写形式; \tkzfrom / \tkzto /
+// \tkzcenter 等小写开头只是实现内部的临时宏, 不是用户命令。
+// 不用裸 "\tkz" 子串: 它会把 tikz-triminos 的 \tkztriminos (小写 t) 也算成
+// tkz-euclide, 误加载该包 (探测表与 fixTkzPercentJoins 布防都要靠本正则收紧)。
+var tkzEuclideRe = regexp.MustCompile(`\\tkz[A-Z]`)
+
+// figchildRe 匹配 figchild 宏包的图形命令。
+// v3.1.1 共 561 个 \fc* 命令: 556 个是 \fc + CamelCase, 另 5 个是小写例外
+// (\fcfrog / \fchamburger / \fcpink / \fcsheetA / \fcsheetB, 取自 v3.1.1 的
+// \newcommand 清单)。[A-Z] 起点同时避开 LaTeX 内核的 \fcolorbox (fc 后是 o,
+// 小写且不在例外名单)。未来版本若新增小写命令, 需同步本正则与例外名单。
+var figchildRe = regexp.MustCompile(`\\fc(?:[A-Z]|frog\b|hamburger\b|pink\b|sheetA\b|sheetB\b)`)
+
+// tikzTriminosRe 匹配 tikz-triminos 的主命令 \tkztriminos[keys]<tikz options>{...}。
+// \b 词边界排除包内变量 \tkztriminosize (triminos 后紧接字母, 无词边界)。
+var tikzTriminosRe = regexp.MustCompile(`\\tkztriminos\b`)
+
+// scsnowmanRe 匹配 scsnowman 宏包的用户命令族。
+// 命令名是 \scsnowman (不是 \snowman), 与 tikzlings-snowmen 的 \snowman
+// 没有同名冲突, 无需任何规避。用户接口: \scsnowman[keys]、
+// \scsnowmandefault{...}、\scsnowmannumeral[keys]{...}、\makeitemsnowman、
+// \makeqedsnowman、\makedocumentsnowman、\usescsnowmanlibrary{...}、
+// \enumsnowman (也以裸词出现在 \pagenumbering{enumsnowman}) 以及
+// sctkzsym-base 的玩笑命令 \makeqedother / \makeitemother。
+// 注意命令名是 make+item+snowman (两者共享那个 s, 即 \makeitemsnowman),
+// 不是 make+items+snowman; 内部 \scsnowmanNumeral (大写 N) 与 \scsnowman@... 不匹配。
+// [^@A-Za-z0-9] 边界排除内部命名空间 \scsnowman@...; enumsnowman 等用 \b 匹配裸词。
+var scsnowmanRe = regexp.MustCompile(`\\scsnowman(?:default|numeral)?(?:[^@A-Za-z0-9]|$)|\\make(?:item|qed|document)snowman(?:[^A-Za-z0-9]|$)|\\usescsnowmanlibrary(?:[^A-Za-z0-9]|$)|\b(?:enumsnowman|makeqedother|makeitemother)\b`)
+
 // tikzExtraPackageRes 是正则匹配的额外包探测——子串匹配无法精确表达的条目。
 // \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 // 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
@@ -751,6 +784,17 @@ var tikzExtraPackageRes = []struct {
 	// 均自带 v0.4, 两后端同路径; demo 专属命令 (\alltikzpeople /
 	// \tikzpeoplecolors, 需 [demo] 选项) 非生产用途, 暂不探测。
 	{re: tikzpeopleShapeRe, pkg: "tikzpeople"},
+	// figchild (独立 CTAN 包): 儿童活动图形, 561 个 \fc* 命令 (v3.1.1) 各自
+	// 自带完整 tikzpicture, 属"自包含命令"(见 tikzSelfContainedCmdRes)。
+	// tectonic bundle 的 v1.1.1 老 API 不兼容, 由 legacyFigchild 写 vendored sty。
+	{re: figchildRe, pkg: "figchild"},
+	// tikz-triminos (独立 CTAN 包): 三连块拼图, 主命令 \tkztriminos 自带
+	// tikzpicture (自包含命令)。bundle 无此包, 由 legacyTriminos 写 vendored sty
+	// 并注入 fpeval shim (bundle 的 LaTeX 2021 缺 \fpeval)。
+	{re: tikzTriminosRe, pkg: "tikz-triminos"},
+	// scsnowman (独立 CTAN 包): 雪人图形盒, \scsnowman 家族自含 inline 图形盒
+	// (自包含命令)。TL2026 v1.3c 与 bundle v1.2d 键集一致, 两后端同路径, 无需 vendoring。
+	{re: scsnowmanRe, pkg: "scsnowman"},
 }
 
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。
@@ -759,6 +803,13 @@ var tikzExtraPackageRes = []struct {
 func detectTikzPackages(content string, legacyIEC bool) []string {
 	var pkgs []string
 	seen := make(map[string]bool)
+	// tkz-euclide 前置检查: 原 `\tkz` 子串会误中 tikz-triminos 的 \tkztriminos,
+	// 收紧为 \tkz+大写。放在两张表之前, 保持 tkz-euclide 出现在包列表最前,
+	// 不改变既有的加载顺序。
+	if tkzEuclideRe.MatchString(content) {
+		seen["tkz-euclide"] = true
+		pkgs = append(pkgs, "tkz-euclide")
+	}
 	for _, e := range tikzExtraPackages {
 		if !strings.Contains(content, e.marker) || seen[e.pkg] {
 			continue
@@ -854,6 +905,35 @@ var tikzSelfContainedEnvs = []string{
 	`\begin{tcblisting}`,
 }
 
+// tikzSelfContainedCmdRes 是"自带绘图"的命令正则表, 与 tikzSelfContainedEnvs
+// 同类: 这些命令宏内部已经开了 tikzpicture (figchild 的 \fc* 与 tikz-triminos 的
+// \tkztriminos) 或生成 inline 图形盒 (\scsnowman 家族), 再被外层 tikzpicture
+// 包一层会造成嵌套 picture (字体钩子无限递归) 或包围盒异常, 必须原样放行。
+var tikzSelfContainedCmdRes = []*regexp.Regexp{figchildRe, tikzTriminosRe, scsnowmanRe}
+
+// selfContainedCmd 报告内容中是否出现自包含绘图命令。
+// 存在性判定 (任一正则命中即真), 与 selfContainedStart 的环境检查同一取舍:
+// 注释/散文里的命中宁可多判——这些命令在任何位置被再包一层都是错的。
+func selfContainedCmd(content string) bool {
+	for _, re := range tikzSelfContainedCmdRes {
+		if re.MatchString(content) {
+			return true
+		}
+	}
+	return false
+}
+
+// selfContainedCmdStart 报告内容是否从位置 0 起就是自包含绘图命令
+// (供 stripOuterTikzShells 判断内层是否该剥离误包外壳; 调用方已 TrimSpace)。
+func selfContainedCmdStart(content string) bool {
+	for _, re := range tikzSelfContainedCmdRes {
+		if loc := re.FindStringIndex(content); loc != nil && loc[0] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // tkzpictureBeginRe 匹配 tkz-base 风格的 tkzpicture 环境 (可带可选参数)。
 // tkzpicture 是 tkz-base (tkz-euclide 2.x 时代的依赖) 提供的 tikzpicture
 // 别名; tkz-euclide 4.x 重写后不再定义该环境, 旧示例直接编译会报
@@ -921,7 +1001,9 @@ func stripOuterTikzShells(content string) string {
 			return content
 		}
 		inner := strings.TrimSpace(trimmed[len(begin) : len(trimmed)-len(end)])
-		if !selfContainedStart(inner) {
+		// 内层以自包含环境或自包含命令 (figchild / tikz-triminos / scsnowman)
+		// 开头时剥离误包外壳; 外层同样不能包自包含命令。
+		if !selfContainedStart(inner) && !selfContainedCmdStart(inner) {
 			return content
 		}
 		content = inner
@@ -943,6 +1025,8 @@ func isTkzNameChar(c byte) bool {
 // 修复: 仅当行尾 % 位于 \tkz 命令参数区内、% 前是名字字符、且下一行首个
 // 非空白字符也是名字字符时删掉该 %, 让 TeX 把换行还原为空格分隔。
 // 逗号续行 (","% 换行) 不需要空格, \node 文本、注释内容均不受影响。
+// 只对 \tkz+大写 (tkz-euclide 用户命令族) 布防: tikz-triminos 的
+// \tkztriminos 小写开头, 其参数里的 % 续行不该被改写, 否则会破坏该包内容。
 func fixTkzPercentJoins(content string) string {
 	var b strings.Builder
 	b.Grow(len(content))
@@ -967,7 +1051,10 @@ func fixTkzPercentJoins(content string) string {
 				continue
 			}
 			if !pendingTkz {
-				if c == '\\' && i+4 <= len(content) && content[i:i+4] == `\tkz` {
+				// 第 5 个字符必须是大写字母 (tkz-euclide 用户命令族);
+				// \tkztriminos 等小写开头的内部/他包命令不布防。
+				if c == '\\' && i+5 <= len(content) && content[i:i+4] == `\tkz` &&
+					content[i+4] >= 'A' && content[i+4] <= 'Z' {
 					pendingTkz = true
 				}
 				b.WriteByte(c)
@@ -1169,7 +1256,9 @@ func fixDefLineTangent(content string) string {
 // 上不是「不需要」, 而是改为注入真库加载行, 见 iecNeedsLibrary。
 // tikzlings 的 pic shim 同样只在 tectonic 上注入 (bundle 无 TikZ 库文件,
 // 见 tikzlingsPicShim); latexmk 上提供 pic 定义的是 tikzlings 真库。
-// siunitx alias shim 与后端无关 (siunitx v3 行为), 两个后端都保留。
+// fpeval shim 只在 tectonic 上注入 (bundle 的 LaTeX 2021 缺 \fpeval, 见
+// triminosFpevalShim); siunitx alias shim 与后端无关 (siunitx v3 行为),
+// 两个后端都保留。
 func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 	var shims string
 	shims += circuitikzMotorShim(raw)
@@ -1188,8 +1277,35 @@ func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 	if p.legacyTikzlings {
 		shims += tikzlingsPicShim(raw)
 	}
+	if p.legacyTriminos {
+		shims += triminosFpevalShim(pkgs)
+	}
 	shims += siunitxAliasShim(pkgs)
 	return shims
+}
+
+// tikzFpevalShim 给 2021 bundle 补齐 \fpeval。
+// tectonic bundle 的 LaTeX 2021 没有 \fpeval (l3kernel 2021-05 才加入),
+// tikz-triminos 内部用它做尺寸计算, 缺失时报 "Undefined control sequence"。
+// \fp_eval:n 是 expl3 早已提供的可展开浮点求值, 语义与新版 \fpeval 一致,
+// 因此直接做别名。\ifcsname 守卫未来 bundle 自带 \fpeval 时不重复定义。
+// 保留 \makeatletter/\makeatother: \fpeval 是宏名 (含 @ 风格的 expl3 命令
+// 需要 expl3 语法区, 由 \ExplSyntaxOn 提供), 出语法区后恢复正常 catcode。
+const tikzFpevalShim = `\makeatletter
+\ifcsname fpeval\endcsname\else
+  \ExplSyntaxOn
+  \cs_new_eq:NN \fpeval \fp_eval:n
+  \ExplSyntaxOff
+\fi
+\makeatother`
+
+// triminosFpevalShim 在包列表含 tikz-triminos 时返回 fpeval shim (带行尾换行),
+// 否则返回空串。只在 tectonic profile 调用 (见 tikzShims)。
+func triminosFpevalShim(pkgs []string) string {
+	if !slices.Contains(pkgs, "tikz-triminos") {
+		return ""
+	}
+	return tikzFpevalShim + "\n"
 }
 
 // tikzlingsPicShim 为 legacy 后端补齐 tikzlings 的 TikZ 库所定义的 pic 定义。
@@ -1317,6 +1433,11 @@ func normalizeTikz(content string, p tikzProfile) string {
 			return content
 		}
 	}
+	// 自包含命令 (figchild / tikz-triminos / scsnowman) 自带 tikzpicture 或
+	// inline 图形盒, 同样不包外壳; 与上面的 env 早退同位置同语义。
+	if selfContainedCmd(content) {
+		return content
+	}
 	var libs []string
 	content = usetikzlibraryRe.ReplaceAllStringFunc(content, func(m string) string {
 		// m 可能带行尾换行 (被正则吃掉), 存库时去掉, Join 时统一补 \n。
@@ -1431,6 +1552,12 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
 			tikzLibraryLines(libs), shims, cjkPreamble), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
+	}
+	// vendored 宏包 (figchild / tikz-triminos) 只在 tectonic profile 上写入
+	// 工作目录; tectonic 优先从输入文件所在目录解析 \usepackage (与 input.tikz
+	// 同一机制), 从而覆盖/补齐 bundle 版本。xe 用系统 TeX Live, 此处为空操作。
+	if err := writeVendoredPackages(tmpDir, profile, pkgs); err != nil {
+		return fmt.Errorf("writing vendored packages: %w", err)
 	}
 
 	// run 执行一条外部命令并施加超时; ctx 到期时 runCmd 会杀掉整个进程组

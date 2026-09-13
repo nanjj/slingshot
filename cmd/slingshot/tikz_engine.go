@@ -38,6 +38,8 @@ type tikzProfile struct {
 	legacyBuzzer     bool // buzzer shim
 	legacyConverter  bool // tacdc/tdcac mnemonic anchor shim
 	legacyTikzlings  bool // tectonic: bundle 无 tikzlings TikZ 库 (v0.8) — pic 语法改用子宏包 + tikzlingsPicShim; latexmk: 注入 \usetikzlibrary{tikzlings}
+	legacyFigchild   bool // tectonic: bundle 的 figchild 是 v1.1.1 (2021, 3 必填参数老 API), 与当前 3.x 的可选 TikZ 选项形式不兼容; 写入 vendored v3.1.1 覆盖
+	legacyTriminos   bool // tectonic: bundle 无 tikz-triminos; 写入 vendored sty + fpeval shim
 }
 
 // latexmkProfile 是 TL2026 主后端: 全 false, 不做 legacy 翻译。
@@ -56,6 +58,8 @@ func tectonicProfile() tikzProfile {
 		legacyBuzzer:     true,
 		legacyConverter:  true,
 		legacyTikzlings:  true,
+		legacyFigchild:   true,
+		legacyTriminos:   true,
 	}
 }
 

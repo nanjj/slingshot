@@ -244,6 +244,37 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\begin{tikzpicture}\n\\tkzDefPointOnCircle[through= angle 30 center K1 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\tkzDefPointOnCircle[through= angle 30 center K1 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
 		},
+		{
+			// figchild 的 \fc* 命令自带 tikzpicture, 不能再包外壳。
+			name:  "figchild command is self-contained, not wrapped",
+			input: "\\fcBell",
+			want:  "\\fcBell",
+		},
+		{
+			// tikz-triminos 的 \tkztriminos 自带 tikzpicture, 不能再包外壳。
+			name:  "tkztriminos command is self-contained, not wrapped",
+			input: "\\tkztriminos{value 1 § value 2 § value 3}",
+			want:  "\\tkztriminos{value 1 § value 2 § value 3}",
+		},
+		{
+			// \scsnowman 家族生成 inline 图形盒, 不能再包外壳。
+			name:  "scsnowman command is self-contained, not wrapped",
+			input: "\\scsnowman[scale=2,hat=red]",
+			want:  "\\scsnowman[scale=2,hat=red]",
+		},
+		{
+			// 误包在 tikzpicture 里的 figchild 命令: 内层是自包含命令, 剥壳。
+			name:  "outer tikzpicture shell around figchild stripped",
+			input: "\\begin{tikzpicture}\n\\fcBell\n\\end{tikzpicture}\n",
+			want:  "\\fcBell",
+		},
+		{
+			// 收紧 fixTkzPercentJoins 布防 (\tkz+大写) 后, tikz-triminos 参数内
+			// 的 % 续行必须原样保留 (旧代码会把 % 删掉)。
+			name:  "tkztriminos percent continuation untouched",
+			input: "\\tkztriminos{a § b%\n c}",
+			want:  "\\tkztriminos{a § b%\n c}",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -981,6 +1012,90 @@ func TestDetectTikzPackages(t *testing.T) {
 			content: "\\draw (0,0) -- (1,alice);",
 			want:    []string{"tikzpeople"},
 		},
+		{
+			name:    "figchild CamelCase command with options",
+			content: "\\fcOwlA[scale=0.5]",
+			want:    []string{"figchild"},
+		},
+		{
+			name:    "figchild lowercase exception frog",
+			content: "\\fcfrog",
+			want:    []string{"figchild"},
+		},
+		{
+			name:    "fcolorbox is kernel, not figchild",
+			content: "\\fcolorbox{red}{blue}{x}",
+		},
+		{
+			name:    "figchild in prose is not a command",
+			content: "the figchild package provides figures",
+		},
+		{
+			name:    "tikz-triminos command loads only tikz-triminos",
+			content: "\\tkztriminos{One § Two § Three}",
+			want:    []string{"tikz-triminos"},
+		},
+		{
+			name:    "tkztriminosize is internal, not the command",
+			content: "\\tkztriminosize",
+		},
+		{
+			name:    "scsnowman command with keys",
+			content: "\\scsnowman[scale=2,hat=red]",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "scsnowmannumeral command",
+			content: "\\scsnowmannumeral{18882}",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "makeitemsnowman command",
+			content: "\\makeitemsnowman",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "enumsnowman bare word in pagenumbering",
+			content: "\\pagenumbering{enumsnowman}",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "scsnowman in prose is not a command",
+			content: "the scsnowman package draws snowmen",
+		},
+		{
+			name:    "scsnowman internal name with numeral capital N",
+			content: "\\scsnowmanNumeral{5}",
+		},
+		{
+			name:    "scsnowman internal namespace with at sign",
+			content: "\\scsnowman@internal",
+		},
+		{
+			name:    "usescsnowmanlibrary command",
+			content: "\\usescsnowmanlibrary{extras}",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "makeqedsnowman command",
+			content: "\\makeqedsnowman",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "makeqedother joke command",
+			content: "\\makeqedother",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "makeitemother joke command",
+			content: "\\makeitemother",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "scsnowmannumeral lowercase is the public command",
+			content: "\\scsnowmannumeral{18882}",
+			want:    []string{"scsnowman"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1680,6 +1795,89 @@ func TestCircuitikzConverterShim(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("circuitikzConverterShim() missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+// TestVendoredPackageFiles 验证 vendored 资产只在 tectonic profile 且命中
+// 对应包时才写入工作目录 (xe 用系统 TeX Live, 永远为空)。
+func TestVendoredPackageFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		p    tikzProfile
+		pkgs []string
+		want []string
+	}{
+		{
+			name: "latexmk needs no vendored files",
+			p:    latexmkProfile(),
+			pkgs: []string{"figchild", "tikz-triminos"},
+		},
+		{
+			name: "tectonic figchild only",
+			p:    tectonicProfile(),
+			pkgs: []string{"figchild"},
+			want: []string{"figchild.sty"},
+		},
+		{
+			name: "tectonic both, figchild first",
+			p:    tectonicProfile(),
+			pkgs: []string{"figchild", "tikz-triminos"},
+			want: []string{"figchild.sty", "tikz-triminos.sty"},
+		},
+		{
+			name: "tectonic with no matching package",
+			p:    tectonicProfile(),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := vendoredPackageFiles(tt.p, tt.pkgs)
+			if len(got) != len(tt.want) {
+				t.Fatalf("vendoredPackageFiles() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("vendoredPackageFiles() = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestTriminosFpevalShim 验证 fpeval shim 只在包列表含 tikz-triminos 时产出,
+// 且内容用 \ifcsname 守卫 (未来 bundle 自带 \fpeval 时不重复定义)。
+func TestTriminosFpevalShim(t *testing.T) {
+	if got := triminosFpevalShim([]string{"tikz-triminos"}); got == "" {
+		t.Fatal("triminosFpevalShim(tikz-triminos) = empty, want the fpeval shim")
+	} else if !strings.Contains(got, `\ifcsname fpeval`) {
+		t.Errorf("triminosFpevalShim() = %q, want it to guard on \\ifcsname fpeval", got)
+	}
+	if got := triminosFpevalShim([]string{"tikz-euclide"}); got != "" {
+		t.Errorf("triminosFpevalShim(without tikz-triminos) = %q, want empty", got)
+	}
+	if got := triminosFpevalShim(nil); got != "" {
+		t.Errorf("triminosFpevalShim(nil) = %q, want empty", got)
+	}
+}
+
+// TestTikzAssetsEmbedded 验证两份 vendored .sty 都嵌进了二进制,
+// 且确实是对应宏包 (只扫前若干 KB, figchild.sty 有 1.8MB)。
+func TestTikzAssetsEmbedded(t *testing.T) {
+	for name, want := range map[string]string{
+		"figchild.sty":      `\ProvidesPackage{figchild}`,
+		"tikz-triminos.sty": `\ProvidesPackage{tikz-triminos}`,
+	} {
+		data, err := tikzAssets.ReadFile("tikzassets/" + name)
+		if err != nil {
+			t.Fatalf("reading embedded %s: %v", name, err)
+		}
+		head := data
+		if len(head) > 8192 {
+			head = head[:8192]
+		}
+		if !strings.Contains(string(head), want) {
+			t.Errorf("embedded %s does not contain %q in its first 8KB", name, want)
 		}
 	}
 }
