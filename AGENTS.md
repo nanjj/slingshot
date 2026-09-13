@@ -103,6 +103,11 @@ the key '/tikz/thing/hat'"）。
 `\bearwear`（bearwear 宏包，独立 CTAN 包，给 tikzlings-bears 的熊提供服装）由 tikzExtraPackages
 的 `\bearwear` 子串命中（一并覆盖 `\bearwearsetup` / `\bearwearlogo`），注入 `\usepackage{bearwear}`；
 包内自行 `\RequirePackage{tikzlings-bears}`，两后端 bundle 均自带该包。
+`\duck` / `\randuck`（tikzducks 宏包，独立 CTAN 包，橡皮鸭）在 `tikzExtraLibraries` 正则表命中，
+注入手册推荐的加载形式 `\usetikzlibrary{ducks}`（库文件内部 `\usepackage{tikzducks}` 并给鸭子
+定义 `duck/.pic`，是宏包的超集）；TL2026（v2.2）与 2021 bundle（v1.5）均自带库文件，两后端同
+路径；`\b` 词边界避免误中 `\ducksay` 等其他宏包的命令。裸 `\duck` 片段由 `normalizeTikz` 自动补
+`tikzpicture` 外壳——`\duck` 内部的 `\begin{scope}` 依赖 picture。
 tikzlings 的 pic 语法（`pic{bear}` / `pic[coati/body=blue, scale=0.5]{coati}` /
 `pic[thing/hat=red]{penguin}`）由 `tikzPicRe` / `detectTikzlingsPics` 单独探测：`/tikz/pics/<name>`
 键只由 TikZ 库文件（`tikzlibrarytikzlings.code.tex`）定义，动物子宏包不带 pic 定义——漏检时

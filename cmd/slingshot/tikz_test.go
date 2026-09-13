@@ -1098,6 +1098,11 @@ func TestDetectTikzLibraries(t *testing.T) {
 		{name: "canvas xy plane at", content: "\\begin{scope}[canvas is xy plane at z=1]", want: []string{"3d"}},
 		{name: "canvas bare plane", content: "\\begin{scope}[canvas is plane={O(0,0) x(1,0) y(0,1)}]", want: []string{"3d"}},
 		{name: "canvas text only not 3d", content: "\\node {the canvas is plain};"},
+		{name: "duck loads ducks library", content: "\\duck", want: []string{"ducks"}},
+		{name: "duck with options loads ducks library", content: "\\duck[shift={(2.5,1)}, scale=.3]", want: []string{"ducks"}},
+		{name: "randuck loads ducks library", content: "\\randuck[body=blue]", want: []string{"ducks"}},
+		{name: "ducksay is not duck", content: "\\ducksay{quack}"},
+		{name: "duckling is not duck", content: "\\duckling"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1257,6 +1262,14 @@ func TestTikzLibraries(t *testing.T) {
 	gotCanvas := tikzLibraries(latexmkProfile(), canvas)
 	if !slices.Contains(gotCanvas, "3d") {
 		t.Errorf("tikzLibraries(canvas is zy plane at) = %v, want 3d", gotCanvas)
+	}
+	// \duck / \randuck 注入 ducks 库: 两个后端都要注入 (2021 bundle v1.5 也自带库文件)。
+	duck := "\\duck\n\\randuck[body=blue]"
+	if got := tikzLibraries(latexmkProfile(), duck); !slices.Contains(got, "ducks") {
+		t.Errorf("tikzLibraries(latexmk, duck) = %v, want ducks", got)
+	}
+	if got := tikzLibraries(tectonicProfile(), duck); !slices.Contains(got, "ducks") {
+		t.Errorf("tikzLibraries(tectonic, duck) = %v, want ducks", got)
 	}
 }
 

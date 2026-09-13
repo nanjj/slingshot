@@ -363,6 +363,21 @@ to[diode={name=D}] (3,2);
   shirt=red!80!black]
 \end{tikzpicture}
 `,
+	// tikzducks: 橡皮鸭 \duck 的回归样例 (此前报 "Undefined control sequence \duck");
+	// 探测命中后注入 \usetikzlibrary{ducks} (手册推荐的加载形式, 库文件是宏包超集)。
+	// 样例保持原始片段形态 (裸 \duck, 无 tikzpicture): \duck 内部的 \begin{scope}
+	// 依赖 picture, 由 normalizeTikz 的外壳自动补上; TL2026 (v2.2) 与 2021 bundle
+	// (v1.5) 均自带库文件, 两后端同路径。
+	"tikzducks": `\duck
+\duck[
+shift={(2.5,1)},
+scale=.3,
+]
+\duck[
+body=lightgray,
+shift={(3,0.5)},
+scale=.3,
+]`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。

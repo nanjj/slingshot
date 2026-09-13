@@ -678,6 +678,12 @@ var tikzExtraLibraries = []struct {
 	{regexp.MustCompile(`\bcanvas\s+is\s+(?:(?:xy|yx|xz|zx|yz|zy)\s+plane\s+at|plane)\b`), "3d"},
 	{regexp.MustCompile(`(?:to|edge)\s*\["`), "quotes"},
 	{regexp.MustCompile(`node\s*\[[^\]]*\b(?:ellipse|diamond|cylinder|regular\s+polygon|star|cloud|trapezium)\b`), "shapes.geometric"},
+	// tikzducks (独立 CTAN 包, samcarter): 橡皮鸭 \duck 与随机鸭 \randuck 由它提供,
+	// 手册示例大量使用。注入手册推荐的加载形式 \usetikzlibrary{ducks} (库文件内部
+	// \usepackage{tikzducks} 并定义 duck/.pic, 是宏包的超集); TL2026 (v2.2) 与
+	// 2021 bundle (v1.5) 均自带库文件, 两后端同路径; \b 词边界避免误中
+	// \ducksay 等其他宏包的命令。
+	{regexp.MustCompile(`\\(?:duck|randuck)\b`), "ducks"},
 }
 
 // detectTikzLibraries 从输入内容推断需要的 tikz 库, 按表顺序收集、去重。
