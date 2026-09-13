@@ -755,8 +755,9 @@ var tikzTriminosRe = regexp.MustCompile(`\\tkztriminos\b`)
 // sctkzsym-base 的玩笑命令 \makeqedother / \makeitemother。
 // 注意命令名是 make+item+snowman (两者共享那个 s, 即 \makeitemsnowman),
 // 不是 make+items+snowman; 内部 \scsnowmanNumeral (大写 N) 与 \scsnowman@... 不匹配。
-// [^@A-Za-z0-9] 边界排除内部命名空间 \scsnowman@...; enumsnowman 等用 \b 匹配裸词。
-var scsnowmanRe = regexp.MustCompile(`\\scsnowman(?:default|numeral)?(?:[^@A-Za-z0-9]|$)|\\make(?:item|qed|document)snowman(?:[^A-Za-z0-9]|$)|\\usescsnowmanlibrary(?:[^A-Za-z0-9]|$)|\b(?:enumsnowman|makeqedother|makeitemother)\b`)
+// [^@A-Za-z0-9] 边界排除内部命名空间 \scsnowman@...; \enumsnowman 等玩笑命令
+// 写成带反斜杠的命令 (不再匹配裸词), \pagenumbering{enumsnowman} 另行显式匹配。
+var scsnowmanRe = regexp.MustCompile(`\\scsnowman(?:default|numeral)?(?:[^@A-Za-z0-9]|$)|\\make(?:item|qed|document)snowman(?:[^A-Za-z0-9]|$)|\\usescsnowmanlibrary(?:[^A-Za-z0-9]|$)|\\(?:enumsnowman|makeqedother|makeitemother)\b|\\pagenumbering\s*\{\s*enumsnowman\s*\}`)
 
 // tikzExtraPackageRes 是正则匹配的额外包探测——子串匹配无法精确表达的条目。
 // \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
@@ -912,15 +913,46 @@ var tikzSelfContainedEnvs = []string{
 var tikzSelfContainedCmdRes = []*regexp.Regexp{figchildRe, tikzTriminosRe, scsnowmanRe}
 
 // selfContainedCmd 报告内容中是否出现自包含绘图命令。
-// 存在性判定 (任一正则命中即真), 与 selfContainedStart 的环境检查同一取舍:
-// 注释/散文里的命中宁可多判——这些命令在任何位置被再包一层都是错的。
+// 判定前先剥离注释 (stripTikzComments): 注释里提到的命令对 TeX 无实际内容,
+// 不应抑制 normalizeTikz 的外壳补偿 (例如 "% \fcBell" 后跟裸 \draw)。
 func selfContainedCmd(content string) bool {
+	stripped := stripTikzComments(content)
 	for _, re := range tikzSelfContainedCmdRes {
-		if re.MatchString(content) {
+		if re.MatchString(stripped) {
 			return true
 		}
 	}
 	return false
+}
+
+// stripTikzComments 删除未转义 % 至行尾的注释, 保留换行符。
+// % 前的连续反斜杠数为奇数时 (如 \%) 视为转义、不算注释起点; 为偶数
+// (含 0, 如 \\%) 才算注释。verbatim 环境不做特殊处理: 该结果只用于自包含
+// 命令的存在性探测 (不写回文档), 极少数 verbatim 里的 % 被误删仅影响判定,
+// 不会产生错误输出。注释/命令的判定取舍与 tikzSelfContainedEnvs 同类。
+func stripTikzComments(content string) string {
+	var b strings.Builder
+	b.Grow(len(content))
+	i := 0
+	for i < len(content) {
+		if content[i] == '%' {
+			// 统计 % 前连续反斜杠数, 奇数表示 % 被转义。
+			bs := 0
+			for j := i - 1; j >= 0 && content[j] == '\\'; j-- {
+				bs++
+			}
+			if bs%2 == 0 {
+				// 注释起点: 跳到行尾 (保留换行符)。
+				for i < len(content) && content[i] != '\n' {
+					i++
+				}
+				continue
+			}
+		}
+		b.WriteByte(content[i])
+		i++
+	}
+	return b.String()
 }
 
 // selfContainedCmdStart 报告内容是否从位置 0 起就是自包含绘图命令
@@ -1289,15 +1321,15 @@ func tikzShims(p tikzProfile, raw string, pkgs []string) string {
 // tikz-triminos 内部用它做尺寸计算, 缺失时报 "Undefined control sequence"。
 // \fp_eval:n 是 expl3 早已提供的可展开浮点求值, 语义与新版 \fpeval 一致,
 // 因此直接做别名。\ifcsname 守卫未来 bundle 自带 \fpeval 时不重复定义。
-// 保留 \makeatletter/\makeatother: \fpeval 是宏名 (含 @ 风格的 expl3 命令
-// 需要 expl3 语法区, 由 \ExplSyntaxOn 提供), 出语法区后恢复正常 catcode。
-const tikzFpevalShim = `\makeatletter
-\ifcsname fpeval\endcsname\else
+// 不需要 \makeatletter/\makeatother: 块内没有 @ 名字; \ExplSyntaxOn 只是
+// 让 _ / : 取得 letter catcode (expl3 命令名) 所必需。
+// 注入位置在 \usepackage 行之后, 依赖 tikz-triminos 在文档阶段 (而非加载期)
+// 才使用 \fpeval (当前实现如此); 未来上游若在加载期使用, 需把 shim 前移。
+const tikzFpevalShim = `\ifcsname fpeval\endcsname\else
   \ExplSyntaxOn
   \cs_new_eq:NN \fpeval \fp_eval:n
   \ExplSyntaxOff
-\fi
-\makeatother`
+\fi`
 
 // triminosFpevalShim 在包列表含 tikz-triminos 时返回 fpeval shim (带行尾换行),
 // 否则返回空串。只在 tectonic profile 调用 (见 tikzShims)。

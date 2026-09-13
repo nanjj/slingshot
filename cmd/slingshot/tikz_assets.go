@@ -16,7 +16,7 @@ import (
 // 解析 (与 input.tikz 同一机制, 已实测), 从而覆盖/补齐 bundle 版本。
 // xe (latexmk) 用系统 TeX Live 的同名包, 不走这条路径。
 //
-//go:embed tikzassets
+//go:embed tikzassets/*.sty
 var tikzAssets embed.FS
 
 // vendoredPackageFiles 返回当前 profile 与包列表下需要写入工作目录的资产文件名。

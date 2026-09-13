@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -274,6 +275,19 @@ func TestNormalizeTikz(t *testing.T) {
 			name:  "tkztriminos percent continuation untouched",
 			input: "\\tkztriminos{a § b%\n c}",
 			want:  "\\tkztriminos{a § b%\n c}",
+		},
+		{
+			// 注释里的自包含命令不算数: 剥离注释后仍应补外壳。
+			name:  "commented-out figchild command still wrapped",
+			input: "% \\fcBell renders nicely\n\\draw (0,0) -- (1,1);",
+			want:  "\\begin{tikzpicture}\n% \\fcBell renders nicely\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n",
+		},
+		{
+			// 固有取舍: 混合了自包含命令与裸 tikz 的内容无法自动修好
+			// (包一层会嵌套 picture), 保持原样。
+			name:  "mixed self-contained command and raw tikz stays unwrapped",
+			input: "\\fcBell\n\\draw (0,0) -- (1,1);",
+			want:  "\\fcBell\n\\draw (0,0) -- (1,1);",
 		},
 	}
 	for _, tt := range tests {
@@ -1096,6 +1110,15 @@ func TestDetectTikzPackages(t *testing.T) {
 			content: "\\scsnowmannumeral{18882}",
 			want:    []string{"scsnowman"},
 		},
+		{
+			name:    "enumsnowman command loads scsnowman",
+			content: "\\enumsnowman",
+			want:    []string{"scsnowman"},
+		},
+		{
+			name:    "the enumsnowman style in prose is not a command",
+			content: "the enumsnowman style",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1864,20 +1887,122 @@ func TestTriminosFpevalShim(t *testing.T) {
 // TestTikzAssetsEmbedded 验证两份 vendored .sty 都嵌进了二进制,
 // 且确实是对应宏包 (只扫前若干 KB, figchild.sty 有 1.8MB)。
 func TestTikzAssetsEmbedded(t *testing.T) {
-	for name, want := range map[string]string{
-		"figchild.sty":      `\ProvidesPackage{figchild}`,
-		"tikz-triminos.sty": `\ProvidesPackage{tikz-triminos}`,
+	// 大小下限断言防止资产被意外截断 / 替换成占位文件。
+	for name, tc := range map[string]struct {
+		want     string
+		minBytes int
+	}{
+		"figchild.sty":      {`\ProvidesPackage{figchild}`, 1_000_000},
+		"tikz-triminos.sty": {`\ProvidesPackage{tikz-triminos}`, 4096},
 	} {
 		data, err := tikzAssets.ReadFile("tikzassets/" + name)
 		if err != nil {
 			t.Fatalf("reading embedded %s: %v", name, err)
 		}
+		if len(data) < tc.minBytes {
+			t.Errorf("embedded %s is %d bytes, want >= %d", name, len(data), tc.minBytes)
+		}
 		head := data
 		if len(head) > 8192 {
 			head = head[:8192]
 		}
-		if !strings.Contains(string(head), want) {
-			t.Errorf("embedded %s does not contain %q in its first 8KB", name, want)
+		if !strings.Contains(string(head), tc.want) {
+			t.Errorf("embedded %s does not contain %q in its first 8KB", name, tc.want)
 		}
+	}
+}
+
+// TestStripTikzComments 验证注释剥离: 未转义 % 删到行尾 (保留换行),
+// 转义 \% 不算注释; % 前连续反斜杠数为奇数才转义。
+func TestStripTikzComments(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "plain comment", input: "a%c\nb", want: "a\nb"},
+		{name: "escaped percent untouched", input: "a\\%b", want: "a\\%b"},
+		{name: "double backslash is a comment start", input: "a\\\\%b\nc", want: "a\\\\\nc"},
+		{name: "comment at end without newline", input: "a%c", want: "a"},
+		{name: "no percent", input: "a\\b\nc", want: "a\\b\nc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stripTikzComments(tt.input); got != tt.want {
+				t.Errorf("stripTikzComments(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWriteVendoredPackages 验证 tectonic profile 会把命中的 vendored 宏包
+// 写进工作目录 (内容以 \ProvidesPackage 开头), latexmk profile 不写任何文件。
+func TestWriteVendoredPackages(t *testing.T) {
+	dir := t.TempDir()
+	pkgs := []string{"figchild", "tikz-triminos"}
+	if err := writeVendoredPackages(dir, tectonicProfile(), pkgs); err != nil {
+		t.Fatalf("writeVendoredPackages(tectonic) = %v", err)
+	}
+	for name, want := range map[string]string{
+		"figchild.sty":      `\ProvidesPackage{figchild}`,
+		"tikz-triminos.sty": `\ProvidesPackage{tikz-triminos}`,
+	} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("reading written %s: %v", name, err)
+		}
+		if len(data) == 0 {
+			t.Errorf("written %s is empty", name)
+		}
+		if !strings.Contains(string(data), want) {
+			t.Errorf("written %s does not contain %q", name, want)
+		}
+	}
+
+	dir2 := t.TempDir()
+	if err := writeVendoredPackages(dir2, latexmkProfile(), pkgs); err != nil {
+		t.Fatalf("writeVendoredPackages(latexmk) = %v", err)
+	}
+	entries, err := os.ReadDir(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("latexmk profile wrote %d files, want 0", len(entries))
+	}
+}
+
+// TestFigchildLowercaseExceptions 扫描嵌入的 figchild.sty, 断言 \fc* 命令中
+// 不匹配 ^fc[A-Z] 的小写例外恰为 figchildRe 硬编码的 5 个名字; 且这些名字
+// 都被 figchildRe 命中, 而内核 \fcolorbox 不被命中 (正则与上游名单一致)。
+func TestFigchildLowercaseExceptions(t *testing.T) {
+	data, err := tikzAssets.ReadFile("tikzassets/figchild.sty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nameRe := regexp.MustCompile(`\\newcommand\s*\{\\(fc[A-Za-z0-9]*)`)
+	var lower []string
+	seen := make(map[string]bool)
+	for _, m := range nameRe.FindAllStringSubmatch(string(data), -1) {
+		n := m[1]
+		if !seen[n] {
+			seen[n] = true
+			if !regexp.MustCompile(`^fc[A-Z]`).MatchString(n) {
+				lower = append(lower, n)
+			}
+		}
+	}
+	slices.Sort(lower)
+	want := []string{"fcfrog", "fchamburger", "fcpink", "fcsheetA", "fcsheetB"}
+	if !slices.Equal(lower, want) {
+		t.Fatalf("lowercase fc exceptions = %v, want %v", lower, want)
+	}
+	for _, n := range want {
+		if !figchildRe.MatchString(`\` + n) {
+			t.Errorf("figchildRe does not match \\%s", n)
+		}
+	}
+	if figchildRe.MatchString(`\fcolorbox`) {
+		t.Error("figchildRe matches kernel \\fcolorbox, want no match")
 	}
 }
