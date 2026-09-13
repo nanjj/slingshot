@@ -16,6 +16,8 @@ locally** —— 本目录只做原样复制, 任何改动都应在上游进行�
 
 ```
 sha256sum cmd/slingshot/tikzassets/figchild.sty cmd/slingshot/tikzassets/tikz-triminos.sty
+# macOS (coreutils 的 sha256sum 常缺失):
+shasum -a 256 cmd/slingshot/tikzassets/figchild.sty cmd/slingshot/tikzassets/tikz-triminos.sty
 ```
 
 ## 刷新策略

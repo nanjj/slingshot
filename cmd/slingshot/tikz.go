@@ -757,7 +757,7 @@ var tikzTriminosRe = regexp.MustCompile(`\\tkztriminos\b`)
 // 不是 make+items+snowman; 内部 \scsnowmanNumeral (大写 N) 与 \scsnowman@... 不匹配。
 // [^@A-Za-z0-9] 边界排除内部命名空间 \scsnowman@...; \enumsnowman 等玩笑命令
 // 写成带反斜杠的命令 (不再匹配裸词), \pagenumbering{enumsnowman} 另行显式匹配。
-var scsnowmanRe = regexp.MustCompile(`\\scsnowman(?:default|numeral)?(?:[^@A-Za-z0-9]|$)|\\make(?:item|qed|document)snowman(?:[^A-Za-z0-9]|$)|\\usescsnowmanlibrary(?:[^A-Za-z0-9]|$)|\\(?:enumsnowman|makeqedother|makeitemother)\b|\\pagenumbering\s*\{\s*enumsnowman\s*\}`)
+var scsnowmanRe = regexp.MustCompile(`\\scsnowman(?:default|numeral)?(?:[^@A-Za-z0-9]|$)|\\make(?:item|qed|document)snowman(?:[^A-Za-z0-9]|$)|\\usescsnowmanlibrary(?:[^A-Za-z0-9]|$)|\\(?:enumsnowman|makeqedother|makeitemother)(?:[^@A-Za-z0-9]|$)|\\pagenumbering\s*\{\s*enumsnowman\s*\}`)
 
 // tikzExtraPackageRes 是正则匹配的额外包探测——子串匹配无法精确表达的条目。
 // \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
@@ -931,6 +931,9 @@ func selfContainedCmd(content string) bool {
 // 命令的存在性探测 (不写回文档), 极少数 verbatim 里的 % 被误删仅影响判定,
 // 不会产生错误输出。注释/命令的判定取舍与 tikzSelfContainedEnvs 同类。
 func stripTikzComments(content string) string {
+	if !strings.ContainsRune(content, '%') {
+		return content
+	}
 	var b strings.Builder
 	b.Grow(len(content))
 	i := 0
@@ -956,10 +959,14 @@ func stripTikzComments(content string) string {
 }
 
 // selfContainedCmdStart 报告内容是否从位置 0 起就是自包含绘图命令
-// (供 stripOuterTikzShells 判断内层是否该剥离误包外壳; 调用方已 TrimSpace)。
+// (供 stripOuterTikzShells 判断内层是否该剥离误包外壳)。
+// 契约: 先剥离注释 (stripTikzComments) 并 TrimSpace 首尾空白, 再做位置 0
+// 匹配——与 selfContainedCmd 的注释剥离保持一致, 避免"注释里提到命令"与
+// "真实命令"在起点判定上不对称。
 func selfContainedCmdStart(content string) bool {
+	stripped := strings.TrimSpace(stripTikzComments(content))
 	for _, re := range tikzSelfContainedCmdRes {
-		if loc := re.FindStringIndex(content); loc != nil && loc[0] == 0 {
+		if loc := re.FindStringIndex(stripped); loc != nil && loc[0] == 0 {
 			return true
 		}
 	}

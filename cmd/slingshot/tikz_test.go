@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -288,6 +290,13 @@ func TestNormalizeTikz(t *testing.T) {
 			name:  "mixed self-contained command and raw tikz stays unwrapped",
 			input: "\\fcBell\n\\draw (0,0) -- (1,1);",
 			want:  "\\fcBell\n\\draw (0,0) -- (1,1);",
+		},
+		{
+			// 外层壳里内层以注释行开头, 随后才是真实 figchild 命令:
+			// selfContainedCmdStart 先剥注释再判定, 因此仍能识别并剥壳。
+			name:  "shell around commented+real figchild stripped",
+			input: "\\begin{tikzpicture}\n% \\fcBell\n\\fcBell\n\\end{tikzpicture}\n",
+			want:  "% \\fcBell\n\\fcBell",
 		},
 	}
 	for _, tt := range tests {
@@ -1925,6 +1934,9 @@ func TestStripTikzComments(t *testing.T) {
 		{name: "double backslash is a comment start", input: "a\\\\%b\nc", want: "a\\\\\nc"},
 		{name: "comment at end without newline", input: "a%c", want: "a"},
 		{name: "no percent", input: "a\\b\nc", want: "a\\b\nc"},
+		{name: "comment at line start", input: "%c\nb", want: "\nb"},
+		{name: "three backslashes then percent is escaped", input: "a\\\\\\%b", want: "a\\\\\\%b"},
+		{name: "crlf comment drops cr too", input: "a%c\r\nb", want: "a\nb"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1972,6 +1984,12 @@ func TestWriteVendoredPackages(t *testing.T) {
 	}
 }
 
+// fcNameRe 从 figchild.sty 提取 \fc* 命令名, 容忍 \newcommand* 与可选花括号。
+var fcNameRe = regexp.MustCompile(`\\newcommand\*?\s*\{?\\?(fc[A-Za-z0-9]*)`)
+
+// fcCamelRe 是 figchildRe 编码的 CamelCase 形式 (fc + 大写)。
+var fcCamelRe = regexp.MustCompile(`^fc[A-Z]`)
+
 // TestFigchildLowercaseExceptions 扫描嵌入的 figchild.sty, 断言 \fc* 命令中
 // 不匹配 ^fc[A-Z] 的小写例外恰为 figchildRe 硬编码的 5 个名字; 且这些名字
 // 都被 figchildRe 命中, 而内核 \fcolorbox 不被命中 (正则与上游名单一致)。
@@ -1980,14 +1998,13 @@ func TestFigchildLowercaseExceptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nameRe := regexp.MustCompile(`\\newcommand\s*\{\\(fc[A-Za-z0-9]*)`)
 	var lower []string
 	seen := make(map[string]bool)
-	for _, m := range nameRe.FindAllStringSubmatch(string(data), -1) {
+	for _, m := range fcNameRe.FindAllStringSubmatch(string(data), -1) {
 		n := m[1]
 		if !seen[n] {
 			seen[n] = true
-			if !regexp.MustCompile(`^fc[A-Z]`).MatchString(n) {
+			if !fcCamelRe.MatchString(n) {
 				lower = append(lower, n)
 			}
 		}
@@ -2004,5 +2021,31 @@ func TestFigchildLowercaseExceptions(t *testing.T) {
 	}
 	if figchildRe.MatchString(`\fcolorbox`) {
 		t.Error("figchildRe matches kernel \\fcolorbox, want no match")
+	}
+}
+
+// TestTikzAssetsSHA256 把 tikzassets/README.md 记录的 SHA-256 变成测试不变量:
+// 从 README 提取全部 64 位 hex token, 断言两份嵌入 .sty 的 sha256 都在其中
+// (README 表与资产由测试互相锁定, 刷新资产时必须同步哈希)。
+func TestTikzAssetsSHA256(t *testing.T) {
+	readme, err := os.ReadFile("tikzassets/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexRe := regexp.MustCompile(`\b[0-9a-f]{64}\b`)
+	documented := make(map[string]bool)
+	for _, m := range hexRe.FindAllString(string(readme), -1) {
+		documented[m] = true
+	}
+	for _, name := range []string{"figchild.sty", "tikz-triminos.sty"} {
+		data, err := tikzAssets.ReadFile("tikzassets/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		got := hex.EncodeToString(sum[:])
+		if !documented[got] {
+			t.Errorf("sha256(%s) = %s is not recorded in tikzassets/README.md", name, got)
+		}
 	}
 }
