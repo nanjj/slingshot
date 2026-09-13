@@ -1016,7 +1016,11 @@ func ensureNewStyle(content string) string {
 }
 
 // selfContainedStart 报告内容是否以自包含 TikZ 环境开头。
+// 契约与 selfContainedCmdStart 一致: 先剥离注释 (stripTikzComments) 并
+// TrimSpace 首尾空白, 再做前缀判定——避免"注释里提到环境"抑制
+// stripOuterTikzShells 的剥壳。剥离只用于判定, 输出仍保留原注释。
 func selfContainedStart(content string) bool {
+	content = strings.TrimSpace(stripTikzComments(content))
 	for _, env := range tikzSelfContainedEnvs {
 		if strings.HasPrefix(content, env) {
 			return true

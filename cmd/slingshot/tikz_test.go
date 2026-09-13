@@ -298,6 +298,13 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\begin{tikzpicture}\n% \\fcBell\n\\fcBell\n\\end{tikzpicture}\n",
 			want:  "% \\fcBell\n\\fcBell",
 		},
+		{
+			// 外层壳里内层以注释行开头, 随后才是真实 circuitikz 环境:
+			// selfContainedStart 同样先剥注释再判定, 因此仍能识别并剥壳。
+			name:  "shell around commented+real circuitikz env stripped",
+			input: "\\begin{tikzpicture}\n% my circuit\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}\n\\end{tikzpicture}\n",
+			want:  "% my circuit\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1127,6 +1134,15 @@ func TestDetectTikzPackages(t *testing.T) {
 		{
 			name:    "the enumsnowman style in prose is not a command",
 			content: "the enumsnowman style",
+		},
+		{
+			name:    "enumsnowman internal namespace with at sign",
+			content: "\\enumsnowman@internal",
+		},
+		{
+			name:    "enumsnowman followed by underscore is the command",
+			content: "\\enumsnowman_foo",
+			want:    []string{"scsnowman"},
 		},
 	}
 	for _, tt := range tests {
@@ -2032,20 +2048,45 @@ func TestTikzAssetsSHA256(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hexRe := regexp.MustCompile(`\b[0-9a-f]{64}\b`)
-	documented := make(map[string]bool)
-	for _, m := range hexRe.FindAllString(string(readme), -1) {
-		documented[m] = true
+	// 逐文件映射: 解析 README 表行的 `name.sty` ... `sha256`, 断言每份
+	// 嵌入 .sty 的 sha256 与该行记录的哈希一致 (防复制粘贴时把两个哈希互换)。
+	rowRe := regexp.MustCompile("`([\\w-]+\\.sty)`[^\\n]*?`([0-9a-f]{64})`")
+	documented := make(map[string]string)
+	for _, m := range rowRe.FindAllStringSubmatch(string(readme), -1) {
+		documented[m[1]] = m[2]
 	}
-	for _, name := range []string{"figchild.sty", "tikz-triminos.sty"} {
+	if len(documented) == 0 {
+		t.Fatal("no .sty sha256 rows parsed from tikzassets/README.md")
+	}
+	// 以嵌入资产为准逐一遍历 (而非遍历解析结果): 若某个 .sty 的行没被解析
+	// 到, 这里会因查不到 documented 而失败, 避免"静默跳过一行"仍通过。
+	entries, err := tikzAssets.ReadDir("tikzassets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || filepath.Ext(name) != ".sty" {
+			continue
+		}
+		checked++
+		want, ok := documented[name]
+		if !ok {
+			t.Errorf("embedded %s has no sha256 row in tikzassets/README.md", name)
+			continue
+		}
 		data, err := tikzAssets.ReadFile("tikzassets/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		sum := sha256.Sum256(data)
 		got := hex.EncodeToString(sum[:])
-		if !documented[got] {
-			t.Errorf("sha256(%s) = %s is not recorded in tikzassets/README.md", name, got)
+		if got != want {
+			t.Errorf("sha256(%s) = %s, README records %s", name, got, want)
 		}
+	}
+	if checked != len(documented) {
+		t.Errorf("checked %d embedded .sty, README documents %d", checked, len(documented))
 	}
 }
