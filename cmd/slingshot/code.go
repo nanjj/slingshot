@@ -144,15 +144,19 @@ Flags:
 func (c *cmdCodeServe) run(ctx context.Context) error {
 	opts := c.opts
 
-	// 1. Logger — text handler to stderr, gated by configured level.
-	// clog.Info/Warn/Error writes to slog.Default() AND to the active span,
-	// eliminating the need for separate span.LogKV calls.
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: parseLogLevel(opts.logLevel),
-	})))
+	// 1. Logger — stderr diagnostics for the server process, gated by
+	// --log-level: the MCP SDK logger and the middleware messages.
+	// clog events are span-only (v0.3.1) and never pass through slog;
+	// the composed span handler routes slog records that carry a span
+	// context to that span as well.
+	slog.SetDefault(slog.New(slog.NewMultiHandler(
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: parseLogLevel(opts.logLevel),
+		}),
+		clog.NewSpanHandler(),
+	)))
 
-	// Log server initialization to both span and stderr.
-	// At default log level "warn", clog.Info only writes to span (stderr filtered).
+	// Log server initialization to the active span.
 	clog.Info(ctx, "code_serve_init",
 		"projectRoot", opts.projectRoot,
 		"dbPath", opts.dbPath,

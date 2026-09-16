@@ -6,7 +6,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/nanjj/clog v0.3.0
+	github.com/nanjj/clog v0.3.1
 	github.com/nanjj/i18n v0.1.1
 	github.com/odvcencio/gotreesitter v0.20.2
 	github.com/opentracing/opentracing-go v1.2.0
