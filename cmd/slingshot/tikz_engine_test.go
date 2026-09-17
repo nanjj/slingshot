@@ -526,13 +526,14 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 		{name: "tectonic", avail: tectonicAvailable,
 			reason: "tectonic unavailable"},
 	}
+	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
 	for _, e := range engines {
 		t.Run(e.name, func(t *testing.T) {
 			if err := e.avail(); err != nil {
 				t.Skipf("%s: %v", e.reason, err)
-			}
-			if _, err := exec.LookPath("mutool"); err != nil {
-				t.Skipf("mutool unavailable: %v", err)
 			}
 			in := filepath.Join(t.TempDir(), "tcblisting_figchild.tikz")
 			out := filepath.Join(t.TempDir(), "tcblisting_figchild.png")

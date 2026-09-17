@@ -1545,18 +1545,18 @@ const tcblistingNoWrapStyle = "slingshot nowrap"
 // 幂等: 选项里已含样式名时原样跳过。\begin{tcblisting} 后没有 '{' 参数、或找不到
 // 配对的 \end{tcblisting} 时, 该环境原样跳过, 不报错。多个环境各自独立判定。
 //
-// 已知取舍 (与 stripTikzComments 的文风一致): 扫描按字面 \begin{tcblisting} /
-// \end{tcblisting} 进行, 注释或 verbatim 里的伪环境标记可能被误认; 正文判定复用
-// selfContainedCmd / selfContainedStart, 二者内部都先经 stripTikzComments, 因此
-// "% \fcBell" 这类注释不计入命中。极端情形 best-effort, 不崩即可。
+// 注释感知 (escape 规则同 stripTikzComments): 定位 \begin{tcblisting} /
+// \end{tcblisting} 标记与扫描选项花括号时, 都跳过未转义 % 至行尾的注释区
+// (nextMarkerOutsideComment / matchBalancedBrace), 因此注释里的伪环境标记与
+// 花括号不参与判定; 正文判定复用 selfContainedCmd / selfContainedStart, 二者
+// 内部同样先经 stripTikzComments, 所以 "% \fcBell" 这类注释不计入命中。
+// verbatim 环境不做特殊处理 (与 stripTikzComments 的既有取舍一致): 其中的 % 与
+// 伪标记可能被误认, 极端情形 best-effort, 不崩即可。
 func rewriteSelfContainedTcblistings(content string) string {
 	const (
 		begin = `\begin{tcblisting}`
 		end   = `\end{tcblisting}`
 	)
-	if !strings.Contains(content, begin) {
-		return content
-	}
 	var b strings.Builder
 	b.Grow(len(content))
 	pos := 0
@@ -1622,19 +1622,61 @@ func rewriteSelfContainedTcblistings(content string) string {
 }
 
 // hasNoWrapStyle 报告 tcblisting 选项串 opts 里是否有与 tcblistingNoWrapStyle
-// **全等**的独立选项。pgfkeys 以逗号分隔选项, 因此按逗号切分、逐段 TrimSpace
-// 后比较, 不能做子串匹配: title={About slingshot nowrap} 这类**值**里出现同样
-// 文字并不等于引用了该样式, 子串匹配会误命中而跳过注入 (缺陷回归)。
-// 切分不解析花括号: 花括号内的逗号会把值切碎, 但碎片的 TrimSpace 结果要么带
-// 残留字符 (如 "slingshot nowrap}"), 要么是 "key=..." 前缀, 都不等于样式名,
-// 因此只会漏判不会误判; 而样式项本身是独立的裸选项 (无花括号), 不会被切碎。
+// 等价的独立选项。pgfkeys 以逗号分隔选项, 但**花括号内的逗号不是分隔符**, 因此
+// 按花括号深度感知地切分 (splitPgfKeysOptions), 再对每段剥掉一层等价的外层花括号
+// (trimOptionBraces: pgfkeys 里 {name} 与 name 等价), TrimSpace 后与样式名全等比较。
+// 不能做子串匹配: title={About slingshot nowrap} 这类**值**里出现同样文字并不等于
+// 引用了该样式, 子串匹配会误命中而跳过注入 (缺陷回归); 也不能纯按逗号切分:
+// title={a,slingshot nowrap,b} 会切出恰好等于样式名的中段, 同样误命中。
+// 未配平的花括号 / \{ 转义只会让切分把过多内容并进同一段, 方向是"多注入"
+// (安全), 不会产生误命中。
 func hasNoWrapStyle(opts string) bool {
-	for _, opt := range strings.Split(opts, ",") {
-		if strings.TrimSpace(opt) == tcblistingNoWrapStyle {
+	for _, opt := range splitPgfKeysOptions(opts) {
+		if trimOptionBraces(strings.TrimSpace(opt)) == tcblistingNoWrapStyle {
 			return true
 		}
 	}
 	return false
+}
+
+// splitPgfKeysOptions 按 pgfkeys 规则把选项串切成各选项段: 只在花括号深度为 0 时
+// 于逗号处分割。花括号配平 ({ 深度 +1, } 深度 -1); 反斜杠转义的 \{ / \} 不参与
+// 深度计数。未配平的花括号会让剩余内容并入同一段 (切分保守, 不会误切出伪样式名)。
+func splitPgfKeysOptions(opts string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i := 0; i < len(opts); i++ {
+		switch opts[i] {
+		case '\\':
+			i++ // 跳过被转义的下一个字符 (\{ / \} / \\ 都按此处理)。
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				out = append(out, opts[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, opts[start:])
+}
+
+// trimOptionBraces 剥掉选项段最外层等价的成对花括号 (可嵌套), 使 {slingshot nowrap}
+// 与 slingshot nowrap 等值——pgfkeys 对整段花括号包裹的 key 也如此处理。
+// 只有首个 '{' 的配对 '}' 恰好落在段尾时才剥离; 否则原样返回。
+func trimOptionBraces(s string) string {
+	for len(s) >= 2 && s[0] == '{' {
+		close, ok := matchBalancedBrace(s, 0)
+		if !ok || close != len(s)-1 {
+			break
+		}
+		s = strings.TrimSpace(s[1:close])
+	}
+	return s
 }
 
 // nextMarkerOutsideComment 返回 s 中从 from 起 sub 首次出现的下标, 跳过 TeX

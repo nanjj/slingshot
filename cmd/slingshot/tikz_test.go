@@ -2086,6 +2086,34 @@ func TestRewriteSelfContainedTcblistings(t *testing.T) {
 			in:   "% \\begin{tcblisting}{}\n\\begin{tcblisting}{title=t}\n\\fcBell\n\\end{tcblisting}\n",
 			want: "% \\begin{tcblisting}{}\n\\begin{tcblisting}{slingshot nowrap, title=t}\n\\fcBell\n\\end{tcblisting}\n",
 		},
+		{
+			// 花括号深度感知: 花括号值里的逗号不切分, 值内的样式名不算引用。
+			name: "style name inside a braced value list",
+			in:   "\\begin{tcblisting}{title={a,slingshot nowrap,b}}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title={a,slingshot nowrap,b}}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// pgfkeys 里 {name} 与 name 等价: 整体被花括号包住的样式项也算引用。
+			name: "braced style name first",
+			in:   "\\begin{tcblisting}{{slingshot nowrap}, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{{slingshot nowrap}, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			name: "braced style name middle",
+			in:   "\\begin{tcblisting}{title=t, {slingshot nowrap}, other=x}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title=t, {slingshot nowrap}, other=x}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			name: "braced style name last",
+			in:   "\\begin{tcblisting}{title=t, {slingshot nowrap}}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title=t, {slingshot nowrap}}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 注释里的 \end 不是环境结尾: 正文继续到真实 \end, 注释原样保留。
+			name: "commented end marker",
+			in:   "\\begin{tcblisting}{}\n% \\end{tcblisting}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap}\n% \\end{tcblisting}\n\\fcBell\n\\end{tcblisting}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2118,6 +2146,14 @@ func TestHasNoWrapStyle(t *testing.T) {
 		{name: "prefix only", opts: "slingshot nowrap extra", want: false},
 		{name: "case sensitive", opts: "Slingshot Nowrap", want: false},
 		{name: "other style", opts: "tikz lower, sidebyside", want: false},
+		// 花括号深度感知: 值里的逗号不切分, 值里的样式名不算引用 (有害方向)。
+		{name: "style name inside braced value list", opts: "title={a,slingshot nowrap,b}", want: false},
+		{name: "value with comma and keyword", opts: "title={x, slingshot nowrap, y}, other=z", want: false},
+		// pgfkeys 里 {name} 与 name 等价。
+		{name: "braced style name first", opts: "{slingshot nowrap}, title=t", want: true},
+		{name: "braced style name middle", opts: "title=t, {slingshot nowrap}, other=x", want: true},
+		{name: "braced style name last", opts: "title=t, {slingshot nowrap}", want: true},
+		{name: "nested braces style name", opts: "title=t, {{slingshot nowrap}}", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2125,6 +2161,100 @@ func TestHasNoWrapStyle(t *testing.T) {
 				t.Errorf("hasNoWrapStyle(%q) = %v, want %v", tt.opts, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestNextMarkerOutsideComment 验证标记定位跳过 TeX 注释区:
+// 注释里的伪标记不算数, 转义 % 不是注释起点, 且反斜杠游程的回看要跨越 from 边界。
+func TestNextMarkerOutsideComment(t *testing.T) {
+	const begin = `\begin{tcblisting}`
+	tests := []struct {
+		name string
+		s    string
+		sub  string
+		from int
+		want int
+	}{
+		{name: "plain", s: "x" + begin + "y", sub: begin, from: 0, want: 1},
+		{
+			// 评审场景: 注释里的 begin 被跳过, 返回真实 begin 的下标。
+			name: "marker inside comment skipped",
+			s:    "% " + begin + "{}\n" + begin + "{}",
+			sub:  begin, from: 0, want: 23,
+		},
+		{
+			// \% 是转义百分号, 不是注释起点: begin 紧跟其后, 下标 2。
+			name: "escaped percent is not a comment",
+			s:    `\%` + begin,
+			sub:  begin, from: 0, want: 2,
+		},
+		{
+			// \\% 是注释起点 (两个反斜杠, 偶数): 整个余下内容都在注释里,
+			// 因此找不到标记。反斜杠游程从下标 0 起、from=1, 回看必须跨越
+			// from 边界才能数出 2 个 (只看 from 之后会误判为 1 个=转义)。
+			name: "even backslashes cross from boundary",
+			s:    `\\%` + begin,
+			sub:  begin, from: 1, want: -1,
+		},
+		{name: "not found", s: "nothing here", sub: begin, from: 0, want: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := nextMarkerOutsideComment(tt.s, tt.sub, tt.from); got != tt.want {
+				t.Errorf("nextMarkerOutsideComment(%q, %q, %d) = %d, want %d",
+					tt.s, tt.sub, tt.from, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSplitPgfKeysOptions 验证选项串按 pgfkeys 规则切分: 只在花括号深度为 0
+// 的逗号处分割; 花括号内的逗号不切。
+func TestSplitPgfKeysOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{name: "empty", in: "", want: []string{""}},
+		{name: "single", in: "tikz lower", want: []string{"tikz lower"}},
+		{name: "two", in: "a, b", want: []string{"a", " b"}},
+		{name: "comma in braces", in: "title={a,b}, c", want: []string{"title={a,b}", " c"}},
+		{name: "nested braces", in: "title={a,{b,c},d},e", want: []string{"title={a,{b,c},d}", "e"}},
+		// \{ 是转义花括号, 不抬升深度: 其中的逗号仍是分隔符。
+		{name: "escaped brace", in: `title=\{a,b\}, c`, want: []string{`title=\{a`, `b\}`, " c"}},
+		{name: "unbalanced merges", in: "title={a,b, c", want: []string{"title={a,b, c"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitPgfKeysOptions(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("splitPgfKeysOptions(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("splitPgfKeysOptions(%q) = %q, want %q", tt.in, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestTrimOptionBraces 验证剥掉选项段最外层等价的成对花括号。
+func TestTrimOptionBraces(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{in: "slingshot nowrap", want: "slingshot nowrap"},
+		{in: "{slingshot nowrap}", want: "slingshot nowrap"},
+		{in: "{{slingshot nowrap}}", want: "slingshot nowrap"},
+		{in: "{ slingshot nowrap }", want: "slingshot nowrap"},
+		{in: "{a} extra", want: "{a} extra"}, // 配对 '}' 不在段尾, 不剥
+		{in: "{a", want: "{a"},
+		{in: "", want: ""},
+	}
+	for _, tt := range tests {
+		if got := trimOptionBraces(tt.in); got != tt.want {
+			t.Errorf("trimOptionBraces(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
 
