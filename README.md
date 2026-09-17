@@ -47,8 +47,9 @@ slingshot
 `tikzpicture` / `circuitikz` / `tikzcd` / `forest` 环境，也可以只是环境内部的命令
 （自动补 `tikzpicture` 外壳）；`\usetikzlibrary` 与显式 `\usepackage` 会被提升到导言区。
 宏包按内容自动加载（tkz-euclide / tikz-cd / pgfplots / circuitikz / tikzlings / bearwear /
-tikzducks / tikzpeople / figchild / tikz-triminos / scsnowman / tcolorbox 等）；手册常用的 `tcblisting` 盒子会自动补上 tcolorbox 的 `listings` 库与
-`tikz lower`（盒子里的 TikZ 代码必须在 `tikzpicture` 内执行）。
+tikzducks / tikzpeople / figchild / tikz-triminos / scsnowman / tcolorbox 等）；手册常用的
+`tcblisting` 盒子会自动补上 tcolorbox 的 `listings` 库、`tikz lower`（盒子里的 TikZ 代码必须
+在 `tikzpicture` 内执行）与手册同款的左右布局（代码在左、编译结果在右并居中）。
 
 ```bash
 slingshot tikz fig.tikz fig.png     # latexmk -xelatex → mutool 栅格化 150dpi

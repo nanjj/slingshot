@@ -122,10 +122,15 @@ tikzlings 的 pic 语法（`pic{bear}` / `pic[coati/body=blue, scale=0.5]{coati}
 pgfkeys 报 "I do not know the key '/tikz/pics/bear'"；legacy 后端要加载的动物子宏包由
 `tikzlingsPicPackages` 提供。
 手册示例常用的 `tcblisting` 盒子由 `tcblistingSetup` 注入 `\tcbuselibrary{listings}` +
-`\tcbset{tikz lower}`：tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
-内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；
-`tikzSelfContainedEnvs` 同时收录 `tcblisting`，避免再套外层 tikzpicture（套了会被 pgf
-包围盒裁切）。两个后端都支持（2021 bundle 自带 tcolorbox + listings）。
+`\tcbset{tikz lower, sidebyside, center lower, righthand width=5.7cm, sidebyside gap=10pt,
+lower separated=false}`：tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
+内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；sidebyside
+系列选项复刻手册盒内的左右布局（代码在左、编译结果在右并居中、无虚线分隔，取值来自
+tikzducks-doc-settings.sty / tikzlings-doc-settings.sty 的 \tcbset）；注入的只是默认值，
+片段自己的 `\tcbset` / 盒子实例选项（如 `righthand width=4cm`）在其后的正文中执行，总是
+优先。`tikzSelfContainedEnvs` 同时收录 `tcblisting`，避免
+再套外层 tikzpicture（套了会被 pgf 包围盒裁切）。两个后端都支持（2021 bundle 自带
+tcolorbox + listings）。
 
 pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|zy> plane at
 <axis>=` 与裸 `canvas is plane` 坐标系/选项，由 `tikzExtraLibraries` 的内容特征正则自动加载

@@ -58,6 +58,11 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\begin{tcblisting}{title={Basic}}\n\\marmot\n\\end{tcblisting}\n",
 		},
 		{
+			name:  "snippet tcbset before tcblisting kept, not wrapped",
+			input: "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}\n",
+			want:  "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}\n",
+		},
+		{
 			name:  "axis still wrapped (needs tikzpicture)",
 			input: "\\begin{axis}\\addplot {x};\n\\end{axis}",
 			want:  "\\begin{tikzpicture}\n\\begin{axis}\\addplot {x};\n\\end{axis}\n\\end{tikzpicture}\n",
@@ -1745,7 +1750,8 @@ func TestTikzShims(t *testing.T) {
 }
 
 // TestTcblistingSetup 验证 tcblisting 的 tcolorbox 配置注入条件:
-// 必须同时命中 tcblisting 与 tcolorbox 宏包, 否则返回空串。
+// 必须同时命中 tcblisting 与 tcolorbox 宏包, 否则返回空串; 命中时注入
+// listings 库、tikz lower 与手册同款 sidebyside 左右布局选项。
 func TestTcblistingSetup(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1757,7 +1763,16 @@ func TestTcblistingSetup(t *testing.T) {
 			name: "tcblisting with tcolorbox",
 			raw:  "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
 			pkgs: []string{"tcolorbox", "tikzlings-marmots"},
-			want: "\\tcbuselibrary{listings}\n\\tcbset{tikz lower}\n",
+			want: `\tcbuselibrary{listings}
+\tcbset{
+  tikz lower,
+  sidebyside,
+  center lower,
+  righthand width=5.7cm,
+  sidebyside gap=10pt,
+  lower separated=false,
+}
+`,
 		},
 		{
 			name: "plain tikz needs nothing",
@@ -1768,6 +1783,21 @@ func TestTcblistingSetup(t *testing.T) {
 			name: "tcblisting without tcolorbox loaded",
 			raw:  "\\begin{tcblisting}{}x\\end{tcblisting}",
 			pkgs: []string{"tikz"},
+		},
+		{
+			name: "snippet tcbset does not suppress defaults",
+			raw:  "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}",
+			pkgs: []string{"tcolorbox"},
+			want: `\tcbuselibrary{listings}
+\tcbset{
+  tikz lower,
+  sidebyside,
+  center lower,
+  righthand width=5.7cm,
+  sidebyside gap=10pt,
+  lower separated=false,
+}
+`,
 		},
 	}
 	for _, tt := range tests {

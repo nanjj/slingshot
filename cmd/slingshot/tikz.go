@@ -49,7 +49,8 @@ Packages are loaded automatically by content detection (tkz-euclide,
 tikz-cd, pgfplots, circuitikz, tikzlings, forest, ...); explicit \usepackage
 lines in the input are hoisted into the preamble. A tcblisting documentation
 box loads tcolorbox with the listings library and \tcbset{tikz lower}, so
-TikZ code inside the box is executed in a picture.
+TikZ code inside the box is executed in a picture; the box is laid out side
+by side like the package manuals (code left, compiled result right).
 
 The output format is determined by the output file extension.
 Pipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript
@@ -1387,7 +1388,14 @@ func tikzlingsPicShim(content string) string {
 //     tikzpicture 内安装 \path / \draw / scope 等命令, 而 tcblisting 的 text
 //     部分默认在 tikzpicture 之外, \marmot 这类以 \begin{scope} 开头的宏会报
 //     "Environment scope undefined"; tikzlings 手册的 preamble 里正是
-//     \tcbset{tikz lower} (tikzlings-doc.tex)。
+//     \tcbset{tikz lower} (tikzlings-doc.tex);
+//   - sidebyside 系列选项复刻手册盒内的左右布局: 代码在左, "text" (编译结果)
+//     在右并居中, 两半之间没有虚线分隔。取值取自手册自己的 preamble
+//     (tikzducks-doc-settings.sty / tikzlings-doc-settings.sty 的 \tcbset:
+//     sidebyside, center lower, righthand width=5.7cm, sidebyside gap=10pt,
+//     lower separated=false)。这些都是默认值: 注入在导言区执行, 片段
+//     自己的 \tcbset 与盒子实例选项 (如 righthand width=4cm) 在其后的
+//     正文中执行 (晚于导言区), 因此用户显式设置总是优先。
 //
 // 仅当内容使用 tcblisting 且 tcolorbox 确实会被加载时注入。
 func tcblistingSetup(raw string, pkgs []string) string {
@@ -1397,7 +1405,16 @@ func tcblistingSetup(raw string, pkgs []string) string {
 	if !slices.Contains(pkgs, "tcolorbox") {
 		return ""
 	}
-	return "\\tcbuselibrary{listings}\n\\tcbset{tikz lower}\n"
+	return `\tcbuselibrary{listings}
+\tcbset{
+  tikz lower,
+  sidebyside,
+  center lower,
+  righthand width=5.7cm,
+  sidebyside gap=10pt,
+  lower separated=false,
+}
+`
 }
 
 // tikzDocColors 是 "文档局部颜色 → 缺失定义" 的兜底表, 与 ensureNewStyle 同类:
