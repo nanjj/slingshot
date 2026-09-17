@@ -989,9 +989,11 @@ func selfContainedCmd(content string) bool {
 
 // stripTikzComments 删除未转义 % 至行尾的注释, 保留换行符。
 // % 前的连续反斜杠数为奇数时 (如 \%) 视为转义、不算注释起点; 为偶数
-// (含 0, 如 \\%) 才算注释。verbatim 环境不做特殊处理: 该结果只用于自包含
-// 命令的存在性探测 (不写回文档), 极少数 verbatim 里的 % 被误删仅影响判定,
-// 不会产生错误输出。注释/命令的判定取舍与 tikzSelfContainedEnvs 同类。
+// (含 0, 如 \\%) 才算注释。转义判定统一走 escapedPercent, 与
+// splitPgfKeysOptions / matchBalancedBrace / nextMarkerOutsideComment 共用同一规则。
+// verbatim 环境不做特殊处理: 该结果只用于自包含命令的存在性探测 (不写回文档),
+// 极少数 verbatim 里的 % 被误删仅影响判定, 不会产生错误输出。注释/命令的判定
+// 取舍与 tikzSelfContainedEnvs 同类。
 func stripTikzComments(content string) string {
 	if !strings.ContainsRune(content, '%') {
 		return content
@@ -1000,19 +1002,12 @@ func stripTikzComments(content string) string {
 	b.Grow(len(content))
 	i := 0
 	for i < len(content) {
-		if content[i] == '%' {
-			// 统计 % 前连续反斜杠数, 奇数表示 % 被转义。
-			bs := 0
-			for j := i - 1; j >= 0 && content[j] == '\\'; j-- {
-				bs++
+		if content[i] == '%' && !escapedPercent(content, i) {
+			// 注释起点: 跳到行尾 (保留换行符)。
+			for i < len(content) && content[i] != '\n' {
+				i++
 			}
-			if bs%2 == 0 {
-				// 注释起点: 跳到行尾 (保留换行符)。
-				for i < len(content) && content[i] != '\n' {
-					i++
-				}
-				continue
-			}
+			continue
 		}
 		b.WriteByte(content[i])
 		i++
@@ -1628,8 +1623,11 @@ func rewriteSelfContainedTcblistings(content string) string {
 // 不能做子串匹配: title={About slingshot nowrap} 这类**值**里出现同样文字并不等于
 // 引用了该样式, 子串匹配会误命中而跳过注入 (缺陷回归); 也不能纯按逗号切分:
 // title={a,slingshot nowrap,b} 会切出恰好等于样式名的中段, 同样误命中。
-// 未配平的花括号 / \{ 转义只会让切分把过多内容并进同一段, 方向是"多注入"
-// (安全), 不会产生误命中。
+// 保证 (有害方向是"误命中而跳过注入, 导致内容静默丢失"): 在已建模的 pgfkeys 语法
+// (花括号分组、\{ \} 字面花括号、% 注释、{name} 外层花括号等价) 下, 值里的同名
+// 文字不会被误判为样式引用。残差: [...] 可选参数组与其他 pgfkeys handler 语法未建模,
+// 若逗号只由这类语法"保护", 仍可能切出恰等于样式名的片段 (误命中); 与
+// splitPgfKeysOptions 的说明一致。
 func hasNoWrapStyle(opts string) bool {
 	for _, opt := range splitPgfKeysOptions(opts) {
 		if trimOptionBraces(strings.TrimSpace(opt)) == tcblistingNoWrapStyle {
@@ -1639,14 +1637,42 @@ func hasNoWrapStyle(opts string) bool {
 	return false
 }
 
-// splitPgfKeysOptions 按 pgfkeys 规则把选项串切成各选项段: 只在花括号深度为 0 时
-// 于逗号处分割。花括号配平 ({ 深度 +1, } 深度 -1); 反斜杠转义的 \{ / \} 不参与
-// 深度计数。未配平的花括号会让剩余内容并入同一段 (切分保守, 不会误切出伪样式名)。
+// escapedPercent 报告 s[i] (必须为 '%') 是否为被转义的百分号 (\%)。
+// 规则: 统计 % 前连续反斜杠数, 奇数表示 % 被转义 (\%); 偶数 (含 0, 如 \\%)
+// 表示注释起点。四个扫描 helper 共用这一判定, 必须保持一致:
+// stripTikzComments / splitPgfKeysOptions / matchBalancedBrace /
+// nextMarkerOutsideComment。
+func escapedPercent(s string, i int) bool {
+	bs := 0
+	for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
+		bs++
+	}
+	return bs%2 == 1
+}
+
+// splitPgfKeysOptions 按 pgfkeys 规则把选项串切成各选项段: 只在花括号深度为 0
+// 时于逗号处分割。扫描契约必须与 matchBalancedBrace / nextMarkerOutsideComment /
+// stripTikzComments 一致 (本系列评审问题都源于这些 helper 的规则失配):
+//   - 花括号配平 ({ 深度 +1, } 深度 -1), 嵌套逗号不切分;
+//   - 反斜杠转义的 \{ / \} 不抬升深度 (与 pgfkeys 把它们当字面花括号一致),
+//     因此"字面花括号"里的逗号仍会切分 —— 这是正确行为, 不是保守合并;
+//   - 未转义 % 至行尾为注释, 其中的逗号不切分; 注释只跳过、不删字节, 位置不变;
+//     转义判定同 escapedPercent。
+//
+// 未建模: [...] 可选参数组与其他 pgfkeys handler 语法。若逗号只由这类未建模语法
+// "保护", 仍可能切出恰等于样式名的片段 —— 这是已知残差, 见 hasNoWrapStyle。
 func splitPgfKeysOptions(opts string) []string {
 	var out []string
 	depth, start := 0, 0
 	for i := 0; i < len(opts); i++ {
 		switch opts[i] {
+		case '%':
+			if !escapedPercent(opts, i) {
+				// 注释起点: 跳到行尾 (保留换行符), 该区间内的逗号不切分。
+				for i < len(opts) && opts[i] != '\n' {
+					i++
+				}
+			}
 		case '\\':
 			i++ // 跳过被转义的下一个字符 (\{ / \} / \\ 都按此处理)。
 		case '{':
@@ -1668,6 +1694,8 @@ func splitPgfKeysOptions(opts string) []string {
 // trimOptionBraces 剥掉选项段最外层等价的成对花括号 (可嵌套), 使 {slingshot nowrap}
 // 与 slingshot nowrap 等值——pgfkeys 对整段花括号包裹的 key 也如此处理。
 // 只有首个 '{' 的配对 '}' 恰好落在段尾时才剥离; 否则原样返回。
+// 配对扫描直接复用 matchBalancedBrace, 因此花括号深度、\{ \} 转义与 % 注释规则
+// 与 splitPgfKeysOptions / nextMarkerOutsideComment 完全一致。
 func trimOptionBraces(s string) string {
 	for len(s) >= 2 && s[0] == '{' {
 		close, ok := matchBalancedBrace(s, 0)
@@ -1681,24 +1709,21 @@ func trimOptionBraces(s string) string {
 
 // nextMarkerOutsideComment 返回 s 中从 from 起 sub 首次出现的下标, 跳过 TeX
 // 注释区里的伪标记; 找不到返回 -1。注释规则同 stripTikzComments: 未转义 % 至
-// 行尾为注释 (% 前连续反斜杠数为奇数视为转义, 如 \%)。只用于定位, 不修改内容。
+// 行尾为注释 (转义判定同 escapedPercent)。只用于定位, 不修改内容。
+// 扫描契约与 splitPgfKeysOptions / matchBalancedBrace 一致 (% 注释与转义规则),
+// 区别仅在于本函数定位标记、不做花括号配对。
 // 用途: 注释里的 % \begin{tcblisting}{} 不应被当作环境起点 (否则样式会被插进
 // 注释、真实环境反而漏改), 注释里的 \end{tcblisting} 也不应截短正文。
 func nextMarkerOutsideComment(s, sub string, from int) int {
 	for i := from; i < len(s); {
-		if s[i] == '%' {
-			// 反斜杠游程可能跨越 from 边界, 因此回看整个前缀而不是只看到 from。
-			bs := 0
-			for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
-				bs++
+		if s[i] == '%' && !escapedPercent(s, i) {
+			// 注释起点: 跳到行尾 (保留换行符), 该区间内的标记一律跳过。
+			// escapedPercent 回看整个前缀 (而非只从 from), 反斜杠游程可跨越
+			// from 边界。
+			for i < len(s) && s[i] != '\n' {
+				i++
 			}
-			if bs%2 == 0 {
-				// 注释起点: 跳到行尾 (保留换行符), 该区间内的标记一律跳过。
-				for i < len(s) && s[i] != '\n' {
-					i++
-				}
-				continue
-			}
+			continue
 		}
 		if strings.HasPrefix(s[i:], sub) {
 			return i
@@ -1711,9 +1736,12 @@ func nextMarkerOutsideComment(s, sub string, from int) int {
 // matchBalancedBrace 返回 s[i] (必须为 '{') 所配对 '}' 的下标。
 // 花括号允许嵌套 (如 title={Basic Ti\emph{k}Zing}); 反斜杠转义的 \{ \} 不计入
 // 深度, 因此选项里的转义花括号不会打乱配对。
-// 注释感知: 未转义 % 至行尾视为注释 (转义规则同 stripTikzComments), 注释里的
-// 花括号既不配对也不计深度——否则 "% { {" 这类注释会把深度算歪, 真实 '}' 反而
-// 配不上, 整个环境漏改。注释只跳过、位置不变。未找到配对时 ok 为 false。
+// 注释感知: 未转义 % 至行尾视为注释 (转义判定同 escapedPercent), 注释里的花括号
+// 既不配对也不计深度——否则 "% { {" 这类注释会把深度算歪, 真实 '}' 反而配不上,
+// 整个环境漏改。注释只跳过、位置不变。
+// 扫描契约与 splitPgfKeysOptions / nextMarkerOutsideComment / stripTikzComments
+// 一致 (花括号深度、\{ \} 转义、% 注释三条规则); trimOptionBraces 复用本函数。
+// 未找到配对时 ok 为 false。
 func matchBalancedBrace(s string, i int) (int, bool) {
 	if i >= len(s) || s[i] != '{' {
 		return 0, false
@@ -1722,11 +1750,7 @@ func matchBalancedBrace(s string, i int) (int, bool) {
 	for ; i < len(s); i++ {
 		switch s[i] {
 		case '%':
-			bs := 0
-			for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
-				bs++
-			}
-			if bs%2 == 0 {
+			if !escapedPercent(s, i) {
 				// 注释起点: 跳到行尾 (保留换行符)。
 				for i < len(s) && s[i] != '\n' {
 					i++

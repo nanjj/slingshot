@@ -2114,6 +2114,13 @@ func TestRewriteSelfContainedTcblistings(t *testing.T) {
 			in:   "\\begin{tcblisting}{}\n% \\end{tcblisting}\n\\fcBell\n\\end{tcblisting}\n",
 			want: "\\begin{tcblisting}{slingshot nowrap}\n% \\end{tcblisting}\n\\fcBell\n\\end{tcblisting}\n",
 		},
+		{
+			// 注释里的逗号不切分 (splitPgfKeysOptions 与其它扫描 helper 同一规则):
+			// 值不会被切出恰等于样式名的片段, 因此仍应注入, 且注释原样保留。
+			name: "comment hides the style name",
+			in:   "\\begin{tcblisting}{title=t % ,slingshot nowrap,\n}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title=t % ,slingshot nowrap,\n}\n\\fcBell\n\\end{tcblisting}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2154,6 +2161,8 @@ func TestHasNoWrapStyle(t *testing.T) {
 		{name: "braced style name middle", opts: "title=t, {slingshot nowrap}, other=x", want: true},
 		{name: "braced style name last", opts: "title=t, {slingshot nowrap}", want: true},
 		{name: "nested braces style name", opts: "title=t, {{slingshot nowrap}}", want: true},
+		// 注释里的逗号不切分: 值不会被切出恰等于样式名的片段。
+		{name: "style name inside a comment", opts: "title=t % ,slingshot nowrap,\n", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2224,6 +2233,8 @@ func TestSplitPgfKeysOptions(t *testing.T) {
 		// \{ 是转义花括号, 不抬升深度: 其中的逗号仍是分隔符。
 		{name: "escaped brace", in: `title=\{a,b\}, c`, want: []string{`title=\{a`, `b\}`, " c"}},
 		{name: "unbalanced merges", in: "title={a,b, c", want: []string{"title={a,b, c"}},
+		// 注释里的逗号不是分隔符: % 至行尾的 ",slingshot nowrap," 整段留在同一选项里。
+		{name: "comma inside comment", in: "title=t % ,slingshot nowrap,\n", want: []string{"title=t % ,slingshot nowrap,\n"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
