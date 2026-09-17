@@ -516,6 +516,10 @@ var tikzExtraPackages = []struct{ marker, pkg string }{
 	// 子串命中同时覆盖 \bearwear / \bearwearsetup / \bearwearlogo; 包内自行
 	// \RequirePackage{tikzlings-bears}。TL2026 与 2021 bundle 均自带, 两后端同路径。
 	{`\bearwear`, "bearwear"},
+	// tikzducks (独立 CTAN 包, samcarter) 的 picture 模式命令 \picduck:
+	// \duck / \randuck 走 TikZ 库 (ducks), \picduck 走 LaTeX picture 环境,
+	// 只有宏包本体提供 (issue #2)。子串 \picduck 不会误中其它包。
+	{`\picduck`, "tikzducks"},
 }
 
 // tikzlingsCommands 把 tikzlings 的命令映射到提供它的宏包。
@@ -872,6 +876,45 @@ func mergeTikzPackages(explicit, detected []string) []string {
 	return pkgs
 }
 
+// mergeTikzLibraries 合并显式 \usetikzlibrary 行与自动探测的库: 顺序与去重
+// 规则同 mergeTikzPackages (显式在前)。
+func mergeTikzLibraries(explicit, detected []string) []string {
+	return mergeTikzPackages(explicit, detected)
+}
+
+// userTikzLibraryRe 匹配行首的 \usetikzlibrary 行, 连同行尾换行。
+// pgf 定义了两种等价写法 (tikz.code.tex 的 \usetikzlibrary):
+//
+//	\usetikzlibrary{list,of,libs}
+//	\usetikzlibrary[list,of,libs]
+//
+// 第二组的方括号是花括号的替代形式 (不是可选参数), 两种都要收。与
+// userPackageRe 同款: 只提行首的整行, 嵌在语句中间的 \usetikzlibrary 留在
+// 原地 -- 移动它可能破坏代码, 而 pgf 允许纯 tikz 库在正文中加载。
+var userTikzLibraryRe = regexp.MustCompile(`(?m)^[ \t]*\\usetikzlibrary(?:\[([^]]*)\]|\{([^}]*)\})[ \t]*\r?\n?`)
+
+// extractUserTikzLibraries 提取输入中显式的 \usetikzlibrary 行, 返回库名列表与
+// 剩余内容。库必须提到**真正的导言区** (tikzWrapper 的 \usetikzlibrary 行),
+// 而不是仅仅移出 tikzpicture: tikzducks 这类库文件内部会 \usepackage
+// (tikzlibraryducks.code.tex 第一行), 在 \begin{document} 之后加载会报
+// "Can be used only in preamble" (issue #2)。库名按逗号拆分并去空白。
+func extractUserTikzLibraries(content string) ([]string, string) {
+	var libs []string
+	for _, m := range userTikzLibraryRe.FindAllStringSubmatch(content, -1) {
+		// 花括号形式进 m[2], 方括号形式进 m[1]; 恰好一组非空。
+		list := m[1]
+		if list == "" {
+			list = m[2]
+		}
+		for name := range strings.SplitSeq(list, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				libs = append(libs, name)
+			}
+		}
+	}
+	return libs, userTikzLibraryRe.ReplaceAllString(content, "")
+}
+
 // tikzPackageLines 把包名列表渲染成 \usepackage 行; 空列表返回空串。
 // compatCircuitikz 为真时 circuitikz 以 [compatibility] 加载 (星号元件语法)。
 func tikzPackageLines(pkgs []string, compatCircuitikz bool) string {
@@ -905,6 +948,18 @@ var tikzSelfContainedEnvs = []string{
 	`\begin{tikzcd}`,
 	`\begin{forest}`,
 	`\begin{tcblisting}`,
+}
+
+// tikzSelfContainedPrefixEnvs 是"以它开头才算自包含"的环境, 与
+// tikzSelfContainedEnvs 的 Contains 判定互补。
+// picture 是 LaTeX 内核环境 (latex.ltx / pict2e), 不是 TikZ 环境, 但同样
+// 不能被裸 tikzpicture 包裹: pgf 会把 picture 当空盒子, 内容全部丢失
+// (issue #2: \begin{picture}(42,44)\picduck\end{picture} 出 16x9 全白图)。
+// 判定用前缀而非 Contains -- picture 常被合法地嵌在 \node {...} 里
+// (issue #2 的 workaround: \node[inner sep=0]{\begin{picture}...}), 那种
+// 片段仍然需要外层 tikzpicture, 不能因为"提到 picture"就跳过包裹。
+var tikzSelfContainedPrefixEnvs = []string{
+	`\begin{picture}`,
 }
 
 // tikzSelfContainedCmdRes 是"自带绘图"的命令正则表, 与 tikzSelfContainedEnvs
@@ -1027,7 +1082,41 @@ func selfContainedStart(content string) bool {
 			return true
 		}
 	}
+	return selfContainedPrefixEnv(content)
+}
+
+// hasAnyPrefix 报告 content 是否以 prefixes 之一开头。
+func hasAnyPrefix(content string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(content, p) {
+			return true
+		}
+	}
 	return false
+}
+
+// tikzPicturePrologueRe 匹配 picture 模式片段开头的
+// \setlength{\unitlength}{...} 前导语句: tikzducks 手册的 picture 示例写作
+// \setlength{\unitlength}{1mm} 紧接 \begin{picture}。它与 picture 环境同属
+// 内核绘图, 但会让 \begin{picture} 不再位于片段首位, 前缀判定会漏掉
+// (issue #2 的 picture 示例即带这行)。只用于判定, 语句保留在原位。
+var tikzPicturePrologueRe = regexp.MustCompile(`\\setlength\s*\{\s*\\unitlength\s*\}\s*\{[^{}]*\}\s*`)
+
+// selfContainedPrefixEnv 报告内容是否以 tikzSelfContainedPrefixEnvs 之一开头,
+// 允许 picture 模式片段以 \setlength{\unitlength}{...} 前导语句开头 (可多行)。
+// 判定契约同 selfContainedStart: 先剥离注释再 TrimSpace 首尾空白。
+func selfContainedPrefixEnv(content string) bool {
+	c := strings.TrimSpace(stripTikzComments(content))
+	for {
+		if hasAnyPrefix(c, tikzSelfContainedPrefixEnvs) {
+			return true
+		}
+		m := tikzPicturePrologueRe.FindString(c)
+		if m == "" || !strings.HasPrefix(c, m) {
+			return false
+		}
+		c = strings.TrimSpace(c[len(m):])
+	}
 }
 
 // stripOuterTikzShells 迭代剥离误包的 tikzpicture 空外壳。
@@ -1488,16 +1577,11 @@ func normalizeTikz(content string, p tikzProfile) string {
 	content = stripOuterTikzShells(content)
 	// new (tkz-euclide 文档自定义的高亮样式) 未定义时注入文档同款定义。
 	content = ensureNewStyle(content)
-	for _, env := range tikzSelfContainedEnvs {
-		if strings.Contains(content, env) {
-			return content
-		}
-	}
-	// 自包含命令 (figchild / tikz-triminos / scsnowman) 自带 tikzpicture 或
-	// inline 图形盒, 同样不包外壳; 与上面的 env 早退同位置同语义。
-	if selfContainedCmd(content) {
-		return content
-	}
+	// 显式 \usetikzlibrary 行提到环境外; 自包含片段同样要提。库文件内部可能
+	// 含 \usepackage (如 tikzlibraryducks.code.tex 第一行的 \usepackage{tikzducks}),
+	// 留在正文里会在 \begin{document} 之后加载, 报 "Can be used only in
+	// preamble" (issue #2)。真正提到导言区由 renderTikz 的
+	// extractUserTikzLibraries 负责, 这里只把行移出环境并统一放到最前面。
 	var libs []string
 	content = usetikzlibraryRe.ReplaceAllStringFunc(content, func(m string) string {
 		// m 可能带行尾换行 (被正则吃掉), 存库时去掉, Join 时统一补 \n。
@@ -1507,6 +1591,21 @@ func normalizeTikz(content string, p tikzProfile) string {
 	head := ""
 	if len(libs) > 0 {
 		head = strings.Join(libs, "\n") + "\n"
+	}
+	for _, env := range tikzSelfContainedEnvs {
+		if strings.Contains(content, env) {
+			return head + content
+		}
+	}
+	// picture 是前缀型自包含环境 (见 tikzSelfContainedPrefixEnvs): 内核 picture
+	// 进了 tikzpicture 就变空盒子, 但嵌在 \node 里的 picture 仍要外层包裹。
+	if selfContainedPrefixEnv(content) {
+		return head + content
+	}
+	// 自包含命令 (figchild / tikz-triminos / scsnowman) 自带 tikzpicture 或
+	// inline 图形盒, 同样不包外壳; 与上面的 env 早退同位置同语义。
+	if selfContainedCmd(content) {
+		return head + content
 	}
 	return head + "\\begin{tikzpicture}\n" + content + "\n\\end{tikzpicture}\n"
 }
@@ -1567,13 +1666,15 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		raw = usetikzlibraryIECRe.ReplaceAllString(raw, "")
 	}
 	explicitPkgs, raw := extractUserPackages(raw)
+	// 显式 \usetikzlibrary 行同样提到导言区 (见 extractUserTikzLibraries)。
+	explicitLibs, raw := extractUserTikzLibraries(raw)
 	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw, profile.legacyIEC))
 	if profile.legacyTikzlings {
 		// legacy bundle (tikzlings v0.8) 没有 TikZ 库文件, pic 语法由
 		// tikzlingsPicShim 定义 <name>/.pic = {\<name>}; \<name> 宏随对应子宏包加载。
 		pkgs = mergeTikzPackages(pkgs, tikzlingsPicPackages(raw))
 	}
-	libs := tikzLibraries(profile, raw)
+	libs := mergeTikzLibraries(explicitLibs, tikzLibraries(profile, raw))
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
 		return fmt.Errorf("resolving output path: %w", err)

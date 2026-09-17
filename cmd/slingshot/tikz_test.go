@@ -310,6 +310,34 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\begin{tikzpicture}\n% my circuit\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}\n\\end{tikzpicture}\n",
 			want:  "% my circuit\n\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}",
 		},
+		{
+			// picture 是 LaTeX 内核环境, 不是 TikZ 环境; 套进裸 tikzpicture 会被 pgf
+			// 当空盒子, 内容全丢 (issue #2)。前缀识别后不再补外壳。
+			name:  "picture env passed through, not wrapped",
+			input: "\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
+			want:  "\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
+		},
+		{
+			// 显式 \usetikzlibrary 行即使位于自包含片段里也要提到环境外, 否则库文件
+			// 内部的 \usepackage 留在正文 (tikzducks 库文件首行即 \usepackage)。
+			name:  "usetikzlibrary hoisted with self-contained env",
+			input: "\\usetikzlibrary{ducks}\n\\begin{tikzpicture}\n\\draw (0,0) pic{duck};\n\\end{tikzpicture}\n",
+			want:  "\\usetikzlibrary{ducks}\n\\begin{tikzpicture}\n\\draw (0,0) pic{duck};\n\\end{tikzpicture}\n",
+		},
+		{
+			// tikzducks 手册的 picture 示例带 \setlength{\unitlength}{...} 前导
+			// 语句, \begin{picture} 不在首位; 同样不能补外壳。
+			name:  "picture with setlength prologue passed through",
+			input: "\\setlength{\\unitlength}{1mm}\n\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
+			want:  "\\setlength{\\unitlength}{1mm}\n\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
+		},
+		{
+			// picture 嵌在 \node 里是合法结构 (issue #2 的 workaround): 片段仍需要外层
+			// tikzpicture, 不能因为"提到 picture"就跳过包裹。
+			name:  "picture inside node still wrapped",
+			input: "\\node[inner sep=0] {\\begin{picture}(42,44)\\picduck\\end{picture}};",
+			want:  "\\begin{tikzpicture}\n\\node[inner sep=0] {\\begin{picture}(42,44)\\picduck\\end{picture}};\n\\end{tikzpicture}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -368,6 +396,12 @@ func TestNormalizeTikzLatexmkProfile(t *testing.T) {
 			name:  "new style injected (both backends)",
 			input: "\\begin{tikzpicture}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
 			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\tkzDrawSegment[new](I,C)\n\\end{tikzpicture}\n",
+		},
+		{
+			// picture 的自包含判定与后端无关: 两个 profile 都不补外壳。
+			name:  "picture env passed through, not wrapped",
+			input: "\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
+			want:  "\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
 		},
 	}
 	for _, tt := range tests {
@@ -1284,6 +1318,92 @@ func TestMergeTikzPackages(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestExtractUserTikzLibraries 验证显式 \usetikzlibrary 行的提取与去行:
+// \usetikzlibrary{a,b} 与 pgf 的 \usetikzlibrary[a,b] 两种写法都要收
+// (见 tikz.code.tex 的 \usetikzlibrary 定义), 行首整行才提, 注释行不动。
+func TestExtractUserTikzLibraries(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantLibs []string
+		wantRest string
+	}{
+		{name: "no library unchanged", input: "\\draw (0,0);", wantRest: "\\draw (0,0);"},
+		{
+			name:     "single library hoisted",
+			input:    "\\usetikzlibrary{ducks}\n\\begin{tikzpicture}\n\\draw (0,0);\n\\end{tikzpicture}",
+			wantLibs: []string{"ducks"},
+			wantRest: "\\begin{tikzpicture}\n\\draw (0,0);\n\\end{tikzpicture}",
+		},
+		{
+			name:     "brace form comma separated",
+			input:    "\\usetikzlibrary{arrows.meta, calc}\n\\draw (0,0);",
+			wantLibs: []string{"arrows.meta", "calc"},
+			wantRest: "\\draw (0,0);",
+		},
+		{
+			name:     "pgf optional-list form and CRLF",
+			input:    "  \\usetikzlibrary[patterns,topaths]\r\n\\draw (0,0);",
+			wantLibs: []string{"patterns", "topaths"},
+			wantRest: "\\draw (0,0);",
+		},
+		{
+			name:     "inside tikzpicture also hoisted",
+			input:    "\\begin{tikzpicture}\n\\usetikzlibrary{calc}\n\\draw (0,0);\n\\end{tikzpicture}",
+			wantLibs: []string{"calc"},
+			wantRest: "\\begin{tikzpicture}\n\\draw (0,0);\n\\end{tikzpicture}",
+		},
+		{
+			name:     "commented line untouched",
+			input:    "% \\usetikzlibrary{ghost}\n\\draw (0,0);",
+			wantRest: "% \\usetikzlibrary{ghost}\n\\draw (0,0);",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			libs, rest := extractUserTikzLibraries(tt.input)
+			if len(libs) != len(tt.wantLibs) {
+				t.Fatalf("extractUserTikzLibraries() libs = %v, want %v", libs, tt.wantLibs)
+			}
+			for i := range libs {
+				if libs[i] != tt.wantLibs[i] {
+					t.Fatalf("extractUserTikzLibraries() libs = %v, want %v", libs, tt.wantLibs)
+				}
+			}
+			if rest != tt.wantRest {
+				t.Errorf("extractUserTikzLibraries() rest = %q, want %q", rest, tt.wantRest)
+			}
+		})
+	}
+}
+
+// TestMergeTikzLibraries 验证显式库与自动探测库的合并 (显式优先, 去重保序)。
+func TestMergeTikzLibraries(t *testing.T) {
+	got := mergeTikzLibraries([]string{"ducks"}, []string{"fit", "ducks"})
+	want := []string{"ducks", "fit"}
+	if len(got) != len(want) {
+		t.Fatalf("mergeTikzLibraries() = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("mergeTikzLibraries() = %v, want %v", got, want)
+		}
+	}
+}
+
+// TestDetectTikzPackagesTikzducksPicture 验证 picture 模式命令 \picduck 触发
+// tikzducks 宏包探测 (issue #2): \duck / \randuck 走 TikZ 库, \picduck 只由
+// 宏包本体提供, 不探测会报 "Undefined control sequence"。
+func TestDetectTikzPackagesTikzducksPicture(t *testing.T) {
+	got := detectTikzPackages(`\picduck`, false)
+	if !slices.Contains(got, "tikzducks") {
+		t.Fatalf("detectTikzPackages(\\picduck) = %v, want tikzducks", got)
+	}
+	if got := detectTikzPackages(`\picnic`, false); slices.Contains(got, "tikzducks") {
+		t.Fatalf("detectTikzPackages(\\picnic) = %v, must not contain tikzducks", got)
 	}
 }
 

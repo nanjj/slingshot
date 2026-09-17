@@ -404,6 +404,31 @@ scale=.3,
 	// tikzlings-snowmen 的 \snowman), 无同名冲突; TL2026 v1.3c 与 bundle
 	// v1.2d 键集一致, 两后端走同一注入路径 (无需 vendoring)。
 	"scsnowman": `\scsnowman[scale=2,hat=red,muffler=blue]`,
+	// tikzducks_picture: LaTeX 内核 picture 环境的回归样例 (issue #2)。
+	// picture 不是 TikZ 环境, 套进裸 tikzpicture 会被 pgf 当空盒子, 内容全丢
+	// (16x9 全白图); 前缀识别后不再补外壳。\picduck 由 tikzducks 宏包提供,
+	// 经 tikzExtraPackages 探测 (样例自带 \usepackage, 两种路径都覆盖)。
+	"tikzducks_picture": `\begin{picture}(42,44)
+  \picduck
+\end{picture}
+`,
+	// tikzducks_picture_setlength: 手册原样的 picture 示例 (带
+	// \setlength{\unitlength}{1mm} 前导), 同样不补 tikzpicture 外壳。
+	"tikzducks_picture_setlength": `\\setlength{\\unitlength}{1mm}
+\\begin{picture}(42,44)
+  \\picduck
+\\end{picture}
+`,
+	// tikzducks_library: 显式 \usetikzlibrary{ducks} 的回归样例 (issue #2)。
+	// 库文件 tikzlibraryducks.code.tex 首行是 \usepackage{tikzducks}; 加载行
+	// 若留在正文 (\begin{document} 之后) 会报 "Can be used only in preamble",
+	// 必须提到真正的导言区。
+	"tikzducks_library": `\usetikzlibrary{ducks}
+\begin{tikzpicture}
+\draw (0,0) pic[duck/water=blue, duck/alien] {duck};
+\draw (4,0) pic[scale=1.4] {duck};
+\end{tikzpicture}
+`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。
