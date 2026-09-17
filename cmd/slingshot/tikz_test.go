@@ -2235,6 +2235,9 @@ func TestSplitPgfKeysOptions(t *testing.T) {
 		{name: "unbalanced merges", in: "title={a,b, c", want: []string{"title={a,b, c"}},
 		// 注释里的逗号不是分隔符: % 至行尾的 ",slingshot nowrap," 整段留在同一选项里。
 		{name: "comma inside comment", in: "title=t % ,slingshot nowrap,\n", want: []string{"title=t % ,slingshot nowrap,\n"}},
+		// 注释吞掉逗号后不再产生分段 (修复前会切成 ["a","%b","c\nd"]); 段内保留
+		// 原注释字节 (只跳过、不删, 位置不变), 因此第二段含注释文本。
+		{name: "comment swallows comma", in: "a,%b,c\nd", want: []string{"a", "%b,c\nd"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2246,6 +2249,32 @@ func TestSplitPgfKeysOptions(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Fatalf("splitPgfKeysOptions(%q) = %q, want %q", tt.in, got, tt.want)
 				}
+			}
+		})
+	}
+}
+
+// TestEscapedPercent 钉住共享谓词 escapedPercent 的契约: % 前的连续反斜杠数为
+// 奇数表示被转义 (\%), 偶数 (含 0, 如 \\%) 表示注释起点; 下标越界或 s[i] 不是
+// '%' 时返回保守的 false (防御性守卫)。
+func TestEscapedPercent(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		i    int
+		want bool
+	}{
+		{name: "bare percent", s: "%", i: 0, want: false},
+		{name: "escaped once", s: `\%`, i: 1, want: true},
+		{name: "escaped twice", s: `\\%`, i: 2, want: false},
+		{name: "escaped thrice", s: `\\\%`, i: 3, want: true},
+		{name: "out of range", s: "%", i: 1, want: false},
+		{name: "not a percent", s: "abc", i: 0, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := escapedPercent(tt.s, tt.i); got != tt.want {
+				t.Errorf("escapedPercent(%q, %d) = %v, want %v", tt.s, tt.i, got, tt.want)
 			}
 		})
 	}

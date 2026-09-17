@@ -989,8 +989,9 @@ func selfContainedCmd(content string) bool {
 
 // stripTikzComments 删除未转义 % 至行尾的注释, 保留换行符。
 // % 前的连续反斜杠数为奇数时 (如 \%) 视为转义、不算注释起点; 为偶数
-// (含 0, 如 \\%) 才算注释。转义判定统一走 escapedPercent, 与
-// splitPgfKeysOptions / matchBalancedBrace / nextMarkerOutsideComment 共用同一规则。
+// (含 0, 如 \\%) 才算注释。转义判定统一走 escapedPercent、注释跳过统一走
+// commentEnd, 与 splitPgfKeysOptions / matchBalancedBrace / nextMarkerOutsideComment
+// 共用同一套规则。
 // verbatim 环境不做特殊处理: 该结果只用于自包含命令的存在性探测 (不写回文档),
 // 极少数 verbatim 里的 % 被误删仅影响判定, 不会产生错误输出。注释/命令的判定
 // 取舍与 tikzSelfContainedEnvs 同类。
@@ -1004,9 +1005,7 @@ func stripTikzComments(content string) string {
 	for i < len(content) {
 		if content[i] == '%' && !escapedPercent(content, i) {
 			// 注释起点: 跳到行尾 (保留换行符)。
-			for i < len(content) && content[i] != '\n' {
-				i++
-			}
+			i = commentEnd(content, i)
 			continue
 		}
 		b.WriteByte(content[i])
@@ -1625,9 +1624,9 @@ func rewriteSelfContainedTcblistings(content string) string {
 // title={a,slingshot nowrap,b} 会切出恰好等于样式名的中段, 同样误命中。
 // 保证 (有害方向是"误命中而跳过注入, 导致内容静默丢失"): 在已建模的 pgfkeys 语法
 // (花括号分组、\{ \} 字面花括号、% 注释、{name} 外层花括号等价) 下, 值里的同名
-// 文字不会被误判为样式引用。残差: [...] 可选参数组与其他 pgfkeys handler 语法未建模,
-// 若逗号只由这类语法"保护", 仍可能切出恰等于样式名的片段 (误命中); 与
-// splitPgfKeysOptions 的说明一致。
+// 文字不会被误判为样式引用。方括号在 pgfkeys 里只是普通字符 (其中的逗号本就应由
+// 切分器切开), 不构成逗号保护, 故不列为残差示例; 若将来出现真正"保护逗号"的
+// 未建模形式, 以"宁多注入 (安全方向)"为准, 并同步本注释与 splitPgfKeysOptions。
 func hasNoWrapStyle(opts string) bool {
 	for _, opt := range splitPgfKeysOptions(opts) {
 		if trimOptionBraces(strings.TrimSpace(opt)) == tcblistingNoWrapStyle {
@@ -1637,17 +1636,31 @@ func hasNoWrapStyle(opts string) bool {
 	return false
 }
 
-// escapedPercent 报告 s[i] (必须为 '%') 是否为被转义的百分号 (\%)。
-// 规则: 统计 % 前连续反斜杠数, 奇数表示 % 被转义 (\%); 偶数 (含 0, 如 \\%)
-// 表示注释起点。四个扫描 helper 共用这一判定, 必须保持一致:
-// stripTikzComments / splitPgfKeysOptions / matchBalancedBrace /
-// nextMarkerOutsideComment。
+// escapedPercent 报告 s[i] (须为 '%') 是否为被转义的百分号 (\%); i 越界或
+// s[i] 不是 '%' 时返回保守的 false (防御性守卫, 误用不会 panic)。规则:
+// 统计 % 前连续反斜杠数, 奇数表示 % 被转义 (\%); 偶数 (含 0, 如 \\%) 表示
+// 注释起点。四个扫描 helper 共用这一判定, 必须保持一致: stripTikzComments /
+// splitPgfKeysOptions / matchBalancedBrace / nextMarkerOutsideComment。
 func escapedPercent(s string, i int) bool {
+	if i < 0 || i >= len(s) || s[i] != '%' {
+		return false
+	}
 	bs := 0
 	for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
 		bs++
 	}
 	return bs%2 == 1
+}
+
+// commentEnd 返回 s 中从 i (须为注释起点处的 '%') 起跳到行尾的下标:
+// 下一个换行符的下标, 或到文件尾时的 len(s); 换行符本身不消费, 由调用方
+// 的循环跳过。四个扫描 helper 的注释跳过统一走本函数, 保证"未转义 % 至行尾
+// 为注释"只有一处实现 (按契约与 escapedPercent 配套使用)。
+func commentEnd(s string, i int) int {
+	for i < len(s) && s[i] != '\n' {
+		i++
+	}
+	return i
 }
 
 // splitPgfKeysOptions 按 pgfkeys 规则把选项串切成各选项段: 只在花括号深度为 0
@@ -1659,19 +1672,21 @@ func escapedPercent(s string, i int) bool {
 //   - 未转义 % 至行尾为注释, 其中的逗号不切分; 注释只跳过、不删字节, 位置不变;
 //     转义判定同 escapedPercent。
 //
-// 未建模: [...] 可选参数组与其他 pgfkeys handler 语法。若逗号只由这类未建模语法
-// "保护", 仍可能切出恰等于样式名的片段 —— 这是已知残差, 见 hasNoWrapStyle。
+// 未建模: 花括号分组 / 转义 / 注释之外的 pgfkeys 写法。方括号等只是普通字符
+// (其中的逗号本就应切分), 不构成逗号保护; 若将来出现真正"保护逗号"的未建模
+// 形式, 以"宁多注入 (安全方向)"为准, 并同步本说明与 hasNoWrapStyle。
 func splitPgfKeysOptions(opts string) []string {
 	var out []string
 	depth, start := 0, 0
 	for i := 0; i < len(opts); i++ {
 		switch opts[i] {
 		case '%':
+			// 注: 反斜杠转义已由 '\\' 分支成对吃掉, 因此到达这里时
+			// escapedPercent 恒为 false; 保留判定以维持四个扫描器共享的
+			// 契约 (见 escapedPercent)。
 			if !escapedPercent(opts, i) {
 				// 注释起点: 跳到行尾 (保留换行符), 该区间内的逗号不切分。
-				for i < len(opts) && opts[i] != '\n' {
-					i++
-				}
+				i = commentEnd(opts, i)
 			}
 		case '\\':
 			i++ // 跳过被转义的下一个字符 (\{ / \} / \\ 都按此处理)。
@@ -1720,9 +1735,7 @@ func nextMarkerOutsideComment(s, sub string, from int) int {
 			// 注释起点: 跳到行尾 (保留换行符), 该区间内的标记一律跳过。
 			// escapedPercent 回看整个前缀 (而非只从 from), 反斜杠游程可跨越
 			// from 边界。
-			for i < len(s) && s[i] != '\n' {
-				i++
-			}
+			i = commentEnd(s, i)
 			continue
 		}
 		if strings.HasPrefix(s[i:], sub) {
@@ -1750,11 +1763,12 @@ func matchBalancedBrace(s string, i int) (int, bool) {
 	for ; i < len(s); i++ {
 		switch s[i] {
 		case '%':
+			// 注: 反斜杠转义已由 '\\' 分支成对吃掉, 因此到达这里时
+			// escapedPercent 恒为 false; 保留判定以维持四个扫描器共享的
+			// 契约 (见 escapedPercent)。
 			if !escapedPercent(s, i) {
 				// 注释起点: 跳到行尾 (保留换行符)。
-				for i < len(s) && s[i] != '\n' {
-					i++
-				}
+				i = commentEnd(s, i)
 				continue
 			}
 		case '\\':
