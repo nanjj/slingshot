@@ -129,8 +129,18 @@ lower separated=false}`：tcblisting 的 text 部分默认在 tikzpicture 之外
 tikzducks-doc-settings.sty / tikzlings-doc-settings.sty 的 \tcbset）；注入的只是默认值，
 片段自己的 `\tcbset` / 盒子实例选项（如 `righthand width=4cm`）在其后的正文中执行，总是
 优先。`tikzSelfContainedEnvs` 同时收录 `tcblisting`，避免
-再套外层 tikzpicture（套了会被 pgf 包围盒裁切）。两个后端都支持（2021 bundle 自带
-tcolorbox + listings）。
+再套外层 tikzpicture（套了会被 pgf 包围盒裁切）。盒子的**内侧**还有第二层包裹需要处理：
+`tikz lower` 会给盒子正文再套一个 tikzpicture（tcolorbox.sty: `tikz lower/.style={before
+lower*={\centering\tcb@shield@externalize\begin{tikzpicture}[{#1}]},after lower*=
+\end{tikzpicture}}`），正文本身自包含时嵌套 picture 会**静默丢失**内容（编译 exit 0、
+盒子右侧空白）——`rewriteSelfContainedTcblistings`（normalizeTikz 入口处调用）用
+`selfContainedCmd` / `selfContainedStart` 判定正文（先经 `stripTikzComments`），命中时把
+`tcblistingNoWrapStyle`（"slingshot nowrap"，与 `tcblistingSetup` 共用常量，该样式覆盖
+`before lower*` / `after lower*`、只留 `\centering`）插到盒子选项**最前面**：pgfkeys 后写者胜，
+用户后写的 `tikz lower` / `before lower*` 仍优先。只改选项参数、正文一字不动（要在代码侧原样
+显示）；选项参数用 `matchBalancedBrace` 做平衡扫描（支持嵌套与 `\{` `\}` 转义）；已含样式名
+则跳过（幂等），无选项参数 / 找不到 `\end{tcblisting}` 时原样跳过不报错。两个后端都支持
+（2021 bundle 自带 tcolorbox + listings）。
 
 pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|zy> plane at
 <axis>=` 与裸 `canvas is plane` 坐标系/选项，由 `tikzExtraLibraries` 的内容特征正则自动加载

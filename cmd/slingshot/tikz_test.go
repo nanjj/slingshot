@@ -1885,6 +1885,7 @@ func TestTcblistingSetup(t *testing.T) {
 			pkgs: []string{"tcolorbox", "tikzlings-marmots"},
 			want: `\tcbuselibrary{listings}
 \tcbset{
+  slingshot nowrap/.style={before lower*={\centering}, after lower*={}},
   tikz lower,
   sidebyside,
   center lower,
@@ -1910,6 +1911,7 @@ func TestTcblistingSetup(t *testing.T) {
 			pkgs: []string{"tcolorbox"},
 			want: `\tcbuselibrary{listings}
 \tcbset{
+  slingshot nowrap/.style={before lower*={\centering}, after lower*={}},
   tikz lower,
   sidebyside,
   center lower,
@@ -1926,6 +1928,172 @@ func TestTcblistingSetup(t *testing.T) {
 				t.Errorf("tcblistingSetup() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestTcblistingSetupDefinesNoWrapStyle 钉住耦合契约: rewriteSelfContainedTcblistings
+// 插入的样式名必须真的在 tcblistingSetup 的输出里被定义, 否则盒子会引用一个
+// 不存在的样式 (pgfkeys 报 unknown key / 或静默保留 picture 包裹)。
+func TestTcblistingSetupDefinesNoWrapStyle(t *testing.T) {
+	got := tcblistingSetup("\\begin{tcblisting}{}\\duck\\end{tcblisting}", []string{"tcolorbox"})
+	want := tcblistingNoWrapStyle + "/.style={before lower*={\\centering}, after lower*={}}"
+	if !strings.Contains(got, want) {
+		t.Fatalf("tcblistingSetup() does not define the style referenced by the rewriter:\n%s", got)
+	}
+}
+
+// TestRewriteSelfContainedTcblistings 验证 tcblisting 盒子正文自包含时,
+// 样式名被插到选项参数最前面; 正文一字不动; 不命中/幂等/畸形输入原样放行。
+func TestRewriteSelfContainedTcblistings(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			// 用户原始输入 (figchild 的 \fc* 自包含命令)。
+			name: "figchild command",
+			in:   "\\begin{tcblisting}{title=小鸭台灯}\n  \\fcAbajourA\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title=小鸭台灯}\n  \\fcAbajourA\n\\end{tcblisting}\n",
+		},
+		{
+			name: "non self-contained duck",
+			in:   "\\begin{tcblisting}{title={Basic duck}}\n\\duck\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title={Basic duck}}\n\\duck\n\\end{tcblisting}\n",
+		},
+		{
+			// 注释里的自包含命令不算数 (stripTikzComments 语义)。
+			name: "commented self-contained command",
+			in:   "\\begin{tcblisting}{}\n% \\fcBell\n\\draw (0,0) -- (1,1);\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{}\n% \\fcBell\n\\draw (0,0) -- (1,1);\n\\end{tcblisting}\n",
+		},
+		{
+			// contains 语义: 自包含命令 + 裸 tikz 混合仍命中。
+			name: "mixed self-contained and raw tikz",
+			in:   "\\begin{tcblisting}{}\n\\fcBell\n\\draw (0,0) -- (1,1);\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap}\n\\fcBell\n\\draw (0,0) -- (1,1);\n\\end{tcblisting}\n",
+		},
+		{
+			// 双环境各自独立判定: 只改命中者。
+			name: "two boxes only one hits",
+			in: "\\begin{tcblisting}{title=a}\n\\duck\n\\end{tcblisting}\n" +
+				"\\begin{tcblisting}{title=b}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title=a}\n\\duck\n\\end{tcblisting}\n" +
+				"\\begin{tcblisting}{slingshot nowrap, title=b}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 嵌套花括号 title: 插入位置正确, 其余原样。
+			name: "nested braces title",
+			in:   "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zing}}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title={Basic Ti\\emph{k}Zing}}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 转义花括号不参与配对。
+			name: "escaped braces in options",
+			in:   "\\begin{tcblisting}{title={a\\{b\\}c}}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title={a\\{b\\}c}}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 空选项: 只写样式名, 不留悬空逗号。
+			name: "empty options",
+			in:   "\\begin{tcblisting}{}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 前导 \tcbset 不是盒子选项, 不动; 盒子正文是裸 tikz 也不命中。
+			name: "leading tcbset untouched",
+			in:   "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}\n",
+			want: "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}\n",
+		},
+		{
+			// 正文以完整自包含环境开头 (selfContainedStart)。
+			name: "body starts with tikzpicture",
+			in:   "\\begin{tcblisting}{title=t}\n\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title=t}\n\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n\\end{tcblisting}\n",
+		},
+		{
+			name: "body starts with circuitikz",
+			in:   "\\begin{tcblisting}{}\n\\begin{circuitikz}\n\\draw (0,0) to[buzzer] (0,2);\n\\end{circuitikz}\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap}\n\\begin{circuitikz}\n\\draw (0,0) to[buzzer] (0,2);\n\\end{circuitikz}\n\\end{tcblisting}\n",
+		},
+		{
+			// \node 内嵌 picture 是合法结构, 不能因为"提到 picture"就跳过包裹;
+			// 且此处没有自包含命令, 保持包裹。
+			name: "picture nested in node keeps wrapper",
+			in:   "\\begin{tcblisting}{}\n\\node[inner sep=0]{\\begin{picture}(42,44)\\picduck\\end{picture}};\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{}\n\\node[inner sep=0]{\\begin{picture}(42,44)\\picduck\\end{picture}};\n\\end{tcblisting}\n",
+		},
+		{
+			// 幂等守卫: 选项里已含样式名时原样放行 (不重复插入)。
+			name: "already has style",
+			in:   "\\begin{tcblisting}{slingshot nowrap, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			name: "no tcblisting at all",
+			in:   "\\draw (0,0) -- (1,1);\n",
+			want: "\\draw (0,0) -- (1,1);\n",
+		},
+		{
+			// 没有 '{' 选项参数: 原样跳过, 不报错。
+			name: "no option argument",
+			in:   "\\begin{tcblisting}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 找不到 \end{tcblisting}: 原样跳过, 不报错。
+			name: "missing end",
+			in:   "\\begin{tcblisting}{title=t}\n\\fcBell\n",
+			want: "\\begin{tcblisting}{title=t}\n\\fcBell\n",
+		},
+		{
+			// 未闭合的选项参数: 原样跳过, 不报错。
+			name: "unbalanced options",
+			in:   "\\begin{tcblisting}{title={a}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title={a}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rewriteSelfContainedTcblistings(tt.in); got != tt.want {
+				t.Errorf("rewriteSelfContainedTcblistings() = %q, want %q", got, tt.want)
+			}
+			// 幂等: 二次改写与首次结果一致。
+			if got := rewriteSelfContainedTcblistings(tt.want); got != tt.want {
+				t.Errorf("rewriteSelfContainedTcblistings() not idempotent: %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestMatchBalancedBrace 验证选项参数的花括号配对扫描。
+func TestMatchBalancedBrace(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string // 配对 '}' 之后的剩余部分; "!" 表示应失败
+	}{
+		{in: "{}rest", want: "rest"},
+		{in: "{a{b}c}rest", want: "rest"},
+		{in: `{a\{b\}c}rest`, want: "rest"},
+		{in: "{a", want: "!"},
+		{in: "x{}", want: "!"}, // 起点不是 '{'
+		{in: "", want: "!"},
+	}
+	for _, tt := range tests {
+		i, ok := matchBalancedBrace(tt.in, 0)
+		if tt.want == "!" {
+			if ok {
+				t.Errorf("matchBalancedBrace(%q, 0) = %d, true, want failure", tt.in, i)
+			}
+			continue
+		}
+		if !ok {
+			t.Errorf("matchBalancedBrace(%q, 0) failed, want success", tt.in)
+			continue
+		}
+		if got := tt.in[i+1:]; got != tt.want {
+			t.Errorf("matchBalancedBrace(%q, 0) tail = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
 

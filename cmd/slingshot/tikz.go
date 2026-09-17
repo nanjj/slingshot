@@ -50,7 +50,11 @@ tikz-cd, pgfplots, circuitikz, tikzlings, forest, ...); explicit \usepackage
 lines in the input are hoisted into the preamble. A tcblisting documentation
 box loads tcolorbox with the listings library and \tcbset{tikz lower}, so
 TikZ code inside the box is executed in a picture; the box is laid out side
-by side like the package manuals (code left, compiled result right).
+by side like the package manuals (code left, compiled result right). When the
+box body is self-contained (a figchild \fc* command, \tkztriminos, \scsnowman,
+or a whole picture environment), the outer picture wrapper is dropped, because
+nesting it would silently discard the drawing; an explicit tikz lower or
+before lower* in the box options still wins.
 
 The output format is determined by the output file extension.
 Pipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript
@@ -940,7 +944,9 @@ var usetikzlibraryRe = regexp.MustCompile(`\\usetikzlibrary\{[^}]*\}\r?\n?`)
 // 把它们包进外层 tikzpicture 会造成嵌套错误 (内容缺失/布局错乱)。
 // tcblisting 不是 TikZ 环境, 而是 tcolorbox 的盒子环境 (内部由 tikz lower
 // 自建 picture); 包进外层 tikzpicture 会因 pgf 包围盒不含盒子而被裁切,
-// 同样不能包。
+// 同样不能包。注意盒子的**内侧**还有一层包裹: tikz lower 会给盒子正文再套一个
+// tikzpicture, 正文本身自包含时那层包裹必须摘掉 (见
+// rewriteSelfContainedTcblistings), 否则内容静默丢失。
 // 注意: axis / venndiagram 等不是自包含环境, 必须在 tikzpicture 内, 不能加入。
 var tikzSelfContainedEnvs = []string{
 	`\begin{tikzpicture}`,
@@ -1486,6 +1492,14 @@ func tikzlingsPicShim(content string) string {
 //     自己的 \tcbset 与盒子实例选项 (如 righthand width=4cm) 在其后的
 //     正文中执行 (晚于导言区), 因此用户显式设置总是优先。
 //
+// 注入的 \tcbset 里还定义了 tcblistingNoWrapStyle ("slingshot nowrap"): 它覆盖
+// tikz lower 设置的两个钩子, 只保留水平居中、去掉 picture 包裹。tcolorbox.sty 的
+// 定义是 tikz lower/.style={before lower*={\centering\tcb@shield@externalize
+// \begin{tikzpicture}[{#1}]},after lower*=\end{tikzpicture}}; 正文自包含时
+// (figchild 的 \fc* / \tkztriminos / \scsnowman / 完整 picture 环境) 再套一层
+// picture 会静默丢内容, 由 rewriteSelfContainedTcblistings 在盒子选项里引用该样式。
+// 样式名由 tcblistingNoWrapStyle 常量统一, 保证"引用了样式名 ⇔ 这里定义了样式"。
+//
 // 仅当内容使用 tcblisting 且 tcolorbox 确实会被加载时注入。
 func tcblistingSetup(raw string, pkgs []string) string {
 	if !strings.Contains(raw, `\begin{tcblisting}`) {
@@ -1496,6 +1510,7 @@ func tcblistingSetup(raw string, pkgs []string) string {
 	}
 	return `\tcbuselibrary{listings}
 \tcbset{
+  ` + tcblistingNoWrapStyle + `/.style={before lower*={\centering}, after lower*={}},
   tikz lower,
   sidebyside,
   center lower,
@@ -1504,6 +1519,130 @@ func tcblistingSetup(raw string, pkgs []string) string {
   lower separated=false,
 }
 `
+}
+
+// tcblistingNoWrapStyle 是"取消 tikz lower 的 tikzpicture 包裹"的 tcolorbox 样式名。
+// 定义 (tcblistingSetup 的 \tcbset) 与引用 (rewriteSelfContainedTcblistings 插入的
+// 盒子选项) 必须共用该常量, 保证"内容引用了样式名 ⇔ 导言区已定义该样式"。
+const tcblistingNoWrapStyle = "slingshot nowrap"
+
+// rewriteSelfContainedTcblistings 在正文为自包含内容的 tcblisting 盒子选项参数
+// 最前面插入 tcblistingNoWrapStyle, 让该盒子不再被 tikz lower 包进 tikzpicture。
+//
+// 背景: tcblistingSetup 注入的 tikz lower 是 tcolorbox 的内置样式
+// (tcolorbox.sty: tikz lower/.style={before lower*={\centering
+// \tcb@shield@externalize\begin{tikzpicture}[{#1}]},after lower*=\end{tikzpicture}}),
+// 它给盒子的 text 部分套一层 picture; 而 figchild 的 \fc*、\tkztriminos、
+// \scsnowman 这些自包含命令内部已经开了 tikzpicture, 嵌套 picture 会让内容
+// **静默丢失**——编译 exit 0, 盒子右侧却一片空白。tcblistingNoWrapStyle 覆盖
+// 这两个钩子 (只保留 \centering, 去掉 picture 包裹), 语义与它在 tcblistingSetup
+// 里的定义严格一致。
+//
+// 只改选项参数, 正文一字不动 (它要在盒子的代码侧原样显示)。样式名插在用户选项
+// **之前**: pgfkeys 后写者胜, 用户在同一选项列表里后写的 tikz lower /
+// before lower* 仍然优先。
+//
+// 幂等: 选项里已含样式名时原样跳过。\begin{tcblisting} 后没有 '{' 参数、或找不到
+// 配对的 \end{tcblisting} 时, 该环境原样跳过, 不报错。多个环境各自独立判定。
+//
+// 已知取舍 (与 stripTikzComments 的文风一致): 扫描按字面 \begin{tcblisting} /
+// \end{tcblisting} 进行, 注释或 verbatim 里的伪环境标记可能被误认; 正文判定复用
+// selfContainedCmd / selfContainedStart, 二者内部都先经 stripTikzComments, 因此
+// "% \fcBell" 这类注释不计入命中。极端情形 best-effort, 不崩即可。
+func rewriteSelfContainedTcblistings(content string) string {
+	const (
+		begin = `\begin{tcblisting}`
+		end   = `\end{tcblisting}`
+	)
+	if !strings.Contains(content, begin) {
+		return content
+	}
+	var b strings.Builder
+	b.Grow(len(content))
+	pos := 0
+	for {
+		i := strings.Index(content[pos:], begin)
+		if i < 0 {
+			break
+		}
+		i += pos
+		optStart := i + len(begin)
+		b.WriteString(content[pos:optStart]) // 含 \begin{tcblisting}
+
+		// 选项参数必须紧跟 \begin{tcblisting} (允许空白分隔); 否则无法插入,
+		// 原样跳过该环境, 继续找下一个。
+		j := optStart
+		for j < len(content) && (content[j] == ' ' || content[j] == '\t' ||
+			content[j] == '\r' || content[j] == '\n') {
+			j++
+		}
+		if j >= len(content) || content[j] != '{' {
+			pos = optStart
+			continue
+		}
+		closeIdx, ok := matchBalancedBrace(content, j)
+		if !ok {
+			pos = optStart
+			continue
+		}
+		// 正文 = 选项参数之后到最近的 \end{tcblisting} 之前。
+		bodyStart := closeIdx + 1
+		k := strings.Index(content[bodyStart:], end)
+		if k < 0 {
+			pos = optStart
+			continue
+		}
+		endIdx := bodyStart + k
+		opts := content[j+1 : closeIdx]
+		body := content[bodyStart:endIdx]
+
+		// 保留 \begin 与 '{' 之间的空白 (正常为空), 再决定写什么。
+		b.WriteString(content[optStart:j])
+		switch {
+		case strings.Contains(opts, tcblistingNoWrapStyle):
+			// 幂等守卫: 已引用样式名, 原样写回。
+			b.WriteString(content[j : endIdx+len(end)])
+		case selfContainedCmd(body) || selfContainedStart(body):
+			// 命中: 样式名插在用户选项之前 (后写的用户设置仍优先)。
+			b.WriteString("{" + tcblistingNoWrapStyle)
+			if strings.TrimSpace(opts) != "" {
+				b.WriteString(", " + opts)
+			}
+			b.WriteString("}")
+			b.WriteString(content[closeIdx+1 : endIdx+len(end)])
+		default:
+			b.WriteString(content[j : endIdx+len(end)])
+		}
+		pos = endIdx + len(end)
+	}
+	b.WriteString(content[pos:])
+	return b.String()
+}
+
+// matchBalancedBrace 返回 s[i] (必须为 '{') 所配对 '}' 的下标。
+// 花括号允许嵌套 (如 title={Basic Ti\emph{k}Zing}); 反斜杠转义的 \{ \} 不计入
+// 深度, 因此选项里的转义花括号不会打乱配对。未找到配对时 ok 为 false。
+func matchBalancedBrace(s string, i int) (int, bool) {
+	if i >= len(s) || s[i] != '{' {
+		return 0, false
+	}
+	depth := 0
+	for ; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			// 跳过被转义的下一个字符 (\{ / \} / \\ 都按此处理), 避免误计数;
+			// 反斜杠位于末尾时 i++ 后循环条件自然结束。
+			i++
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // tikzDocColors 是 "文档局部颜色 → 缺失定义" 的兜底表, 与 ensureNewStyle 同类:
@@ -1539,10 +1678,16 @@ func tikzDocColorShims(content string) string {
 // 已有自包含环境 (tikzpicture / circuitikz / tikzcd / forest / tcblisting)
 // 则原样返回; 否则补一层 tikzpicture, 并把 \usetikzlibrary 提到环境外
 // (它在 document body 中有效, 但在 tikzpicture 内行为不受保证)。
+// 入口处先对 tcblisting 盒子做自包含改写 (见
+// rewriteSelfContainedTcblistings): 放在这里是为了让 tcblisting 的早退路径
+// 也被覆盖; 内容不含 tcblisting 时是空操作。
 //
 // p 控制 legacy 翻译: 只对 tectonic profile 启用 tkz-euclide 5.x → 4.051b
 // 的语法翻译, latexmk (TL2026 新版语法) 下必须原样保留, 否则会"反向出错"。
 func normalizeTikz(content string, p tikzProfile) string {
+	// 自包含正文的 tcblisting 盒子先摘掉 tikz lower 的 picture 包裹: 正文不进
+	// 盒子选项就无法知道它自包含, 而 tcblisting 又在下面早退, 所以必须在这之前。
+	content = rewriteSelfContainedTcblistings(content)
 	// % 续行陷阱: 手册示例靠续行缩进提供空格, 抄写丢缩进时 P' 与下一项
 	// 粘合成 P'N; 在 \tkz 参数区内删除行尾 % 让换行还原为空格 (见上)。
 	content = fixTkzPercentJoins(content)

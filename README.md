@@ -49,7 +49,12 @@ slingshot
 宏包按内容自动加载（tkz-euclide / tikz-cd / pgfplots / circuitikz / tikzlings / bearwear /
 tikzducks / tikzpeople / figchild / tikz-triminos / scsnowman / tcolorbox 等）；手册常用的
 `tcblisting` 盒子会自动补上 tcolorbox 的 `listings` 库、`tikz lower`（盒子里的 TikZ 代码必须
-在 `tikzpicture` 内执行）与手册同款的左右布局（代码在左、编译结果在右并居中）。
+在 `tikzpicture` 内执行）与手册同款的左右布局（代码在左、编译结果在右并居中）。当盒子正文
+本身自包含（figchild 的 `\fc*` 命令、`\tkztriminos`、`\scsnowman`，或整段
+`tikzpicture` / `circuitikz` / `picture` 等环境）时会自动摘掉 `tikz lower` 的 picture 包裹——
+再套一层会让图形**静默丢失**（编译 exit 0，盒子右侧空白）。盒子选项里显式写在后面的
+`tikz lower` / `before lower*` 仍然优先。大图建议在内容里用 `[scale=...]` 缩小，或加宽盒子
+选项（`width` / `righthand width`）。
 
 ```bash
 slingshot tikz fig.tikz fig.png     # latexmk -xelatex → mutool 栅格化 150dpi
