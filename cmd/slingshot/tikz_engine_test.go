@@ -509,52 +509,68 @@ func TestRenderTikzIntegrationTectonic(t *testing.T) {
 // 内容区变白 —— 编译级断言完全抓不住, 必须解码栅格图后统计暗像素。
 // 区域取 x ∈ (60%, 92%) 宽、y ∈ (20%, 95%) 高, 这是"编译结果"那一半
 // (代码在左) 的中下部; 空内容时实测 0, 修复后约 1570, 阈值 200 留足余量。
+// 修复与后端无关, 因此两个引擎都跑 (各自可用才跑); 唯一差异是 xe 走 latexmk、
+// tectonic 走 bundle, 因此用子测试覆盖, 而不是只跑 xe。
 func TestRenderTikzTcblistingNotBlank(t *testing.T) {
-	if err := latexmkAvailable(false); err != nil {
-		t.Skipf("latexmk unavailable: %v", err)
-	}
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
 	const sample = `\begin{tcblisting}{title={Abajour}}
 \fcAbajourA
 \end{tcblisting}
 `
-	in := filepath.Join(t.TempDir(), "tcblisting_figchild.tikz")
-	out := filepath.Join(t.TempDir(), "tcblisting_figchild.png")
-	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
-		t.Fatal(err)
+	engines := []struct {
+		name   string
+		avail  func() error
+		reason string
+	}{
+		{name: "xe", avail: func() error { return latexmkAvailable(false) },
+			reason: "latexmk unavailable"},
+		{name: "tectonic", avail: tectonicAvailable,
+			reason: "tectonic unavailable"},
 	}
-	if err := renderTikz(in, out, "xe"); err != nil {
-		t.Fatalf("renderTikz() failed: %v", err)
-	}
-	f, err := os.Open(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		t.Fatalf("decoding png: %v", err)
-	}
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	x0, x1 := b.Min.X+w*60/100, b.Min.X+w*92/100
-	y0, y1 := b.Min.Y+h*20/100, b.Min.Y+h*95/100
-	dark := 0
-	for y := y0; y < y1; y++ {
-		for x := x0; x < x1; x++ {
-			r, g, bl, _ := img.At(x, y).RGBA()
-			// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
-			lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-			if lum < 128 {
-				dark++
+	for _, e := range engines {
+		t.Run(e.name, func(t *testing.T) {
+			if err := e.avail(); err != nil {
+				t.Skipf("%s: %v", e.reason, err)
 			}
-		}
-	}
-	if dark <= 200 {
-		t.Fatalf("tcblisting lower half looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > 200); the figchild drawing was silently dropped",
-			dark, x0, x1, y0, y1, w, h)
+			if _, err := exec.LookPath("mutool"); err != nil {
+				t.Skipf("mutool unavailable: %v", err)
+			}
+			in := filepath.Join(t.TempDir(), "tcblisting_figchild.tikz")
+			out := filepath.Join(t.TempDir(), "tcblisting_figchild.png")
+			if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := renderTikz(in, out, e.name); err != nil {
+				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
+			}
+			f, err := os.Open(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			img, _, err := image.Decode(f)
+			if err != nil {
+				t.Fatalf("decoding png: %v", err)
+			}
+			b := img.Bounds()
+			w, h := b.Dx(), b.Dy()
+			x0, x1 := b.Min.X+w*60/100, b.Min.X+w*92/100
+			y0, y1 := b.Min.Y+h*20/100, b.Min.Y+h*95/100
+			dark := 0
+			for y := y0; y < y1; y++ {
+				for x := x0; x < x1; x++ {
+					r, g, bl, _ := img.At(x, y).RGBA()
+					// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
+					lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
+					if lum < 128 {
+						dark++
+					}
+				}
+			}
+			if dark <= 200 {
+				t.Fatalf("tcblisting lower half looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > 200); the figchild drawing was silently dropped",
+					dark, x0, x1, y0, y1, w, h)
+			}
+		})
 	}
 }
 

@@ -2052,6 +2052,40 @@ func TestRewriteSelfContainedTcblistings(t *testing.T) {
 			in:   "\\begin{tcblisting}{title={a}\n\\fcBell\n\\end{tcblisting}\n",
 			want: "\\begin{tcblisting}{title={a}\n\\fcBell\n\\end{tcblisting}\n",
 		},
+		{
+			// 幂等守卫必须按独立选项比较: 值里出现的同名子串不算已引用。
+			name: "style name inside a title value",
+			in:   "\\begin{tcblisting}{title={About slingshot nowrap}}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title={About slingshot nowrap}}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			name: "style name first",
+			in:   "\\begin{tcblisting}{slingshot nowrap, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			name: "style name middle",
+			in:   "\\begin{tcblisting}{title=t, slingshot nowrap, other=x}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title=t, slingshot nowrap, other=x}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			name: "style name last",
+			in:   "\\begin{tcblisting}{title=t, slingshot nowrap}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title=t, slingshot nowrap}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 选项参数里的注释含不平衡花括号: 注释里的花括号不参与配对,
+			// 真实 '}' 才是参数结尾 (旧逻辑会因注释里的 '{' 多计而配不上, 整个环境漏改)。
+			name: "comment with unbalanced braces in options",
+			in:   "\\begin{tcblisting}{title=x % { { } unbalanced\n}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, title=x % { { } unbalanced\n}\n\\fcBell\n\\end{tcblisting}\n",
+		},
+		{
+			// 注释里的 \begin{tcblisting} 不是环境起点: 只应改写真实环境。
+			name: "commented begin marker",
+			in:   "% \\begin{tcblisting}{}\n\\begin{tcblisting}{title=t}\n\\fcBell\n\\end{tcblisting}\n",
+			want: "% \\begin{tcblisting}{}\n\\begin{tcblisting}{slingshot nowrap, title=t}\n\\fcBell\n\\end{tcblisting}\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2061,6 +2095,34 @@ func TestRewriteSelfContainedTcblistings(t *testing.T) {
 			// 幂等: 二次改写与首次结果一致。
 			if got := rewriteSelfContainedTcblistings(tt.want); got != tt.want {
 				t.Errorf("rewriteSelfContainedTcblistings() not idempotent: %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHasNoWrapStyle 验证幂等守卫按 pgfkeys 逗号分隔的独立选项全等比较,
+// 而不是子串匹配: 值里出现的同样文字不算引用。
+func TestHasNoWrapStyle(t *testing.T) {
+	tests := []struct {
+		name string
+		opts string
+		want bool
+	}{
+		{name: "empty", opts: "", want: false},
+		{name: "first", opts: "slingshot nowrap, title=t", want: true},
+		{name: "middle", opts: "title=t, slingshot nowrap, other=x", want: true},
+		{name: "last", opts: "title=t, slingshot nowrap", want: true},
+		{name: "surrounding space", opts: "  slingshot nowrap  ", want: true},
+		{name: "only in a value", opts: "title={About slingshot nowrap}", want: false},
+		{name: "value with trailing text", opts: "title=t, note=slingshot nowrap", want: false},
+		{name: "prefix only", opts: "slingshot nowrap extra", want: false},
+		{name: "case sensitive", opts: "Slingshot Nowrap", want: false},
+		{name: "other style", opts: "tikz lower, sidebyside", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasNoWrapStyle(tt.opts); got != tt.want {
+				t.Errorf("hasNoWrapStyle(%q) = %v, want %v", tt.opts, got, tt.want)
 			}
 		})
 	}
@@ -2078,6 +2140,11 @@ func TestMatchBalancedBrace(t *testing.T) {
 		{in: "{a", want: "!"},
 		{in: "x{}", want: "!"}, // 起点不是 '{'
 		{in: "", want: "!"},
+		// 注释里的花括号不参与配对: 只跳过、位置不变, 真实 '}' 才是结尾。
+		{in: "{a % { { } comment\n}rest", want: "rest"},
+		{in: "{a % } comment\n}rest", want: "rest"},
+		// \% 是转义百分号, 不是注释起点: 它后面的 '}' 正常关闭花括号。
+		{in: `{a \% b}rest`, want: "rest"},
 	}
 	for _, tt := range tests {
 		i, ok := matchBalancedBrace(tt.in, 0)

@@ -53,8 +53,10 @@ tikzducks / tikzpeople / figchild / tikz-triminos / scsnowman / tcolorbox 等）
 本身自包含（figchild 的 `\fc*` 命令、`\tkztriminos`、`\scsnowman`，或整段
 `tikzpicture` / `circuitikz` / `picture` 等环境）时会自动摘掉 `tikz lower` 的 picture 包裹——
 再套一层会让图形**静默丢失**（编译 exit 0，盒子右侧空白）。盒子选项里显式写在后面的
-`tikz lower` / `before lower*` 仍然优先。大图建议在内容里用 `[scale=...]` 缩小，或加宽盒子
-选项（`width` / `righthand width`）。
+`tikz lower` / `before lower*` 仍然优先。注意自包含命令与裸 TikZ **混用**时（按"包含即命中"
+判定）同样会摘掉包裹，其中的裸 TikZ 代码因没有 picture 会编译报错——与 `standalone` 片段的既有
+取舍一致，混用时请自行补 `tikzpicture`。大图建议在内容里用 `[scale=...]` 缩小，或加宽盒子选项
+（`width` / `righthand width`）。
 
 ```bash
 slingshot tikz fig.tikz fig.png     # latexmk -xelatex → mutool 栅格化 150dpi

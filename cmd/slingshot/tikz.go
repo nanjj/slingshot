@@ -1561,11 +1561,12 @@ func rewriteSelfContainedTcblistings(content string) string {
 	b.Grow(len(content))
 	pos := 0
 	for {
-		i := strings.Index(content[pos:], begin)
+		// 注释区里的伪 \begin 标记不是环境起点 (注释里的 "样例" 不应被改写);
+		// 定位标记时统一跳过注释, 索引原样保留。
+		i := nextMarkerOutsideComment(content, begin, pos)
 		if i < 0 {
 			break
 		}
-		i += pos
 		optStart := i + len(begin)
 		b.WriteString(content[pos:optStart]) // 含 \begin{tcblisting}
 
@@ -1585,22 +1586,23 @@ func rewriteSelfContainedTcblistings(content string) string {
 			pos = optStart
 			continue
 		}
-		// 正文 = 选项参数之后到最近的 \end{tcblisting} 之前。
+		// 正文 = 选项参数之后到最近的 \end{tcblisting} 之前 (注释里的
+		// \end 同样不算数, 否则会截短正文并误判)。
 		bodyStart := closeIdx + 1
-		k := strings.Index(content[bodyStart:], end)
+		k := nextMarkerOutsideComment(content, end, bodyStart)
 		if k < 0 {
 			pos = optStart
 			continue
 		}
-		endIdx := bodyStart + k
+		endIdx := k
 		opts := content[j+1 : closeIdx]
 		body := content[bodyStart:endIdx]
 
 		// 保留 \begin 与 '{' 之间的空白 (正常为空), 再决定写什么。
 		b.WriteString(content[optStart:j])
 		switch {
-		case strings.Contains(opts, tcblistingNoWrapStyle):
-			// 幂等守卫: 已引用样式名, 原样写回。
+		case hasNoWrapStyle(opts):
+			// 幂等守卫: 选项里已有独立样式项, 原样写回。
 			b.WriteString(content[j : endIdx+len(end)])
 		case selfContainedCmd(body) || selfContainedStart(body):
 			// 命中: 样式名插在用户选项之前 (后写的用户设置仍优先)。
@@ -1619,9 +1621,57 @@ func rewriteSelfContainedTcblistings(content string) string {
 	return b.String()
 }
 
+// hasNoWrapStyle 报告 tcblisting 选项串 opts 里是否有与 tcblistingNoWrapStyle
+// **全等**的独立选项。pgfkeys 以逗号分隔选项, 因此按逗号切分、逐段 TrimSpace
+// 后比较, 不能做子串匹配: title={About slingshot nowrap} 这类**值**里出现同样
+// 文字并不等于引用了该样式, 子串匹配会误命中而跳过注入 (缺陷回归)。
+// 切分不解析花括号: 花括号内的逗号会把值切碎, 但碎片的 TrimSpace 结果要么带
+// 残留字符 (如 "slingshot nowrap}"), 要么是 "key=..." 前缀, 都不等于样式名,
+// 因此只会漏判不会误判; 而样式项本身是独立的裸选项 (无花括号), 不会被切碎。
+func hasNoWrapStyle(opts string) bool {
+	for _, opt := range strings.Split(opts, ",") {
+		if strings.TrimSpace(opt) == tcblistingNoWrapStyle {
+			return true
+		}
+	}
+	return false
+}
+
+// nextMarkerOutsideComment 返回 s 中从 from 起 sub 首次出现的下标, 跳过 TeX
+// 注释区里的伪标记; 找不到返回 -1。注释规则同 stripTikzComments: 未转义 % 至
+// 行尾为注释 (% 前连续反斜杠数为奇数视为转义, 如 \%)。只用于定位, 不修改内容。
+// 用途: 注释里的 % \begin{tcblisting}{} 不应被当作环境起点 (否则样式会被插进
+// 注释、真实环境反而漏改), 注释里的 \end{tcblisting} 也不应截短正文。
+func nextMarkerOutsideComment(s, sub string, from int) int {
+	for i := from; i < len(s); {
+		if s[i] == '%' {
+			// 反斜杠游程可能跨越 from 边界, 因此回看整个前缀而不是只看到 from。
+			bs := 0
+			for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
+				bs++
+			}
+			if bs%2 == 0 {
+				// 注释起点: 跳到行尾 (保留换行符), 该区间内的标记一律跳过。
+				for i < len(s) && s[i] != '\n' {
+					i++
+				}
+				continue
+			}
+		}
+		if strings.HasPrefix(s[i:], sub) {
+			return i
+		}
+		i++
+	}
+	return -1
+}
+
 // matchBalancedBrace 返回 s[i] (必须为 '{') 所配对 '}' 的下标。
 // 花括号允许嵌套 (如 title={Basic Ti\emph{k}Zing}); 反斜杠转义的 \{ \} 不计入
-// 深度, 因此选项里的转义花括号不会打乱配对。未找到配对时 ok 为 false。
+// 深度, 因此选项里的转义花括号不会打乱配对。
+// 注释感知: 未转义 % 至行尾视为注释 (转义规则同 stripTikzComments), 注释里的
+// 花括号既不配对也不计深度——否则 "% { {" 这类注释会把深度算歪, 真实 '}' 反而
+// 配不上, 整个环境漏改。注释只跳过、位置不变。未找到配对时 ok 为 false。
 func matchBalancedBrace(s string, i int) (int, bool) {
 	if i >= len(s) || s[i] != '{' {
 		return 0, false
@@ -1629,6 +1679,18 @@ func matchBalancedBrace(s string, i int) (int, bool) {
 	depth := 0
 	for ; i < len(s); i++ {
 		switch s[i] {
+		case '%':
+			bs := 0
+			for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
+				bs++
+			}
+			if bs%2 == 0 {
+				// 注释起点: 跳到行尾 (保留换行符)。
+				for i < len(s) && s[i] != '\n' {
+					i++
+				}
+				continue
+			}
 		case '\\':
 			// 跳过被转义的下一个字符 (\{ / \} / \\ 都按此处理), 避免误计数;
 			// 反斜杠位于末尾时 i++ 后循环条件自然结束。

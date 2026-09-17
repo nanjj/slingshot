@@ -139,8 +139,12 @@ lower*={\centering\tcb@shield@externalize\begin{tikzpicture}[{#1}]},after lower*
 `before lower*` / `after lower*`、只留 `\centering`）插到盒子选项**最前面**：pgfkeys 后写者胜，
 用户后写的 `tikz lower` / `before lower*` 仍优先。只改选项参数、正文一字不动（要在代码侧原样
 显示）；选项参数用 `matchBalancedBrace` 做平衡扫描（支持嵌套与 `\{` `\}` 转义）；已含样式名
-则跳过（幂等），无选项参数 / 找不到 `\end{tcblisting}` 时原样跳过不报错。两个后端都支持
-（2021 bundle 自带 tcolorbox + listings）。
+则跳过（幂等），无选项参数 / 找不到 `\end{tcblisting}` 时原样跳过不报错；定位 begin/end 标记与
+扫描选项花括号时都跳过注释区（未转义 `%` 至行尾），注释里的伪环境标记与花括号不参与判定；幂等
+守卫按 pgfkeys 逗号分隔逐项全等比较（`hasNoWrapStyle`），值里出现同名文字不算引用。自包含命令
+与裸 TikZ **混用**时按 contains 语义命中、同样摘包裹，其中的裸 TikZ 会因缺 picture 编译报错——
+与 standalone 片段同一取舍，`README.md` 的 tikz 小节同步说明。两个后端都支持（2021 bundle 自带
+tcolorbox + listings）。
 
 pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|zy> plane at
 <axis>=` 与裸 `canvas is plane` 坐标系/选项，由 `tikzExtraLibraries` 的内容特征正则自动加载
