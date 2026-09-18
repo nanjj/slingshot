@@ -1471,13 +1471,26 @@ func tikzlingsPicShim(content string) string {
 
 // tcblistingSetup 为 tcblisting 文档示例注入 tcolorbox 配置, 未命中返回空串。
 // tcblisting 是 tcolorbox 的 "代码 + 编译结果" 环境, TikZ 手册常用它展示示例:
-//   - \tcbuselibrary{listings} 提供 tcblisting 环境 (listings 引擎,
-//     不需要 --shell-escape);
+//   - \tcbuselibrary{listings} 提供 tcblisting 环境 (listings 是纯 TeX 引擎,
+//     与 shell escape 无关); 当 profile.supportsMinted 时追加 minted 库, 让
+//     片段的 listing engine=minted / minted options= 可用。minted 同样
+//     **不需要** -shell-escape: TL2026 的 minted v3 把高亮交给 latexminted
+//     助手, 而 latexminted 就在 texmf.cnf 的受限白名单里 (shell_escape = p,
+//     shell_escape_commands 含 latexminted)。tectonic 的 shell escape 被完全
+//     禁用, minted 在**加载期**就报 "You must invoke LaTeX with the
+//     -shell-escape flag", 且这会拖垮文档里每一个 tcblisting, 故 tectonic
+//     profile 下不加载 minted —— 此时 listing engine=minted 退化为 pgfkeys
+//     "Choice 'minted' unknown in choice key '/tcb/listing engine'", 属已知
+//     限制 (README / AGENTS 有说明), 不是本工具要修的错误;
 //   - \tcbset{tikz lower} 让 "text" 部分在 tikzpicture 内执行 —— TikZ 只在
 //     tikzpicture 内安装 \path / \draw / scope 等命令, 而 tcblisting 的 text
 //     部分默认在 tikzpicture 之外, \marmot 这类以 \begin{scope} 开头的宏会报
 //     "Environment scope undefined"; tikzlings 手册的 preamble 里正是
 //     \tcbset{tikz lower} (tikzlings-doc.tex);
+//   - \tcbset 末项 listing engine=listings 钉住默认高亮引擎: minted 库一旦
+//     加载, tcolorbox 的默认引擎在某些版本下会跟着变, 未声明引擎的既有盒子
+//     就会平白要求 pygments; 显式写 listings 保证默认行为不变。想要 minted 的
+//     片段自己写 listing engine=minted —— 盒子实例选项晚于导言区执行, 总是优先。
 //   - sidebyside 系列选项复刻手册盒内的左右布局: 代码在左, "text" (编译结果)
 //     在右并居中, 两半之间没有虚线分隔。取值取自手册自己的 preamble
 //     (tikzducks-doc-settings.sty / tikzlings-doc-settings.sty 的 \tcbset:
@@ -1495,14 +1508,21 @@ func tikzlingsPicShim(content string) string {
 // 样式名由 tcblistingNoWrapStyle 常量统一, 保证"引用了样式名 ⇔ 这里定义了样式"。
 //
 // 仅当内容使用 tcblisting 且 tcolorbox 确实会被加载时注入。
-func tcblistingSetup(raw string, pkgs []string) string {
+func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
 	if !strings.Contains(raw, `\begin{tcblisting}`) {
 		return ""
 	}
 	if !slices.Contains(pkgs, "tcolorbox") {
 		return ""
 	}
-	return `\tcbuselibrary{listings}
+	// minted 只在后端支持时加载 (latexmk 走受限 shell escape 白名单,
+	// tectonic 完全禁用 shell escape): 无条件加载会让 tectonic 上所有含
+	// tcblisting 的文档在导言区直接失败。
+	libs := "listings"
+	if profile.supportsMinted {
+		libs += ",minted"
+	}
+	return `\tcbuselibrary{` + libs + `}
 \tcbset{
   ` + tcblistingNoWrapStyle + `/.style={before lower*={\centering}, after lower*={}},
   tikz lower,
@@ -1511,6 +1531,7 @@ func tcblistingSetup(raw string, pkgs []string) string {
   righthand width=5.7cm,
   sidebyside gap=10pt,
   lower separated=false,
+  listing engine=listings,
 }
 `
 }
@@ -1989,8 +2010,9 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		cjkPreamble = "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n"
 	}
 	// 兼容 shim 按后端 profile 组装 (见 tikzShims); tcblisting 的 tcolorbox
-	// 配置与文档局部颜色兜底 (tikzDocColorShims) 均与后端无关, 命中时追加。
-	shims := tikzShims(profile, raw, pkgs) + tcblistingSetup(raw, pkgs) + tikzDocColorShims(raw)
+	// 配置也随 profile 分叉 (minted 库只在支持受限 shell escape 的后端加载,
+	// 见 tcblistingSetup), 文档局部颜色兜底 (tikzDocColorShims) 与后端无关。
+	shims := tikzShims(profile, raw, pkgs) + tcblistingSetup(profile, raw, pkgs) + tikzDocColorShims(raw)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
 		[]byte(normalizeTikz(raw, profile)), 0644); err != nil {

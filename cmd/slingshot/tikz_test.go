@@ -1869,76 +1869,128 @@ func TestTikzShims(t *testing.T) {
 	}
 }
 
+// tcblistingWant 拼出 tcblistingSetup 的期望输出: libs 是高亮引擎库列表
+// ("listings" 或 "listings,minted"), 其余 	cbset 条目在 profile 之间不共享,
+// 故由本函数统一, 测试只需给出 libs。
+func tcblistingWant(libs string) string {
+	return `\tcbuselibrary{` + libs + `}
+\tcbset{
+  slingshot nowrap/.style={before lower*={\centering}, after lower*={}},
+  tikz lower,
+  sidebyside,
+  center lower,
+  righthand width=5.7cm,
+  sidebyside gap=10pt,
+  lower separated=false,
+  listing engine=listings,
+}
+`
+}
+
 // TestTcblistingSetup 验证 tcblisting 的 tcolorbox 配置注入条件:
 // 必须同时命中 tcblisting 与 tcolorbox 宏包, 否则返回空串; 命中时注入
-// listings 库、tikz lower 与手册同款 sidebyside 左右布局选项。
+// 高亮引擎库、tikz lower 与手册同款 sidebyside 左右布局选项。
+//
+// 库列表随 profile 分叉: latexmk (受限 shell escape) 支持 minted, 两个库都
+// 加载; tectonic 禁用 shell escape, 只加载 listings。	cbset 的内容与顺序
+// 与 profile 无关 (含末尾的 listing engine=listings 默认引擎钉扎)。
 func TestTcblistingSetup(t *testing.T) {
 	tests := []struct {
-		name string
-		raw  string
-		pkgs []string
-		want string
+		name    string
+		profile tikzProfile
+		raw     string
+		pkgs    []string
+		want    string
 	}{
 		{
-			name: "tcblisting with tcolorbox",
-			raw:  "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
-			pkgs: []string{"tcolorbox", "tikzlings-marmots"},
-			want: `\tcbuselibrary{listings}
-\tcbset{
-  slingshot nowrap/.style={before lower*={\centering}, after lower*={}},
-  tikz lower,
-  sidebyside,
-  center lower,
-  righthand width=5.7cm,
-  sidebyside gap=10pt,
-  lower separated=false,
-}
-`,
+			name:    "tcblisting with tcolorbox (latexmk)",
+			profile: latexmkProfile(),
+			raw:     "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
+			pkgs:    []string{"tcolorbox", "tikzlings-marmots"},
+			want:    tcblistingWant("listings,minted"),
 		},
 		{
-			name: "plain tikz needs nothing",
-			raw:  "\\draw (0,0) -- (1,1);",
-			pkgs: []string{"tcolorbox"},
+			name:    "tcblisting with tcolorbox (tectonic)",
+			profile: tectonicProfile(),
+			raw:     "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
+			pkgs:    []string{"tcolorbox", "tikzlings-marmots"},
+			want:    tcblistingWant("listings"),
 		},
 		{
-			name: "tcblisting without tcolorbox loaded",
-			raw:  "\\begin{tcblisting}{}x\\end{tcblisting}",
-			pkgs: []string{"tikz"},
+			name:    "plain tikz needs nothing",
+			profile: latexmkProfile(),
+			raw:     "\\draw (0,0) -- (1,1);",
+			pkgs:    []string{"tcolorbox"},
 		},
 		{
-			name: "snippet tcbset does not suppress defaults",
-			raw:  "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}",
-			pkgs: []string{"tcolorbox"},
-			want: `\tcbuselibrary{listings}
-\tcbset{
-  slingshot nowrap/.style={before lower*={\centering}, after lower*={}},
-  tikz lower,
-  sidebyside,
-  center lower,
-  righthand width=5.7cm,
-  sidebyside gap=10pt,
-  lower separated=false,
-}
-`,
+			name:    "tcblisting without tcolorbox loaded",
+			profile: latexmkProfile(),
+			raw:     "\\begin{tcblisting}{}x\\end{tcblisting}",
+			pkgs:    []string{"tikz"},
+		},
+		{
+			name:    "snippet tcbset does not suppress defaults",
+			profile: latexmkProfile(),
+			raw:     "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}",
+			pkgs:    []string{"tcolorbox"},
+			want:    tcblistingWant("listings,minted"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tcblistingSetup(tt.raw, tt.pkgs); got != tt.want {
+			if got := tcblistingSetup(tt.profile, tt.raw, tt.pkgs); got != tt.want {
 				t.Errorf("tcblistingSetup() = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
+// TestTcblistingSetupMintedGatedByProfile 是 minted 加载的**门控**契约:
+// minted 库只在支持受限 shell escape 的后端加载 (latexmk), tectonic 上加载
+// 会在导言区直接报 "You must invoke LaTeX with the -shell-escape flag" 并
+// 拖垮所有含 tcblisting 的文档, 因此绝不能出现在 tectonic 的输出里。
+// listing engine=listings 默认引擎钉扎则两个 profile 都必须有, 否则既有的
+// listings 盒子会平白要求 pygments。
+func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
+	const raw = "\\begin{tcblisting}{}\\duck\\end{tcblisting}"
+	pkgs := []string{"tcolorbox"}
+
+	xe := tcblistingSetup(latexmkProfile(), raw, pkgs)
+	if !strings.Contains(xe, `\tcbuselibrary{listings,minted}`) {
+		t.Errorf("latexmk output must load listings,minted, got:\n%s", xe)
+	}
+
+	tec := tcblistingSetup(tectonicProfile(), raw, pkgs)
+	if !strings.Contains(tec, `\tcbuselibrary{listings}`) {
+		t.Errorf("tectonic output must load listings, got:\n%s", tec)
+	}
+	// 子串 "minted" 在 tectonic 输出里一次都不能出现: minted 库加载或
+	// listing engine=minted 都会让 tectonic 编译失败。
+	if strings.Contains(tec, "minted") {
+		t.Errorf("tectonic output must not mention minted at all, got:\n%s", tec)
+	}
+
+	for name, got := range map[string]string{"latexmk": xe, "tectonic": tec} {
+		if !strings.Contains(got, "listing engine=listings") {
+			t.Errorf("%s output must pin listing engine=listings, got:\n%s", name, got)
+		}
+	}
+}
+
 // TestTcblistingSetupDefinesNoWrapStyle 钉住耦合契约: rewriteSelfContainedTcblistings
 // 插入的样式名必须真的在 tcblistingSetup 的输出里被定义, 否则盒子会引用一个
 // 不存在的样式 (pgfkeys 报 unknown key / 或静默保留 picture 包裹)。
+// 两个 profile 都定义该样式 (与后端无关)。
 func TestTcblistingSetupDefinesNoWrapStyle(t *testing.T) {
-	got := tcblistingSetup("\\begin{tcblisting}{}\\duck\\end{tcblisting}", []string{"tcolorbox"})
 	want := tcblistingNoWrapStyle + "/.style={before lower*={\\centering}, after lower*={}}"
-	if !strings.Contains(got, want) {
-		t.Fatalf("tcblistingSetup() does not define the style referenced by the rewriter:\n%s", got)
+	for name, profile := range map[string]tikzProfile{
+		"latexmk":  latexmkProfile(),
+		"tectonic": tectonicProfile(),
+	} {
+		got := tcblistingSetup(profile, "\\begin{tcblisting}{}\\duck\\end{tcblisting}", []string{"tcolorbox"})
+		if !strings.Contains(got, want) {
+			t.Fatalf("%s: tcblistingSetup() does not define the style referenced by the rewriter:\n%s", name, got)
+		}
 	}
 }
 

@@ -575,6 +575,94 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 	}
 }
 
+// TestRenderTikzTcblistingMintedNotBlank 是 tcblisting 的 minted 引擎回归
+// (tikzlings 手册"练习 6"场景: listing engine=minted + minted options={linenos})。
+//
+// 只设 xe 腿: minted 依赖受限 shell escape 白名单里的 latexminted, 而 tectonic
+// 完全禁用 shell escape —— minted 在导言区就报 "You must invoke LaTeX with the
+// -shell-escape flag", 示例必然编译失败。tectonic 上"不加载 minted"这条分档
+// 契约由 TestTcblistingSetupMintedGatedByProfile 单测钉住, 不在这里设腿。
+//
+// 断言与 TestRenderTikzTcblistingNotBlank 同构: 解码 PNG 后统计暗像素, 抓的是
+// "编译成功但内容空白"这类静默丢失。区域沿用 x ∈ (60%, 92%) 的右侧结果区约定
+// (代码在左、编译结果在右), 另加 x ∈ (5%, 45%) 的左侧代码区 —— minted 若被
+// 静默降级成 plain, 行号与高亮会消失, 代码区暗像素随之塌陷。空内容时两区均为 0,
+// 实测右侧 ≈ 3087、左侧 ≈ 3932 (725x318 样例), 阈值 1000 留约 3 倍余量。
+func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
+	if err := latexmkAvailable(false); err != nil {
+		t.Skipf("latexmk unavailable: %v", err)
+	}
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	const sample = `\begin{tcblisting}{
+  title={tikzcd minted},
+  lower separated,
+  listing engine=minted,
+  minted options={linenos},
+}
+  \begin{tikzcd}[row sep=scriptsize, column sep=scriptsize]
+    & f^* E_V \arrow[dl] \arrow[rr] \arrow[dd]
+    & & E_V \arrow[dl] \arrow[dd] \\
+    f^* E \arrow[rr, crossing over] \arrow[dd] & & E \\
+    & U \arrow[dl] \arrow[rr] & & V \arrow[dl] \\
+    M \arrow[rr] & & N \arrow[from=uu, crossing over]\\
+  \end{tikzcd}
+\end{tcblisting}
+`
+	in := filepath.Join(t.TempDir(), "tcblisting_minted.tikz")
+	out := filepath.Join(t.TempDir(), "tcblisting_minted.png")
+	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderTikz(in, out, "xe"); err != nil {
+		t.Fatalf("renderTikz(xe) failed: %v", err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		t.Fatalf("decoding png: %v", err)
+	}
+	// 右侧结果区 (编译结果) 与左侧代码区 (minted 高亮 + 行号)。
+	regions := []struct {
+		name           string
+		x0f, x1f       int
+		y0f, y1f       int
+		minDark        int
+		emptyDetection string
+	}{
+		{name: "result area", x0f: 60, x1f: 92, y0f: 20, y1f: 95, minDark: 1000,
+			emptyDetection: "the tikzcd drawing was silently dropped"},
+		{name: "code area", x0f: 5, x1f: 45, y0f: 20, y1f: 95, minDark: 1000,
+			emptyDetection: "the minted-highlighted source and line numbers were silently dropped"},
+	}
+	for _, rg := range regions {
+		b := img.Bounds()
+		w, h := b.Dx(), b.Dy()
+		x0, x1 := b.Min.X+w*rg.x0f/100, b.Min.X+w*rg.x1f/100
+		y0, y1 := b.Min.Y+h*rg.y0f/100, b.Min.Y+h*rg.y1f/100
+		dark := 0
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				r, g, bl, _ := img.At(x, y).RGBA()
+				// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
+				lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
+				if lum < 128 {
+					dark++
+				}
+			}
+		}
+		if dark <= rg.minDark {
+			t.Fatalf("tcblisting minted %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
+				rg.name, dark, x0, x1, y0, y1, w, h, rg.minDark, rg.emptyDetection)
+		}
+	}
+}
+
 // TestRenderTikzIntegrationCJK 真跑 xe 引擎 + xelatex + xeCJK 三者齐备时渲染 CJK。
 func TestRenderTikzIntegrationCJK(t *testing.T) {
 	if err := latexmkAvailable(true); err != nil {

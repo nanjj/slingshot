@@ -21,12 +21,15 @@ const (
 	engineAuto     tikzEngine = "auto"     // xe 优先, tectonic 回退
 )
 
-// tikzProfile 选择某个后端需要的兼容处理。
+// tikzProfile 选择某个后端需要的兼容处理, 并声明该后端的能力。
 //
 // latexmk (TeX Live 2026) 走的是新版 tkz-euclide / circuitikz 5.x 语法,
 // 无需翻译; tectonic bundle 内置的是旧版 tkz-euclide 4.051b / circuitikz
 // 1.4.x, 才需要把这些 5.x 语法翻译回旧版等价形式。错误地启用 legacy
 // 处理会在 TL2026 上"反向出错"(见 tikz_engine 门控矩阵)。
+//
+// legacy* 字段描述"要不要把新语法翻译回旧的"; 能力字段描述"后端本身
+// 支不支持某个特性", 两者都可能让 profile 分叉, 故放在同一个结构里。
 type tikzProfile struct {
 	legacyVeclen     bool // [veclen] -> [xfp]
 	legacyThrough    bool // through= center..angle..point.. 重排
@@ -40,12 +43,23 @@ type tikzProfile struct {
 	legacyTikzlings  bool // tectonic: bundle 无 tikzlings TikZ 库 (v0.8) — pic 语法改用子宏包 + tikzlingsPicShim; latexmk: 注入 \usetikzlibrary{tikzlings}
 	legacyFigchild   bool // tectonic: bundle 的 figchild 是 v1.1.1 (2021, 3 必填参数老 API), 与当前 3.x 的可选 TikZ 选项形式不兼容; 写入 vendored v3.1.1 覆盖
 	legacyTriminos   bool // tectonic: bundle 无 tikz-triminos; 写入 vendored sty + fpeval shim
+
+	// supportsMinted 报告该后端能否加载 minted 库 (tcblisting 的
+	// listing engine=minted)。latexmk: TL2026 的 texmf.cnf 开启受限 shell
+	// escape (shell_escape = p), 白名单 shell_escape_commands 里含
+	// latexminted —— minted v3 把高亮交给该助手执行, 因此**不需要**
+	// -shell-escape 就能工作。tectonic: shell escape 被完全禁用, minted 在
+	// \RequirePackage 阶段就报 "You must invoke LaTeX with the -shell-escape
+	// flag", 会让文档里每一个 tcblisting 编译失败, 故为 false。
+	supportsMinted bool
 }
 
-// latexmkProfile 是 TL2026 主后端: 全 false, 不做 legacy 翻译。
-func latexmkProfile() tikzProfile { return tikzProfile{} }
+// latexmkProfile 是 TL2026 主后端: 不做任何 legacy 翻译, 且支持 minted
+// (受限 shell escape 白名单里有 latexminted, 见 tikzProfile.supportsMinted)。
+func latexmkProfile() tikzProfile { return tikzProfile{supportsMinted: true} }
 
-// tectonicProfile 是 tectonic 后备后端: 全 true, 启用 legacy 翻译。
+// tectonicProfile 是 tectonic 后备后端: 启用全部 legacy 翻译, 但不支持
+// minted (tectonic 完全禁用 shell escape)。
 func tectonicProfile() tikzProfile {
 	return tikzProfile{
 		legacyVeclen:     true,
@@ -60,6 +74,7 @@ func tectonicProfile() tikzProfile {
 		legacyTikzlings:  true,
 		legacyFigchild:   true,
 		legacyTriminos:   true,
+		supportsMinted:   false, // tectonic 禁用 shell escape, 加载 minted 即在导言区报错
 	}
 }
 
@@ -77,7 +92,9 @@ func latexmkEngineFlag(eng tikzEngine) string {
 }
 
 // latexmkCompileArgs 是 latexmk 后端的固定编译参数。
-// 绝不加 -shell-escape。
+// 绝不加 -shell-escape。minted 也不需要: TL2026 的 minted v3 经 latexminted
+// 助手工作, 而 latexminted 已在 texmf.cnf 的受限白名单里 (shell_escape = p
+// + shell_escape_commands, 见 tikzProfile.supportsMinted)。
 func latexmkCompileArgs(eng tikzEngine) []string {
 	return []string{latexmkEngineFlag(eng), "-interaction=nonstopmode", "-halt-on-error", "input.tex"}
 }
