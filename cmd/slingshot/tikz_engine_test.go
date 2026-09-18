@@ -585,9 +585,13 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 //
 // 断言与 TestRenderTikzTcblistingNotBlank 同构: 解码 PNG 后统计暗像素, 抓的是
 // "编译成功但内容空白"这类静默丢失。区域沿用 x ∈ (60%, 92%) 的右侧结果区约定
-// (代码在左、编译结果在右), 另加 x ∈ (5%, 45%) 的左侧代码区 —— minted 若被
-// 静默降级成 plain, 行号与高亮会消失, 代码区暗像素随之塌陷。空内容时两区均为 0,
-// 实测右侧 ≈ 3087、左侧 ≈ 3932 (725x318 样例), 阈值 1000 留约 3 倍余量。
+// (代码在左、编译结果在右), 另加 x ∈ (5%, 45%) 的左侧代码区 —— 它只能证明
+// 代码侧整体存在, 并**不能**验证高亮/行号逐栏正确 (minted 失效时是编译报错、
+// 不是静默降级成 plain, 所以不存在"高亮悄悄消失"的故障模式)。minted 路径真正
+// 的保护是三者叠加: renderTikz 返回错误 (加载期报 -shell-escape) +
+// TestTcblistingSetupMintedGatedByProfile 的内容/后端门控 + 本测试的样例能
+// 成功渲染。空内容时两区均为 0, 实测右侧 ≈ 3087、左侧 ≈ 3932 (725x318 样例),
+// 阈值 1000 留约 3 倍余量。
 func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
 	if err := latexmkAvailable(false); err != nil {
 		t.Skipf("latexmk unavailable: %v", err)
@@ -638,7 +642,7 @@ func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
 		{name: "result area", x0f: 60, x1f: 92, y0f: 20, y1f: 95, minDark: 1000,
 			emptyDetection: "the tikzcd drawing was silently dropped"},
 		{name: "code area", x0f: 5, x1f: 45, y0f: 20, y1f: 95, minDark: 1000,
-			emptyDetection: "the minted-highlighted source and line numbers were silently dropped"},
+			emptyDetection: "the code side of the box is blank"},
 	}
 	for _, rg := range regions {
 		b := img.Bounds()

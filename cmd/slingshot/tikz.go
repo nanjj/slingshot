@@ -1472,8 +1472,11 @@ func tikzlingsPicShim(content string) string {
 // tcblistingSetup 为 tcblisting 文档示例注入 tcolorbox 配置, 未命中返回空串。
 // tcblisting 是 tcolorbox 的 "代码 + 编译结果" 环境, TikZ 手册常用它展示示例:
 //   - \tcbuselibrary{listings} 提供 tcblisting 环境 (listings 是纯 TeX 引擎,
-//     与 shell escape 无关); 当 profile.supportsMinted 时追加 minted 库, 让
-//     片段的 listing engine=minted / minted options= 可用。minted 同样
+//     与 shell escape 无关); 仅当 profile.supportsMinted **且内容提到 minted**
+//     (子串命中, 覆盖 listing engine=minted / minted options= 等写法) 时才追加
+//     minted 库。能力与内容两个条件缺一不可: 后端能力决定"能不能加载", 内容
+//     命中决定"要不要加载"—— 后者保证不提 minted 的文档与改动前逐字一致
+//     (不引入 minted/latexminted 依赖, 也不假设 TL>=2026)。minted 同样
 //     **不需要** -shell-escape: TL2026 的 minted v3 把高亮交给 latexminted
 //     助手, 而 latexminted 就在 texmf.cnf 的受限白名单里 (shell_escape = p,
 //     shell_escape_commands 含 latexminted)。tectonic 的 shell escape 被完全
@@ -1515,11 +1518,13 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
 	if !slices.Contains(pkgs, "tcolorbox") {
 		return ""
 	}
-	// minted 只在后端支持时加载 (latexmk 走受限 shell escape 白名单,
-	// tectonic 完全禁用 shell escape): 无条件加载会让 tectonic 上所有含
-	// tcblisting 的文档在导言区直接失败。
+	// minted 只在"后端支持"且"内容命中"时加载: 后端能力决定能不能加载
+	// (latexmk 走受限 shell escape 白名单, tectonic 完全禁用 shell escape),
+	// 内容命中决定要不要加载 —— 不提 minted 的文档保持 \tcbuselibrary{listings}
+	// 逐字不变, 不引入 minted/latexminted 依赖。无条件加载还会让 tectonic 上
+	// 所有含 tcblisting 的文档在导言区直接失败。
 	libs := "listings"
-	if profile.supportsMinted {
+	if profile.supportsMinted && strings.Contains(raw, "minted") {
 		libs += ",minted"
 	}
 	return `\tcbuselibrary{` + libs + `}

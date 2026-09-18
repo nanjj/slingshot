@@ -1870,7 +1870,7 @@ func TestTikzShims(t *testing.T) {
 }
 
 // tcblistingWant 拼出 tcblistingSetup 的期望输出: libs 是高亮引擎库列表
-// ("listings" 或 "listings,minted"), 其余 	cbset 条目在 profile 之间不共享,
+// ("listings" 或 "listings,minted"), 其余 \tcbset 条目在 profile 之间不共享,
 // 故由本函数统一, 测试只需给出 libs。
 func tcblistingWant(libs string) string {
 	return `\tcbuselibrary{` + libs + `}
@@ -1891,10 +1891,13 @@ func tcblistingWant(libs string) string {
 // 必须同时命中 tcblisting 与 tcolorbox 宏包, 否则返回空串; 命中时注入
 // 高亮引擎库、tikz lower 与手册同款 sidebyside 左右布局选项。
 //
-// 库列表随 profile 分叉: latexmk (受限 shell escape) 支持 minted, 两个库都
-// 加载; tectonic 禁用 shell escape, 只加载 listings。	cbset 的内容与顺序
-// 与 profile 无关 (含末尾的 listing engine=listings 默认引擎钉扎)。
+// 库列表按 profile 与内容两个条件拼接: 只有 latexmk (受限 shell escape) 且
+// 内容提到 minted 时才追加 minted 库; 其余组合都只加载 listings, 与改动前
+// 逐字一致。\tcbset 的内容与顺序与两者无关 (含末尾的 listing engine=listings
+// 默认引擎钉扎)。
 func TestTcblistingSetup(t *testing.T) {
+	const plainRaw = "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}"
+	const mintedRaw = "\\begin{tcblisting}{listing engine=minted, minted options={linenos}}\n\\duck\n\\end{tcblisting}"
 	tests := []struct {
 		name    string
 		profile tikzProfile
@@ -1903,16 +1906,26 @@ func TestTcblistingSetup(t *testing.T) {
 		want    string
 	}{
 		{
-			name:    "tcblisting with tcolorbox (latexmk)",
+			// 内容不含 minted: 即便 latexmk 支持 minted, 也不得加载, 否则
+			// 本来正常的文档会平白依赖 minted/latexminted。
+			name:    "tcblisting with tcolorbox (latexmk, no minted)",
 			profile: latexmkProfile(),
-			raw:     "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
+			raw:     plainRaw,
 			pkgs:    []string{"tcolorbox", "tikzlings-marmots"},
+			want:    tcblistingWant("listings"),
+		},
+		{
+			// 内容命中 minted 且后端支持: 两个库都加载。
+			name:    "tcblisting with tcolorbox (latexmk, minted)",
+			profile: latexmkProfile(),
+			raw:     mintedRaw,
+			pkgs:    []string{"tcolorbox"},
 			want:    tcblistingWant("listings,minted"),
 		},
 		{
 			name:    "tcblisting with tcolorbox (tectonic)",
 			profile: tectonicProfile(),
-			raw:     "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}",
+			raw:     plainRaw,
 			pkgs:    []string{"tcolorbox", "tikzlings-marmots"},
 			want:    tcblistingWant("listings"),
 		},
@@ -1933,7 +1946,7 @@ func TestTcblistingSetup(t *testing.T) {
 			profile: latexmkProfile(),
 			raw:     "\\tcbset{righthand width=3cm}\n\\begin{tcblisting}{title={Basic}}\n\\duck\n\\end{tcblisting}",
 			pkgs:    []string{"tcolorbox"},
-			want:    tcblistingWant("listings,minted"),
+			want:    tcblistingWant("listings"),
 		},
 	}
 	for _, tt := range tests {
@@ -1945,35 +1958,52 @@ func TestTcblistingSetup(t *testing.T) {
 	}
 }
 
-// TestTcblistingSetupMintedGatedByProfile 是 minted 加载的**门控**契约:
-// minted 库只在支持受限 shell escape 的后端加载 (latexmk), tectonic 上加载
-// 会在导言区直接报 "You must invoke LaTeX with the -shell-escape flag" 并
-// 拖垮所有含 tcblisting 的文档, 因此绝不能出现在 tectonic 的输出里。
-// listing engine=listings 默认引擎钉扎则两个 profile 都必须有, 否则既有的
-// listings 盒子会平白要求 pygments。
+// TestTcblistingSetupMintedGatedByProfile 是 minted 加载的门控矩阵:
+// 后端能力 (profile.supportsMinted) 与内容命中 (raw 含 "minted") 两个条件
+// 缺一不可 —— 唯一加载 `listings,minted` 的组合是 latexmk x 含 minted。
+//
+// 两个理由共同决定这个矩阵: (1) tectonic 加载 minted 会在导言区直接报
+// "You must invoke LaTeX with the -shell-escape flag" 并拖垮所有含 tcblisting
+// 的文档; (2) latexmk 上不提 minted 的内容也不该加载 minted 库, 否则本来正常
+// 的文档会平白依赖 minted/latexminted (缺环境即导言区失败), 还假设了 TL>=2026。
+// listing engine=listings 默认引擎钉扎则四种组合都必须有, 否则既有的 listings
+// 盒子会平白要求 pygments。
 func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
-	const raw = "\\begin{tcblisting}{}\\duck\\end{tcblisting}"
+	const plainRaw = "\\begin{tcblisting}{}\\duck\\end{tcblisting}"
+	const mintedRaw = "\\begin{tcblisting}{listing engine=minted}\\duck\\end{tcblisting}"
 	pkgs := []string{"tcolorbox"}
 
-	xe := tcblistingSetup(latexmkProfile(), raw, pkgs)
-	if !strings.Contains(xe, `\tcbuselibrary{listings,minted}`) {
-		t.Errorf("latexmk output must load listings,minted, got:\n%s", xe)
+	cases := []struct {
+		name    string
+		profile tikzProfile
+		raw     string
+		wantLib string
+	}{
+		{"latexmk/no minted", latexmkProfile(), plainRaw, `\tcbuselibrary{listings}`},
+		{"latexmk/minted", latexmkProfile(), mintedRaw, `\tcbuselibrary{listings,minted}`},
+		{"tectonic/no minted", tectonicProfile(), plainRaw, `\tcbuselibrary{listings}`},
+		{"tectonic/minted", tectonicProfile(), mintedRaw, `\tcbuselibrary{listings}`},
 	}
-
-	tec := tcblistingSetup(tectonicProfile(), raw, pkgs)
-	if !strings.Contains(tec, `\tcbuselibrary{listings}`) {
-		t.Errorf("tectonic output must load listings, got:\n%s", tec)
-	}
-	// 子串 "minted" 在 tectonic 输出里一次都不能出现: minted 库加载或
-	// listing engine=minted 都会让 tectonic 编译失败。
-	if strings.Contains(tec, "minted") {
-		t.Errorf("tectonic output must not mention minted at all, got:\n%s", tec)
-	}
-
-	for name, got := range map[string]string{"latexmk": xe, "tectonic": tec} {
-		if !strings.Contains(got, "listing engine=listings") {
-			t.Errorf("%s output must pin listing engine=listings, got:\n%s", name, got)
-		}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tcblistingSetup(tc.profile, tc.raw, pkgs)
+			if !strings.Contains(got, tc.wantLib) {
+				t.Errorf("output must contain %q, got:\n%s", tc.wantLib, got)
+			}
+			if !strings.Contains(got, "listing engine=listings") {
+				t.Errorf("output must pin listing engine=listings, got:\n%s", got)
+			}
+			// 除了 latexmk x 含 minted, 其余组合的输出里 "minted" 一次都不能
+			// 出现: tectonic 加载 minted 必炸, latexmk 上不提 minted 的内容
+			// 也不该引入 minted/latexminted 依赖。
+			wantMinted := tc.profile.supportsMinted && strings.Contains(tc.raw, "minted")
+			if gotMinted := strings.Contains(got, ",minted"); gotMinted != wantMinted {
+				t.Errorf("output minted library = %v, want %v; got:\n%s", gotMinted, wantMinted, got)
+			}
+			if !wantMinted && strings.Contains(got, "minted") {
+				t.Errorf("non-minted output must not mention minted at all, got:\n%s", got)
+			}
+		})
 	}
 }
 

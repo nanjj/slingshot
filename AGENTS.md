@@ -123,18 +123,21 @@ pgfkeys 报 "I do not know the key '/tikz/pics/bear'"；legacy 后端要加载�
 `tikzlingsPicPackages` 提供。
 手册示例常用的 `tcblisting` 盒子由 `tcblistingSetup` 注入高亮引擎库 + `\tcbset{tikz lower,
 sidebyside, center lower, righthand width=5.7cm, sidebyside gap=10pt, lower separated=false,
-listing engine=listings}`：库列表按 `tikzProfile.supportsMinted` 拼接——latexmk 后端拼
-`\tcbuselibrary{listings,minted}`，tectonic 后端只拼 `\tcbuselibrary{listings}`。minted 与
-listings 都**不需要** `-shell-escape`，但途径不同：listings 是纯 TeX 引擎；TL2026 的 minted v3
-把高亮交给 `latexminted` 助手，而 `latexminted` 已在 texmf.cnf 的受限白名单里（`shell_escape = p`
-+ `shell_escape_commands`，`latexmkCompileArgs` 绝不加 `-shell-escape` 的规则不受影响）。
-tectonic 的 shell escape 被完全禁用，加载 minted 会在**导言区**就报 "You must invoke LaTeX with
-the -shell-escape flag"，且拖垮文档里每一个 tcblisting，故 tectonic profile 不加载 minted
-（此时 `listing engine=minted` 退化为 pgfkeys "Choice 'minted' unknown in choice key
-'/tcb/listing engine'"，属已知限制；`TestRenderTikzTcblistingMintedNotBlank` 只设 xe 腿，
-分档契约由 `TestTcblistingSetupMintedGatedByProfile` 单测钉住）。`\tcbset` 末项
+listing engine=listings}`：库列表按"后端能力 **且** 内容命中"拼接——只有 latexmk 后端
+（`tikzProfile.supportsMinted`）且片段提到 minted 时才拼 `\tcbuselibrary{listings,minted}`，
+其余组合都只拼 `\tcbuselibrary{listings}`。两个条件缺一不可：能力决定"能不能加载"，
+内容决定"要不要加载"——不提 minted 的文档因此保持与改动前逐字一致，不会平白依赖
+minted/latexminted。minted 与 listings 都**不需要** `-shell-escape`，但途径不同：listings 是
+纯 TeX 引擎；TL2026 的 minted v3 把高亮交给 `latexminted` 助手，而 `latexminted` 已在 texmf.cnf
+的受限白名单里（`shell_escape = p` + `shell_escape_commands`，`latexmkCompileArgs` 绝不加
+`-shell-escape` 的规则不受影响）。tectonic 的 shell escape 被完全禁用，加载 minted 会在
+**导言区**就报 "You must invoke LaTeX with the -shell-escape flag"，且拖垮文档里每一个
+tcblisting，故 tectonic profile 不加载 minted（此时 `listing engine=minted` 退化为 pgfkeys
+"Choice 'minted' unknown in choice key '/tcb/listing engine'"，属已知限制；
+`TestRenderTikzTcblistingMintedNotBlank` 只设 xe 腿，分档契约由
+`TestTcblistingSetupMintedGatedByProfile` 单测钉住）。`\tcbset` 末项
 `listing engine=listings` 钉住默认引擎（minted 库一加载，tcolorbox 默认引擎可能跟着变），
-片段的盒子实例选项晚于导言区执行、总是优先。其余：tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
+片段的盒子实例选项晚于导言区执行、总是优先。tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
 内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；sidebyside
 系列选项复刻手册盒内的左右布局（代码在左、编译结果在右并居中、无虚线分隔，取值来自
 tikzducks-doc-settings.sty / tikzlings-doc-settings.sty 的 \tcbset）；注入的只是默认值，
