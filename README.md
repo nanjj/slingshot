@@ -53,8 +53,9 @@ tikzducks / tikzpeople / figchild / tikz-triminos / scsnowman / tcolorbox 等）
 minted（如 `listing engine=minted` / `minted options={...}`）时，xe 后端才额外加载 `minted` 库，
 这类片段可直接使用 minted 高亮——TeX Live 2026 的 minted v3 经受限 shell escape 白名单里的
 `latexminted` 助手工作，因此**不需要** `-shell-escape`；未提到 minted 的片段只加载 `listings`，
-与以往一致。tectonic 后端完全禁用 shell escape、不支持 minted（不会加载 minted 库，`listing
-engine=minted` 会报 pgfkeys "Choice 'minted' unknown"），需要 minted 高亮时请用默认的 xe 后端。
+与以往一致（判定只看内容里有没有 `minted` 字样）。tectonic 后端完全禁用 shell escape、
+不支持 minted（不会加载 minted 库，`listing engine=minted` 会报 pgfkeys "Choice 'minted'
+unknown"），需要 minted 高亮时请用默认的 xe 后端。
 当盒子正文本身自包含（figchild 的 `\fc*` 命令、`\tkztriminos`、`\scsnowman`，或整段
 `tikzpicture` / `circuitikz` / `picture` 等环境）时会自动摘掉 `tikz lower` 的 picture 包裹——
 再套一层会让图形**静默丢失**（编译 exit 0，盒子右侧空白）。盒子选项里显式写在后面的

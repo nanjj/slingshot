@@ -1474,8 +1474,11 @@ func tikzlingsPicShim(content string) string {
 //   - \tcbuselibrary{listings} 提供 tcblisting 环境 (listings 是纯 TeX 引擎,
 //     与 shell escape 无关); 仅当 profile.supportsMinted **且内容提到 minted**
 //     (子串命中, 覆盖 listing engine=minted / minted options= 等写法) 时才追加
-//     minted 库。能力与内容两个条件缺一不可: 后端能力决定"能不能加载", 内容
-//     命中决定"要不要加载"—— 后者保证不提 minted 的文档与改动前逐字一致
+//     minted 库。内容触发刻意"宽进": 任何出现 minted 字样即加载 (含 title 等
+//     非语义位置)—— 误报的代价只是多加载一个库 (无害), 漏报却会让真正的
+//     minted 片段失败, 故不采用更窄的匹配 (评审建议的正则收紧已评估、不采纳)。
+//     能力与内容两个条件缺一不可: 后端能力决定"能不能加载", 内容命中决定
+//     "要不要加载"—— 后者保证字节里不含 minted 字样的文档与改动前一致
 //     (不引入 minted/latexminted 依赖, 也不假设 TL>=2026)。minted 同样
 //     **不需要** -shell-escape: TL2026 的 minted v3 把高亮交给 latexminted
 //     助手, 而 latexminted 就在 texmf.cnf 的受限白名单里 (shell_escape = p,
@@ -1520,9 +1523,10 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
 	}
 	// minted 只在"后端支持"且"内容命中"时加载: 后端能力决定能不能加载
 	// (latexmk 走受限 shell escape 白名单, tectonic 完全禁用 shell escape),
-	// 内容命中决定要不要加载 —— 不提 minted 的文档保持 \tcbuselibrary{listings}
-	// 逐字不变, 不引入 minted/latexminted 依赖。无条件加载还会让 tectonic 上
-	// 所有含 tcblisting 的文档在导言区直接失败。
+	// 内容命中决定要不要加载 —— 字节里不含 minted 字样的文档保持
+	// \tcbuselibrary{listings} 与改动前一致, 不引入 minted/latexminted 依赖。
+	// 无条件加载还会让 tectonic 上所有含 tcblisting 的文档在导言区直接失败。
+	// 内容匹配刻意"宽进" (见函数文档): 只看子串, 不区分 minted 出现在何处。
 	libs := "listings"
 	if profile.supportsMinted && strings.Contains(raw, "minted") {
 		libs += ",minted"

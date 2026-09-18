@@ -126,7 +126,7 @@ sidebyside, center lower, righthand width=5.7cm, sidebyside gap=10pt, lower sepa
 listing engine=listings}`：库列表按"后端能力 **且** 内容命中"拼接——只有 latexmk 后端
 （`tikzProfile.supportsMinted`）且片段提到 minted 时才拼 `\tcbuselibrary{listings,minted}`，
 其余组合都只拼 `\tcbuselibrary{listings}`。两个条件缺一不可：能力决定"能不能加载"，
-内容决定"要不要加载"——不提 minted 的文档因此保持与改动前逐字一致，不会平白依赖
+内容决定"要不要加载"——字节里不含 minted 字样的文档因此保持与改动前一致，不会平白依赖
 minted/latexminted。minted 与 listings 都**不需要** `-shell-escape`，但途径不同：listings 是
 纯 TeX 引擎；TL2026 的 minted v3 把高亮交给 `latexminted` 助手，而 `latexminted` 已在 texmf.cnf
 的受限白名单里（`shell_escape = p` + `shell_escape_commands`，`latexmkCompileArgs` 绝不加

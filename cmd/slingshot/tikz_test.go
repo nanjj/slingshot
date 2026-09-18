@@ -1892,9 +1892,9 @@ func tcblistingWant(libs string) string {
 // 高亮引擎库、tikz lower 与手册同款 sidebyside 左右布局选项。
 //
 // 库列表按 profile 与内容两个条件拼接: 只有 latexmk (受限 shell escape) 且
-// 内容提到 minted 时才追加 minted 库; 其余组合都只加载 listings, 与改动前
-// 逐字一致。\tcbset 的内容与顺序与两者无关 (含末尾的 listing engine=listings
-// 默认引擎钉扎)。
+// 内容提到 minted 时才追加 minted 库; 其余组合都只加载 listings, 字节里不含
+// minted 字样的文档因此与改动前一致。\tcbset 的内容与顺序与两者无关 (含末尾的
+// listing engine=listings 默认引擎钉扎)。
 func TestTcblistingSetup(t *testing.T) {
 	const plainRaw = "\\begin{tcblisting}{title={Basic Ti\\emph{k}Zling}}\n\\marmot\n\\end{tcblisting}"
 	const mintedRaw = "\\begin{tcblisting}{listing engine=minted, minted options={linenos}}\n\\duck\n\\end{tcblisting}"
@@ -1971,6 +1971,10 @@ func TestTcblistingSetup(t *testing.T) {
 func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
 	const plainRaw = "\\begin{tcblisting}{}\\duck\\end{tcblisting}"
 	const mintedRaw = "\\begin{tcblisting}{listing engine=minted}\\duck\\end{tcblisting}"
+	// minted 只出现在 title 里 (无 listing engine): 内容触发刻意"宽进", 只看
+	// 子串 —— 这正是当前契约, 用本用例钉住, 防止将来收紧匹配时静默改变行为
+	// (误报只是多加载一个库; 漏报会让真正的 minted 片段失败)。
+	const titleMintedRaw = "\\begin{tcblisting}{title={About the minted package}}\\duck\\end{tcblisting}"
 	pkgs := []string{"tcolorbox"}
 
 	cases := []struct {
@@ -1981,6 +1985,7 @@ func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
 	}{
 		{"latexmk/no minted", latexmkProfile(), plainRaw, `\tcbuselibrary{listings}`},
 		{"latexmk/minted", latexmkProfile(), mintedRaw, `\tcbuselibrary{listings,minted}`},
+		{"latexmk/minted in title only (wide match)", latexmkProfile(), titleMintedRaw, `\tcbuselibrary{listings,minted}`},
 		{"tectonic/no minted", tectonicProfile(), plainRaw, `\tcbuselibrary{listings}`},
 		{"tectonic/minted", tectonicProfile(), mintedRaw, `\tcbuselibrary{listings}`},
 	}
@@ -1993,9 +1998,9 @@ func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
 			if !strings.Contains(got, "listing engine=listings") {
 				t.Errorf("output must pin listing engine=listings, got:\n%s", got)
 			}
-			// 除了 latexmk x 含 minted, 其余组合的输出里 "minted" 一次都不能
-			// 出现: tectonic 加载 minted 必炸, latexmk 上不提 minted 的内容
-			// 也不该引入 minted/latexminted 依赖。
+			// 除了 latexmk x 含 minted, 其余组合**注入的 setup 输出**里不得出现
+			// "minted" (片段 raw 里当然可以出现): tectonic 加载 minted 必炸,
+			// latexmk 上不含 minted 字样的内容也不该引入 minted/latexminted 依赖。
 			wantMinted := tc.profile.supportsMinted && strings.Contains(tc.raw, "minted")
 			if gotMinted := strings.Contains(got, ",minted"); gotMinted != wantMinted {
 				t.Errorf("output minted library = %v, want %v; got:\n%s", gotMinted, wantMinted, got)

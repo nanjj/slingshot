@@ -51,6 +51,10 @@ type tikzProfile struct {
 	// -shell-escape 就能工作。tectonic: shell escape 被完全禁用, minted 在
 	// \RequirePackage 阶段就报 "You must invoke LaTeX with the -shell-escape
 	// flag", 会让文档里每一个 tcblisting 编译失败, 故为 false。
+	//
+	// 该能力是 TeX Live >= 2026 的假设: 旧版 TL (minted v2) 加载 minted 仍需
+	// -shell-escape, 而本工具从不传该开关。将来接线 pdf/lua 复用 profile 时需
+	// 保留此前提 (按 TeX Live 版本判定, 或维持"仅在 latexmk 上启用")。
 	supportsMinted bool
 }
 
