@@ -157,7 +157,24 @@ lower*={\centering\tcb@shield@externalize\begin{tikzpicture}[{#1}]},after lower*
 扫描选项花括号时都跳过注释区（未转义 `%` 至行尾），注释里的伪环境标记与花括号不参与判定；幂等
 守卫按 pgfkeys 逗号分隔逐项全等比较（`hasNoWrapStyle`），值里出现同名文字不算引用。自包含命令
 与裸 TikZ **混用**时按 contains 语义命中、同样摘包裹，其中的裸 TikZ 会因缺 picture 编译报错——
-与 standalone 片段同一取舍，`README.md` 的 tikz 小节同步说明。两个后端都支持（2021 bundle 自带
+与 standalone 片段同一取舍，`README.md` 的 tikz 小节同步说明。**注释族布局**是 nowrap 的第二个
+触发条件：`listing side comment`（tcblistingscore.code.tex:224，= `sidebyside, listing and
+comment`）等布局把**散文注释**（`comment={...}`）放进盒子 lower 槽，tcolorbox 为 sbs 排版 lower
+时用 `\sbox{\tcb@lowerbox}{...\tcb@insert@before@lower <注释> \tcb@insert@after@lower}`
+（tcolorbox.sty:1301），于是注释被 `before lower*` 的 `\centering` + `\begin{tikzpicture}`
+包住；注释里的 `\\`（用户合法用法 = 换行）被 `\centering` 重定义为 `\@centercr`
+（latex.ltx:15402）→ `\@xcentercr` → `\addvspace{ -\parskip}`（latex.ltx:15404），而
+`\sbox` 内是 restricted horizontal mode，`\par` 无法结束段落 → `\addvspace` 的
+`\ifhmode\ifinner` 守卫触发 `\@LRmoderr`（latex.ltx:9321），报 "! LaTeX Error: Not allowed
+in LR mode." 于 `\end{tcblisting}`；即便注释不含 `\\`，把散文包进 picture 语义上也错。
+判定复用同一套 pgfkeys 扫描：对选项的**顶层逗号分隔条目**（splitPgfKeysOptions 已跳过未转义
+`%` 至行尾的行内注释）剥掉等价外层花括号后与名单**全等**比较（isCommentFamilyTcblisting /
+tcblistingCommentFamilyStyles），因此 `title={listing side comment}` 这类值内文字与注释里的
+同名文字都不算引用；名单含父样式与 sidebyside 别名，**不含** `listing side text` /
+`text side listing` / `text only` / `listing only` / 裸 `comment={...}`（默认布局 =
+`listing and text`）——它们的 tikz lower 行为不变。插入位置、幂等（hasNoWrapStyle）、无选项
+参数 / 找不到 `\end{tcblisting}` 时原样跳过等行为与自包含分支完全一致，两个触发条件共用同一次
+注入。两个后端都支持（2021 bundle 自带
 tcolorbox + listings）。
 
 pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|zy> plane at

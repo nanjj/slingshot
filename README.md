@@ -58,7 +58,15 @@ minted（如 `listing engine=minted` / `minted options={...}`）时，xe 后端�
 unknown"），需要 minted 高亮时请用默认的 xe 后端。
 当盒子正文本身自包含（figchild 的 `\fc*` 命令、`\tkztriminos`、`\scsnowman`，或整段
 `tikzpicture` / `circuitikz` / `picture` 等环境）时会自动摘掉 `tikz lower` 的 picture 包裹——
-再套一层会让图形**静默丢失**（编译 exit 0，盒子右侧空白）。盒子选项里显式写在后面的
+再套一层会让图形**静默丢失**（编译 exit 0，盒子右侧空白）。采用**注释族布局**的盒子
+（`comment only` / `comment and listing` / `comment side listing` / `listing and comment` /
+`listing side comment` / `comment above listing` / `comment above* listing` /
+`listing above comment` / `listing above* comment` / `comment outside listing` /
+`listing outside comment`，即把 `comment={...}` 散文注释放进 lower 槽的那些）同样会摘掉包裹：
+注释被 `\centering` + `tikzpicture` 包进 `\sbox` 后，里面的 `\\` 换行会报
+"Not allowed in LR mode"（`\end{tcblisting}` 处），而且把散文注释包进 picture 语义上也是错的。
+`listing side text` / `text side listing` / `text only` / `listing only` 与裸 `comment={...}`
+保持原有 `tikz lower` 行为。盒子选项里显式写在后面的
 `tikz lower` / `before lower*` 仍然优先。注意自包含命令与裸 TikZ **混用**时（按"包含即命中"
 判定）同样会摘掉包裹，其中的裸 TikZ 代码因没有 picture 会编译报错——与 `standalone` 片段的既有
 取舍一致，混用时请自行补 `tikzpicture`。大图建议在内容里用 `[scale=...]` 缩小，或加宽盒子选项
