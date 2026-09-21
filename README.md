@@ -62,11 +62,15 @@ unknown"），需要 minted 高亮时请用默认的 xe 后端。
 （`comment only` / `comment and listing` / `comment side listing` / `listing and comment` /
 `listing side comment` / `comment above listing` / `comment above* listing` /
 `listing above comment` / `listing above* comment` / `comment outside listing` /
-`listing outside comment`，即把 `comment={...}` 散文注释放进 lower 槽的那些）同样会摘掉包裹：
-注释被 `\centering` + `tikzpicture` 包进 `\sbox` 后，里面的 `\\` 换行会报
-"Not allowed in LR mode"（`\end{tcblisting}` 处），而且把散文注释包进 picture 语义上也是错的。
-`listing side text` / `text side listing` / `text only` / `listing only` 与裸 `comment={...}`
-保持原有 `tikz lower` 行为。盒子选项里显式写在后面的
+`listing outside comment`）同样会摘掉包裹。该集合是**防御性超集**，按实测分三类：
+`listing and comment`（含别名 `listing side comment`）是**承载修复**那类——注释进 lower 槽，
+注释被 `\centering` + `tikzpicture` 包进 `\sbox` 后，里面的 `\\` 换行会报 "Not allowed in
+LR mode"（`\end{tcblisting}` 处）；`comment and listing` / `comment side listing` /
+`comment only` 是**防御性**收录（默认值下本就能编译，picture 包裹对它们无意义）；
+`comment above* listing` / `listing above* comment` 走 outside 路径另有独立失败，**不在本修复
+覆盖范围**。`listing side text` / `text side listing` / `text only` / `listing only` 与裸
+`comment={...}` 保持原有 `tikz lower` 行为。注意注释族盒子摘除 picture 后，`comment={...}`
+里若写可执行 TikZ（如 `\draw`）将没有 picture 可跑——注释定位为散文，不支持是预期行为。盒子选项里显式写在后面的
 `tikz lower` / `before lower*` 仍然优先。注意自包含命令与裸 TikZ **混用**时（按"包含即命中"
 判定）同样会摘掉包裹，其中的裸 TikZ 代码因没有 picture 会编译报错——与 `standalone` 片段的既有
 取舍一致，混用时请自行补 `tikzpicture`。大图建议在内容里用 `[scale=...]` 缩小，或加宽盒子选项

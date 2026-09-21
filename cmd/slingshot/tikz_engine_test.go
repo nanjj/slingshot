@@ -511,6 +511,41 @@ func TestRenderTikzIntegrationTectonic(t *testing.T) {
 // (代码在左) 的中下部; 空内容时实测 0, 修复后约 1570, 阈值 200 留足余量。
 // 修复与后端无关, 因此两个引擎都跑 (各自可用才跑); 唯一差异是 xe 走 latexmk、
 // tectonic 走 bundle, 因此用子测试覆盖, 而不是只跑 xe。
+// countDarkPixels 统计 img 在归一化区域 x[x0f,x1f) y[y0f,y1f) (百分比坐标) 内
+// 亮度 < 128 的像素数, 并返回实际像素边界 (供失败消息使用)。
+// 亮度按 ITU-R BT.601 (16-bit RGBA 先右移 8 位回到 0..255)。三个 tcblisting
+// 非空白渲染测试共用本 helper, 保证阈值统计只有一处实现。
+func countDarkPixels(img image.Image, x0f, x1f, y0f, y1f int) (dark, x0, x1, y0, y1 int) {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	x0, x1 = b.Min.X+w*x0f/100, b.Min.X+w*x1f/100
+	y0, y1 = b.Min.Y+h*y0f/100, b.Min.Y+h*y1f/100
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
+			if lum < 128 {
+				dark++
+			}
+		}
+	}
+	return dark, x0, x1, y0, y1
+}
+
+// assertRegionNotBlank 断言 img 的归一化区域 x[x0f,x1f) y[y0f,y1f) 内暗像素数
+// > minDark; 不足时以 what 说明该区域的语义并失败。抓的是"编译成功但内容空白"
+// 这类静默丢失。阈值与消息格式单点化, 三个 tcblisting 渲染测试共用。
+func assertRegionNotBlank(t *testing.T, img image.Image, name string,
+	x0f, x1f, y0f, y1f, minDark int, what string) {
+	t.Helper()
+	dark, x0, x1, y0, y1 := countDarkPixels(img, x0f, x1f, y0f, y1f)
+	if dark <= minDark {
+		b := img.Bounds()
+		t.Fatalf("tcblisting %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
+			name, dark, x0, x1, y0, y1, b.Dx(), b.Dy(), minDark, what)
+	}
+}
+
 func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 	const sample = `\begin{tcblisting}{title={Abajour}}
 \fcAbajourA
@@ -552,25 +587,8 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decoding png: %v", err)
 			}
-			b := img.Bounds()
-			w, h := b.Dx(), b.Dy()
-			x0, x1 := b.Min.X+w*60/100, b.Min.X+w*92/100
-			y0, y1 := b.Min.Y+h*20/100, b.Min.Y+h*95/100
-			dark := 0
-			for y := y0; y < y1; y++ {
-				for x := x0; x < x1; x++ {
-					r, g, bl, _ := img.At(x, y).RGBA()
-					// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
-					lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-					if lum < 128 {
-						dark++
-					}
-				}
-			}
-			if dark <= 200 {
-				t.Fatalf("tcblisting lower half looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > 200); the figchild drawing was silently dropped",
-					dark, x0, x1, y0, y1, w, h)
-			}
+			assertRegionNotBlank(t, img, "lower half", 60, 92, 20, 95, 200,
+				"the figchild drawing was silently dropped")
 		})
 	}
 }
@@ -645,25 +663,8 @@ func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
 			emptyDetection: "the code side of the box is blank"},
 	}
 	for _, rg := range regions {
-		b := img.Bounds()
-		w, h := b.Dx(), b.Dy()
-		x0, x1 := b.Min.X+w*rg.x0f/100, b.Min.X+w*rg.x1f/100
-		y0, y1 := b.Min.Y+h*rg.y0f/100, b.Min.Y+h*rg.y1f/100
-		dark := 0
-		for y := y0; y < y1; y++ {
-			for x := x0; x < x1; x++ {
-				r, g, bl, _ := img.At(x, y).RGBA()
-				// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
-				lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-				if lum < 128 {
-					dark++
-				}
-			}
-		}
-		if dark <= rg.minDark {
-			t.Fatalf("tcblisting minted %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
-				rg.name, dark, x0, x1, y0, y1, w, h, rg.minDark, rg.emptyDetection)
-		}
+		assertRegionNotBlank(t, img, "minted "+rg.name,
+			rg.x0f, rg.x1f, rg.y0f, rg.y1f, rg.minDark, rg.emptyDetection)
 	}
 }
 
@@ -741,27 +742,69 @@ func TestRenderTikzTcblistingCommentFamilyNotBlank(t *testing.T) {
 		{name: "comment area", x0f: 60, x1f: 92, y0f: 20, y1f: 95, minDark: 300,
 			emptyDetection: "the comment side of the box is blank"},
 	}
-	for _, rg := range regions {
-		b := img.Bounds()
-		w, h := b.Dx(), b.Dy()
-		x0, x1 := b.Min.X+w*rg.x0f/100, b.Min.X+w*rg.x1f/100
-		y0, y1 := b.Min.Y+h*rg.y0f/100, b.Min.Y+h*rg.y1f/100
-		dark := 0
-		for y := y0; y < y1; y++ {
-			for x := x0; x < x1; x++ {
-				r, g, bl, _ := img.At(x, y).RGBA()
-				// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
-				lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-				if lum < 128 {
-					dark++
-				}
-			}
-		}
-		if dark <= rg.minDark {
-			t.Fatalf("tcblisting comment-family %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
-				rg.name, dark, x0, x1, y0, y1, w, h, rg.minDark, rg.emptyDetection)
-		}
+	for _, rgg := range regions {
+		assertRegionNotBlank(t, img, "comment-family "+rgg.name,
+			rgg.x0f, rgg.x1f, rgg.y0f, rgg.y1f, rgg.minDark, rgg.emptyDetection)
 	}
+}
+
+// TestRenderTikzTcblistingListingAndCommentNotBlank 覆盖非 sbs 的
+// `listing and comment` 布局 (listing engine=listings, 无 minted): 该布局把
+// listing 放在盒子上部、注释放在下部, 是注释族里"承载修复"那类 (base 无 nowrap
+// 时注释进 lower 槽 -> LR 崩溃)。只设 xe 腿 (与其它 tcblisting 渲染测试一致)。
+//
+// 区域为上下两半: upper x[5%,95%) y[2%,45%) = listing 代码侧, lower
+// x[5%,95%) y[55%,98%) = 注释侧; 实测 (725x404 样例) 分别 ≈ 2531 / 2194,
+// 阈值取 800 / 600 留约 3 倍余量。
+func TestRenderTikzTcblistingListingAndCommentNotBlank(t *testing.T) {
+	if err := latexmkAvailable(false); err != nil {
+		t.Skipf("latexmk unavailable: %v", err)
+	}
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	const sample = `\begin{tcblisting}{
+  listing and comment,
+  sidebyside=false,
+  listing engine=listings,
+  comment={注意：\\最后一行列},
+}
+| ITEM    | COST | PRICE |
+|---------+------+-------|
+| Bike    |   50 |   100 |
+| Sword   |   20 |    35 |
+| Drill   |   30 |    60 |
+| Cooler  |   10 |    70 |
+| TV      |   50 |    40 |
+| Blender |   25 |    45 |
+| Boots   |   20 |    20 |
+|---------+------+-------|
+|         |  205 |   370 |
+#+TBLFM: @>$2..$3=vsum(@2..@-1)
+
+\end{tcblisting}
+`
+	in := filepath.Join(t.TempDir(), "tcblisting_listing_and_comment.tikz")
+	out := filepath.Join(t.TempDir(), "tcblisting_listing_and_comment.png")
+	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderTikz(in, out, "xe"); err != nil {
+		t.Fatalf("renderTikz(xe) failed: %v", err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		t.Fatalf("decoding png: %v", err)
+	}
+	assertRegionNotBlank(t, img, "listing and comment listing side", 5, 95, 2, 45, 800,
+		"the listing (code) side of the box is blank")
+	assertRegionNotBlank(t, img, "listing and comment comment side", 5, 95, 55, 98, 600,
+		"the comment side of the box is blank")
 }
 
 // TestRenderTikzIntegrationCJK 真跑 xe 引擎 + xelatex + xeCJK 三者齐备时渲染 CJK。

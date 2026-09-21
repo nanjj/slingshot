@@ -2266,6 +2266,9 @@ func TestIsCommentFamilyTcblisting(t *testing.T) {
 		{name: "bare comment option", opts: "comment={a\\b}, listing engine=minted"},
 		// 值里出现同样文字: 不是布局引用 (子串匹配会误命中)。
 		{name: "style name inside a title value", opts: "title={listing side comment}"},
+		// 注释值里出现样式名 (comment={listing side comment}): comment= 是 key,
+		// 值是散文注释, 不是布局引用, 不得触发 nowrap。
+		{name: "style name inside a comment value", opts: "comment={listing side comment}"},
 		{name: "style name inside a braced value list", opts: "title={a,listing side comment,b}"},
 		// 注释里的样式名不算数 (splitPgfKeysOptions 跳过未转义 % 至行尾)。
 		{name: "style name inside a comment", opts: "title=t % listing side comment\n"},
@@ -2337,6 +2340,12 @@ func TestRewriteTcblistingCommentFamily(t *testing.T) {
 			name: "style name inside a title value",
 			in:   "\\begin{tcblisting}{title={listing side comment}}\ncode\n\\end{tcblisting}\n",
 			want: "\\begin{tcblisting}{title={listing side comment}}\ncode\n\\end{tcblisting}\n",
+		},
+		{
+			// comment={listing side comment}: 样式名只是注释值, 不注入。
+			name: "style name inside a comment value",
+			in:   "\\begin{tcblisting}{comment={listing side comment}}\ncode\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{comment={listing side comment}}\ncode\n\\end{tcblisting}\n",
 		},
 		{
 			// 注释里出现样式名: 不算引用, 不注入。

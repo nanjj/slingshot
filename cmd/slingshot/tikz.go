@@ -1557,12 +1557,13 @@ const tcblistingNoWrapStyle = "slingshot nowrap"
 //
 //  1. 正文为自包含内容 (selfContainedCmd / selfContainedStart): 嵌套 picture 会
 //     让内容静默丢失 (编译 exit 0, 盒子右侧空白);
-//  2. 选项里出现注释族布局样式 (isCommentFamilyTcblisting): 这些布局把**散文
-//     注释** (`comment={...}`) 放进盒子 lower 槽, 而 tikz lower 的 before lower*
-//     钩子里的 \centering 会把注释中的 \\ 重定义为 \@centercr -> \addvspace;
-//     \sbox 内是 restricted horizontal mode, \addvspace 的 \ifhmode\ifinner
-//     守卫于是触发 "! LaTeX Error: Not allowed in LR mode." (报在
-//     \end{tcblisting})。即便注释不含 \\, 把散文包进 picture 语义上也是错的。
+//  2. 选项里出现注释族布局样式 (isCommentFamilyTcblisting): 对**承载修复**的
+//     `listing and comment` / `listing side comment`, 注释进 lower 槽, tikz lower
+//     的 before lower* 钩子里的 \centering 会把注释中的 \\ 重定义为 \@centercr
+//     -> \addvspace; \sbox 内是 restricted horizontal mode, \addvspace 的
+//     \ifhmode\ifinner 守卫于是触发 "! LaTeX Error: Not allowed in LR mode."
+//     (报在 \end{tcblisting})。其余注释族布局是防御性收录 (见
+//     tcblistingCommentFamilyStyles 的三类说明), 且把散文包进 picture 本无意义。
 //
 // 背景: tcblistingSetup 注入的 tikz lower 是 tcolorbox 的内置样式
 // (tcolorbox.sty: tikz lower/.style={before lower*={\centering
@@ -1677,18 +1678,28 @@ func hasNoWrapStyle(opts string) bool {
 	return false
 }
 
-// tcblistingCommentFamilyStyles 是"把 `comment={...}` 文本放进盒子 lower 槽"的
-// tcblisting 布局样式名集合 (取自 tcolorbox 的 tcblistingscore.code.tex)。
-// 这些布局下 lower 槽装的是**散文注释**而不是代码, 与 tikz lower 的 picture
-// 包裹天然冲突: 注释里的 \\ (用户合法用法 = 换行) 会在 restricted horizontal
-// mode 里触发 "! LaTeX Error: Not allowed in LR mode." (见
-// rewriteSelfContainedTcblistings 的条件 2 与根因说明)。
+// tcblistingCommentFamilyStyles 是"注释族" tcblisting 布局样式名集合 (取自
+// tcolorbox 的 tcblistingscore.code.tex), 用于防御性地摘除 tikz lower 的
+// picture 包裹。集合是**防御性超集**: 按实测分三类 (base = 用户片段 + 全默认
+// 注入、注释含 \\、无 nowrap):
 //
-// 刻意不含 text 家族 (listing side text / text side listing / text only /
-// listing only) 与裸 comment={...} (默认布局 = listing and text): 这些布局
-// 没有把注释塞进 lower 槽 (或语义上仍依赖 tikz lower), 保持原有行为。
-// 名单里同时收录父样式 (listing and comment) 与其 sidebyside 别名
-// (listing side comment = sidebyside, listing and comment)。
+//  1. **承载修复** —— `listing and comment` (含别名 `listing side comment`
+//     = sidebyside, listing and comment): 注释进 lower 槽, base 即 LR 崩溃
+//     ("Not allowed in LR mode."), 加 nowrap 后 OK。这是本修复的主要命中。
+//  2. **防御性** —— `comment and listing` / `comment side listing` (sbs 别名)
+//     / `comment only`: base 默认值下即可编译 (无 nowrap 亦 OK), 加 nowrap 后
+//     仍 OK。picture 包裹对它们本无意义, 统一摘除以防将来重排/默认值变化漏判。
+//  3. **不在本修复范围** —— `comment above* listing` / `listing above* comment`
+//     走 `listing@process@outside` 路径, base 默认注入下另有独立失败
+//     (`Missing number` / `Missing \endgroup`), 加 nowrap 后**仍失败**。收录
+//     只是与其它注释族布局保持一致, 不声称本修复覆盖它们。
+//
+// 名单含父样式与 sidebyside 别名; 刻意不含 text 家族 (listing side text /
+// text side listing / text only / listing only) 与裸 comment={...} (默认布局 =
+// listing and text): 它们语义上仍依赖 tikz lower, 保持原有行为。
+//
+// trade-off: 注释族盒子统一摘除 picture 后, comment={...} 里若写可执行 TikZ
+// (如 \draw) 将没有 picture 可跑 —— 注释定位为散文, 不支持是预期行为。
 var tcblistingCommentFamilyStyles = map[string]bool{
 	"comment only":            true,
 	"comment and listing":     true,

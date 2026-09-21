@@ -158,15 +158,23 @@ lower*={\centering\tcb@shield@externalize\begin{tikzpicture}[{#1}]},after lower*
 守卫按 pgfkeys 逗号分隔逐项全等比较（`hasNoWrapStyle`），值里出现同名文字不算引用。自包含命令
 与裸 TikZ **混用**时按 contains 语义命中、同样摘包裹，其中的裸 TikZ 会因缺 picture 编译报错——
 与 standalone 片段同一取舍，`README.md` 的 tikz 小节同步说明。**注释族布局**是 nowrap 的第二个
-触发条件：`listing side comment`（tcblistingscore.code.tex:224，= `sidebyside, listing and
-comment`）等布局把**散文注释**（`comment={...}`）放进盒子 lower 槽，tcolorbox 为 sbs 排版 lower
-时用 `\sbox{\tcb@lowerbox}{...\tcb@insert@before@lower <注释> \tcb@insert@after@lower}`
+触发条件，名单 `tcblistingCommentFamilyStyles` 是**防御性超集**，按实测分三类：
+（1）**承载修复**：`listing and comment`（含别名 `listing side comment` =
+`sidebyside, listing and comment`，tcblistingscore.code.tex:224）把散文注释
+（`comment={...}`）放进盒子 lower 槽，tcolorbox 为 sbs 排版 lower 时用
+`\sbox{\tcb@lowerbox}{...\tcb@insert@before@lower <注释> \tcb@insert@after@lower}`
 （tcolorbox.sty:1301），于是注释被 `before lower*` 的 `\centering` + `\begin{tikzpicture}`
 包住；注释里的 `\\`（用户合法用法 = 换行）被 `\centering` 重定义为 `\@centercr`
 （latex.ltx:15402）→ `\@xcentercr` → `\addvspace{ -\parskip}`（latex.ltx:15404），而
 `\sbox` 内是 restricted horizontal mode，`\par` 无法结束段落 → `\addvspace` 的
 `\ifhmode\ifinner` 守卫触发 `\@LRmoderr`（latex.ltx:9321），报 "! LaTeX Error: Not allowed
-in LR mode." 于 `\end{tcblisting}`；即便注释不含 `\\`，把散文包进 picture 语义上也错。
+in LR mode." 于 `\end{tcblisting}`（base = 用户片段 + 全默认注入、注释含 `\\`、无 nowrap
+时复现；加 nowrap 后 OK）。
+（2）**防御性**：`comment and listing` / `comment side listing` / `comment only` 在默认值下
+本就能编译（无 nowrap 亦 OK），picture 包裹对它们无意义，统一摘除以防将来重排/默认值变化漏判。
+（3）**不在本修复范围**：`comment above* listing` / `listing above* comment` 走
+`listing@process@outside` 路径，默认注入下另有独立失败（`Missing number` /
+`Missing \endgroup`），加 nowrap 后**仍失败**；收录只为与其它注释族布局保持一致，不声称覆盖。
 判定复用同一套 pgfkeys 扫描：对选项的**顶层逗号分隔条目**（splitPgfKeysOptions 已跳过未转义
 `%` 至行尾的行内注释）剥掉等价外层花括号后与名单**全等**比较（isCommentFamilyTcblisting /
 tcblistingCommentFamilyStyles），因此 `title={listing side comment}` 这类值内文字与注释里的
@@ -174,7 +182,9 @@ tcblistingCommentFamilyStyles），因此 `title={listing side comment}` 这类�
 `text side listing` / `text only` / `listing only` / 裸 `comment={...}`（默认布局 =
 `listing and text`）——它们的 tikz lower 行为不变。插入位置、幂等（hasNoWrapStyle）、无选项
 参数 / 找不到 `\end{tcblisting}` 时原样跳过等行为与自包含分支完全一致，两个触发条件共用同一次
-注入。两个后端都支持（2021 bundle 自带
+注入。注释族盒子摘除 picture 后，`comment={...}`
+里若写可执行 TikZ（如 `\draw`）将没有 picture 可跑——注释定位为散文，不支持是预期行为。
+两个后端都支持（2021 bundle 自带
 tcolorbox + listings）。
 
 pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|zy> plane at
