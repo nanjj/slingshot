@@ -667,6 +667,103 @@ func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
 	}
 }
 
+// TestRenderTikzTcblistingCommentFamilyNotBlank 是注释族布局的回归 (用户博客片段:
+// "listing side comment" + comment 里的 \\\\ 换行 + minted 代码侧)。
+//
+// 修复前: 注释文本被 tikz lower 的 before lower* 钩子 (\\centering + picture)
+// 包进 \\sbox 的 restricted horizontal mode, comment 里的 \\\\ 经 \\@centercr ->
+// \\addvspace 触发 "! LaTeX Error: Not allowed in LR mode." (报在
+// \\end{tcblisting}), 编译失败。修复后 rewriteSelfContainedTcblistings 对
+// 注释族布局注入 nowrap 样式, 不再包 picture。
+//
+// 只设 xe 腿: 样例用 listing engine=minted, 而 tectonic 禁用 shell escape, minted
+// 在导言区即失败 (同 TestRenderTikzTcblistingMintedNotBlank 的分档理由)。
+//
+// 断言与 TestRenderTikzTcblistingMintedNotBlank 同构: 左侧代码区 + 右侧结果/注释区
+// 的暗像素计数。实测 (725x399 样例) 左侧 ≈ 3818、右侧 ≈ 782, 阈值取 1000 / 300
+// 留约 2.5-3 倍余量; 区域沿用 x ∈ (5%, 45%) 与 (60%, 92%) 的既有约定。
+func TestRenderTikzTcblistingCommentFamilyNotBlank(t *testing.T) {
+	if err := latexmkAvailable(false); err != nil {
+		t.Skipf("latexmk unavailable: %v", err)
+	}
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	const sample = `\begin{tcblisting}{
+  listing side comment,
+  righthand ratio=0.45,
+  title={汉字\\标题},
+  comment={注意：\\最后一行列},
+  listing engine=minted,
+  minted language=org
+}
+| ITEM    | COST | PRICE |
+|---------+------+-------|
+| Bike    |   50 |   100 |
+| Sword   |   20 |    35 |
+| Drill   |   30 |    60 |
+| Cooler  |   10 |    70 |
+| TV      |   50 |    40 |
+| Blender |   25 |    45 |
+| Boots   |   20 |    20 |
+|---------+------+-------|
+|         |  205 |   370 |
+#+TBLFM: @>$2..$3=vsum(@2..@-1)
+
+\end{tcblisting}
+`
+	in := filepath.Join(t.TempDir(), "tcblisting_comment_family.tikz")
+	out := filepath.Join(t.TempDir(), "tcblisting_comment_family.png")
+	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderTikz(in, out, "xe"); err != nil {
+		t.Fatalf("renderTikz(xe) failed: %v", err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		t.Fatalf("decoding png: %v", err)
+	}
+	regions := []struct {
+		name           string
+		x0f, x1f       int
+		y0f, y1f       int
+		minDark        int
+		emptyDetection string
+	}{
+		{name: "code area", x0f: 5, x1f: 45, y0f: 20, y1f: 95, minDark: 1000,
+			emptyDetection: "the minted code side of the box is blank"},
+		{name: "comment area", x0f: 60, x1f: 92, y0f: 20, y1f: 95, minDark: 300,
+			emptyDetection: "the comment side of the box is blank"},
+	}
+	for _, rg := range regions {
+		b := img.Bounds()
+		w, h := b.Dx(), b.Dy()
+		x0, x1 := b.Min.X+w*rg.x0f/100, b.Min.X+w*rg.x1f/100
+		y0, y1 := b.Min.Y+h*rg.y0f/100, b.Min.Y+h*rg.y1f/100
+		dark := 0
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				r, g, bl, _ := img.At(x, y).RGBA()
+				// 亮度按 ITU-R BT.601; 16-bit RGBA 先右移 8 位回到 0..255。
+				lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
+				if lum < 128 {
+					dark++
+				}
+			}
+		}
+		if dark <= rg.minDark {
+			t.Fatalf("tcblisting comment-family %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
+				rg.name, dark, x0, x1, y0, y1, w, h, rg.minDark, rg.emptyDetection)
+		}
+	}
+}
+
 // TestRenderTikzIntegrationCJK 真跑 xe 引擎 + xelatex + xeCJK 三者齐备时渲染 CJK。
 func TestRenderTikzIntegrationCJK(t *testing.T) {
 	if err := latexmkAvailable(true); err != nil {

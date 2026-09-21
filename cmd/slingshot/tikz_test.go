@@ -2222,6 +2222,160 @@ func TestRewriteSelfContainedTcblistings(t *testing.T) {
 	}
 }
 
+// TestIsCommentFamilyTcblisting 验证注释族布局的识别: 顶层条目与样式名全等才命中。
+func TestIsCommentFamilyTcblisting(t *testing.T) {
+	// 正向: 名单里每个样式名都命中 (含父样式与 sidebyside 别名)。
+	for _, name := range []string{
+		"comment only",
+		"comment and listing",
+		"comment side listing",
+		"listing and comment",
+		"listing side comment",
+		"comment above listing",
+		"comment above* listing",
+		"listing above comment",
+		"listing above* comment",
+		"comment outside listing",
+		"listing outside comment",
+	} {
+		t.Run("forward/"+name, func(t *testing.T) {
+			// 单条、前置、后置与花括号包裹等价形式都应命中。
+			for _, opts := range []string{
+				name,
+				name + ", righthand ratio=0.45",
+				"title=t, " + name,
+				"{" + name + "}",
+			} {
+				if !isCommentFamilyTcblisting(opts) {
+					t.Errorf("isCommentFamilyTcblisting(%q) = false, want true", opts)
+				}
+			}
+		})
+	}
+
+	reverse := []struct {
+		name string
+		opts string
+	}{
+		// 不动的 text 家族: 没有把注释塞进 lower 槽, 保持 tikz lower 行为。
+		{name: "listing side text", opts: "listing side text, righthand ratio=0.45"},
+		{name: "text side listing", opts: "text side listing"},
+		{name: "text only", opts: "text only"},
+		{name: "listing only", opts: "listing only"},
+		// 裸 comment={...}: 默认布局仍是 listing and text, 不属于注释族布局。
+		{name: "bare comment option", opts: "comment={a\\b}, listing engine=minted"},
+		// 值里出现同样文字: 不是布局引用 (子串匹配会误命中)。
+		{name: "style name inside a title value", opts: "title={listing side comment}"},
+		{name: "style name inside a braced value list", opts: "title={a,listing side comment,b}"},
+		// 注释里的样式名不算数 (splitPgfKeysOptions 跳过未转义 % 至行尾)。
+		{name: "style name inside a comment", opts: "title=t % listing side comment\n"},
+		// 前缀/后缀不同: 必须全等。
+		{name: "prefix only", opts: "listing side comment extra"},
+		{name: "case sensitive", opts: "Listing Side Comment"},
+		{name: "empty", opts: ""},
+		{name: "unrelated options", opts: "tikz lower, sidebyside, listing engine=listings"},
+	}
+	for _, tt := range reverse {
+		t.Run("reverse/"+tt.name, func(t *testing.T) {
+			if isCommentFamilyTcblisting(tt.opts) {
+				t.Errorf("isCommentFamilyTcblisting(%q) = true, want false", tt.opts)
+			}
+		})
+	}
+}
+
+// TestRewriteTcblistingCommentFamily 验证注释族布局的盒子会像自包含正文一样
+// 在选项参数最前面插入 tcblistingNoWrapStyle (并且只改选项、正文一字不动)。
+func TestRewriteTcblistingCommentFamily(t *testing.T) {
+	// 正向: 名单里每个样式名都触发注入, 且样式名插在用户选项之前。
+	for _, name := range []string{
+		"comment only",
+		"comment and listing",
+		"comment side listing",
+		"listing and comment",
+		"listing side comment",
+		"comment above listing",
+		"comment above* listing",
+		"listing above comment",
+		"listing above* comment",
+		"comment outside listing",
+		"listing outside comment",
+	} {
+		t.Run("forward/"+name, func(t *testing.T) {
+			in := "\\begin{tcblisting}{\n  " + name + ",\n  comment={note},\n}\ncode\n\\end{tcblisting}\n"
+			want := "\\begin{tcblisting}{" + tcblistingNoWrapStyle + ", \n  " + name + ",\n  comment={note},\n}\ncode\n\\end{tcblisting}\n"
+			if got := rewriteSelfContainedTcblistings(in); got != want {
+				t.Errorf("rewriteSelfContainedTcblistings() = %q, want %q", got, want)
+			}
+		})
+	}
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			// 不动的 text 家族: 选项原样, 不注入。
+			name: "listing side text keeps wrapper",
+			in:   "\\begin{tcblisting}{listing side text}\n\\duck\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{listing side text}\n\\duck\n\\end{tcblisting}\n",
+		},
+		{
+			name: "text only keeps wrapper",
+			in:   "\\begin{tcblisting}{text only}\ntext\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{text only}\ntext\n\\end{tcblisting}\n",
+		},
+		{
+			// 裸 comment={...} (默认布局 = listing and text) 不动。
+			name: "bare comment keeps wrapper",
+			in:   "\\begin{tcblisting}{comment={a\\\\b}}\ncode\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{comment={a\\\\b}}\ncode\n\\end{tcblisting}\n",
+		},
+		{
+			// 值里出现样式名: 不是布局引用, 不注入。
+			name: "style name inside a title value",
+			in:   "\\begin{tcblisting}{title={listing side comment}}\ncode\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title={listing side comment}}\ncode\n\\end{tcblisting}\n",
+		},
+		{
+			// 注释里出现样式名: 不算引用, 不注入。
+			name: "style name inside a comment",
+			in:   "\\begin{tcblisting}{title=t % listing side comment\n}\ncode\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{title=t % listing side comment\n}\ncode\n\\end{tcblisting}\n",
+		},
+		{
+			// 无选项参数: 原样跳过。
+			name: "no option argument",
+			in:   "\\begin{tcblisting}\ncode\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}\ncode\n\\end{tcblisting}\n",
+		},
+		{
+			// 找不到 \\end{tcblisting}: 原样跳过。
+			name: "missing end",
+			in:   "\\begin{tcblisting}{listing side comment}\ncode\n",
+			want: "\\begin{tcblisting}{listing side comment}\ncode\n",
+		},
+		{
+			// 幂等守卫: 已含样式名时原样放行。
+			name: "already has style",
+			in:   "\\begin{tcblisting}{slingshot nowrap, listing side comment}\ncode\n\\end{tcblisting}\n",
+			want: "\\begin{tcblisting}{slingshot nowrap, listing side comment}\ncode\n\\end{tcblisting}\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rewriteSelfContainedTcblistings(tt.in); got != tt.want {
+				t.Errorf("rewriteSelfContainedTcblistings() = %q, want %q", got, tt.want)
+			}
+			// 幂等: 二次改写与首次结果一致。
+			if got := rewriteSelfContainedTcblistings(tt.want); got != tt.want {
+				t.Errorf("rewriteSelfContainedTcblistings() not idempotent: %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestHasNoWrapStyle 验证幂等守卫按 pgfkeys 逗号分隔的独立选项全等比较,
 // 而不是子串匹配: 值里出现的同样文字不算引用。
 func TestHasNoWrapStyle(t *testing.T) {

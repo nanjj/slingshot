@@ -1548,10 +1548,21 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
 // tcblistingNoWrapStyle 是"取消 tikz lower 的 tikzpicture 包裹"的 tcolorbox 样式名。
 // 定义 (tcblistingSetup 的 \tcbset) 与引用 (rewriteSelfContainedTcblistings 插入的
 // 盒子选项) 必须共用该常量, 保证"内容引用了样式名 ⇔ 导言区已定义该样式"。
+// 引用有两个触发条件: 盒子正文自包含 (嵌套 picture 会静默丢内容), 或盒子采用
+// 注释族布局 (散文注释被放进 lower 槽, 包进 picture 会在 LR mode 报错)。
 const tcblistingNoWrapStyle = "slingshot nowrap"
 
-// rewriteSelfContainedTcblistings 在正文为自包含内容的 tcblisting 盒子选项参数
-// 最前面插入 tcblistingNoWrapStyle, 让该盒子不再被 tikz lower 包进 tikzpicture。
+// rewriteSelfContainedTcblistings 在命中下列任一条件的 tcblisting 盒子选项参数
+// 最前面插入 tcblistingNoWrapStyle, 让该盒子不再被 tikz lower 包进 tikzpicture:
+//
+//  1. 正文为自包含内容 (selfContainedCmd / selfContainedStart): 嵌套 picture 会
+//     让内容静默丢失 (编译 exit 0, 盒子右侧空白);
+//  2. 选项里出现注释族布局样式 (isCommentFamilyTcblisting): 这些布局把**散文
+//     注释** (`comment={...}`) 放进盒子 lower 槽, 而 tikz lower 的 before lower*
+//     钩子里的 \centering 会把注释中的 \\ 重定义为 \@centercr -> \addvspace;
+//     \sbox 内是 restricted horizontal mode, \addvspace 的 \ifhmode\ifinner
+//     守卫于是触发 "! LaTeX Error: Not allowed in LR mode." (报在
+//     \end{tcblisting})。即便注释不含 \\, 把散文包进 picture 语义上也是错的。
 //
 // 背景: tcblistingSetup 注入的 tikz lower 是 tcolorbox 的内置样式
 // (tcolorbox.sty: tikz lower/.style={before lower*={\centering
@@ -1628,7 +1639,7 @@ func rewriteSelfContainedTcblistings(content string) string {
 		case hasNoWrapStyle(opts):
 			// 幂等守卫: 选项里已有独立样式项, 原样写回。
 			b.WriteString(content[j : endIdx+len(end)])
-		case selfContainedCmd(body) || selfContainedStart(body):
+		case isCommentFamilyTcblisting(opts) || selfContainedCmd(body) || selfContainedStart(body):
 			// 命中: 样式名插在用户选项之前 (后写的用户设置仍优先)。
 			b.WriteString("{" + tcblistingNoWrapStyle)
 			if strings.TrimSpace(opts) != "" {
@@ -1660,6 +1671,50 @@ func rewriteSelfContainedTcblistings(content string) string {
 func hasNoWrapStyle(opts string) bool {
 	for _, opt := range splitPgfKeysOptions(opts) {
 		if trimOptionBraces(strings.TrimSpace(opt)) == tcblistingNoWrapStyle {
+			return true
+		}
+	}
+	return false
+}
+
+// tcblistingCommentFamilyStyles 是"把 `comment={...}` 文本放进盒子 lower 槽"的
+// tcblisting 布局样式名集合 (取自 tcolorbox 的 tcblistingscore.code.tex)。
+// 这些布局下 lower 槽装的是**散文注释**而不是代码, 与 tikz lower 的 picture
+// 包裹天然冲突: 注释里的 \\ (用户合法用法 = 换行) 会在 restricted horizontal
+// mode 里触发 "! LaTeX Error: Not allowed in LR mode." (见
+// rewriteSelfContainedTcblistings 的条件 2 与根因说明)。
+//
+// 刻意不含 text 家族 (listing side text / text side listing / text only /
+// listing only) 与裸 comment={...} (默认布局 = listing and text): 这些布局
+// 没有把注释塞进 lower 槽 (或语义上仍依赖 tikz lower), 保持原有行为。
+// 名单里同时收录父样式 (listing and comment) 与其 sidebyside 别名
+// (listing side comment = sidebyside, listing and comment)。
+var tcblistingCommentFamilyStyles = map[string]bool{
+	"comment only":            true,
+	"comment and listing":     true,
+	"comment side listing":    true, // sidebyside, comment and listing
+	"listing and comment":     true,
+	"listing side comment":    true, // sidebyside, listing and comment
+	"comment above listing":   true,
+	"comment above* listing":  true,
+	"listing above comment":   true,
+	"listing above* comment":  true,
+	"comment outside listing": true,
+	"listing outside comment": true,
+}
+
+// isCommentFamilyTcblisting 报告 tcblisting 选项串 opts 的**顶层逗号分隔条目**
+// 里是否有注释族布局样式名。判定与 hasNoWrapStyle 同源: 用 splitPgfKeysOptions
+// 做花括号/转义/注释感知的逗号切分, 再 trimOptionBraces 剥掉等价外层花括号,
+// TrimSpace 后与集合**全等**比较。
+//
+// 必须全等而非子串匹配: title={listing side comment} 这类**值**里出现同样文字
+// 并不等于选用了该布局, 子串匹配会误命中并把 nowrap 注入到纯 text 盒子上
+// (回归缺陷)。切分器已跳过未转义 % 至行尾的注释, 因此行内注释里的样式名不算数
+// (用户盒子选项里常用行内 % 注释)。
+func isCommentFamilyTcblisting(opts string) bool {
+	for _, opt := range splitPgfKeysOptions(opts) {
+		if tcblistingCommentFamilyStyles[trimOptionBraces(strings.TrimSpace(opt))] {
 			return true
 		}
 	}
