@@ -2909,4 +2909,13 @@ func TestTikzWrapperLoadsAmsSymb(t *testing.T) {
 	if symb < math {
 		t.Fatalf("amssymb (%d) must come after amsmath (%d)", symb, math)
 	}
+	// 结构断言: 四个 %s 注入槽是 tikzWrapper 与调用方之间的契约, 不能被
+	// 新加的导言行破坏; amssymb 必须落在固定导言区 (第一个槽之前), 而不是
+	// 落进调用方拼进来的额外包/库/shim/CJK 前导里。
+	if n := strings.Count(tikzWrapper, "%s"); n != 4 {
+		t.Fatalf("tikzWrapper has %d %%s slots, want 4", n)
+	}
+	if slot := strings.Index(tikzWrapper, "%s"); slot >= 0 && symb > slot {
+		t.Fatalf("amssymb must be in the fixed preamble before the %%s slots: amssymb at %d, first slot at %d", symb, slot)
+	}
 }
