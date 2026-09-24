@@ -441,6 +441,17 @@ scale=.3,
 \fcAbajourA
 \end{tcblisting}
 `,
+	// tikzcd_pullback_corner: tikz-cd pullback corner 的回归样例。片段用
+	// \arrow[dr, phantom, "\ulcorner"] 画角标, \ulcorner 属 AMS 符号族
+	// (amsfonts 提供、amssymb 依赖并加载它)。导言区此前只加载 amsmath, 因此
+	// 在 \end{tikzcd} 报 "Undefined control sequence" (tikz-cd 标签默认数学
+	// 模式 \iftikzcd@mathmode, 角标在编译期展开); 这是编译级失败而非静默丢失,
+	// PDF 头断言即可。TL2026 与 tectonic 2021 bundle 均自带 amssymb, 两后端同路径。
+	"tikzcd_pullback_corner": `\begin{tikzcd}
+  A \arrow[r, "f"] \arrow[d, "g'"] \arrow[dr, phantom, "\ulcorner"] & B \arrow[d, "h"] \\
+  C \arrow[r, "k'"] & D
+\end{tikzcd}
+`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。

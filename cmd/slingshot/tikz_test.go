@@ -2895,3 +2895,18 @@ func TestTikzAssetsSHA256(t *testing.T) {
 		t.Errorf("checked %d embedded .sty, README documents %d", checked, len(documented))
 	}
 }
+
+// TestTikzWrapperLoadsAmsSymb 钉住导言区常驻 amssymb: \ulcorner / \urcorner /
+// \llcorner / \lrcorner 等 AMS 符号由 amsfonts 提供、amssymb 依赖并加载它,
+// tikz-cd 的标签默认数学模式, 缺包即在 \end{tikzcd} 报 "Undefined control
+// sequence"。顺序断言要求 amssymb 出现在 amsmath 之后, 与模板的阅读顺序一致。
+func TestTikzWrapperLoadsAmsSymb(t *testing.T) {
+	math := strings.Index(tikzWrapper, `\usepackage{amsmath}`)
+	symb := strings.Index(tikzWrapper, `\usepackage{amssymb}`)
+	if math < 0 || symb < 0 {
+		t.Fatalf("preamble missing: amsmath at %d, amssymb at %d", math, symb)
+	}
+	if symb < math {
+		t.Fatalf("amssymb (%d) must come after amsmath (%d)", symb, math)
+	}
+}

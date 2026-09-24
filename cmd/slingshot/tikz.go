@@ -100,10 +100,17 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 // 其余情况为空串)。shim 与 CJK 前导均可为空。
 // \usetikzlibrary 放在所有 \usepackage 之后、\begin{document} 之前,
 // 确保 fit / calc 等库在输入内容执行前生效。
+// amssymb 与 amsmath 同级常驻: \ulcorner / \urcorner / \llcorner /
+// \lrcorner / \varnothing / \checkmark 等 AMS 符号由 amsfonts 提供、
+// amssymb 依赖并加载它, 而 tikz-cd 的标签默认数学模式 (\iftikzcd@mathmode),
+// 缺包即在 \end{tikzcd} 报 "Undefined control sequence"。单个符号的内容探测
+// 不现实 (符号族太大且会与 \node 文本里的普通文本混淆), 故固定加载;
+// 重复加载无害 (LaTeX 的 \ver@ 去重, 片段里显式 \usepackage{amssymb} 是 no-op)。
 const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{amsmath}
+\usepackage{amssymb}
 %s%s%s%s\begin{document}
 \input{input.tikz}
 \end{document}
