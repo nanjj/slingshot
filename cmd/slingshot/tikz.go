@@ -105,7 +105,8 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 // amssymb 依赖并加载它, 而 tikz-cd 的标签默认数学模式 (\iftikzcd@mathmode),
 // 缺包即在 \end{tikzcd} 报 "Undefined control sequence"。单个符号的内容探测
 // 不现实 (符号族太大且会与 \node 文本里的普通文本混淆), 故固定加载;
-// 重复加载无害 (LaTeX 的 \ver@ 去重, 片段里显式 \usepackage{amssymb} 是 no-op)。
+// 重复加载无害 (LaTeX 记录已加载宏包 \ver@<name>.sty 并跳过重复加载,
+// 片段里显式 \usepackage{amssymb} 是 no-op)。
 const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
