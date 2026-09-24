@@ -203,6 +203,15 @@ CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic 
 环境变量覆盖（默认 Noto Sans CJK SC）；该值必须是有效字体族名，不要包含 `{` `}` `%` `\`
 等 TeX 特殊字符（会直接拼进 `\setCJKmainfont{...}`）。字体缺失时 fontspec 会报错退出。
 
+AMS 符号：导言区固定加载 `amsmath` + `amssymb`（`tikzWrapper` 模板固定部分，与四个 %s 注入槽无关）。
+`\ulcorner` / `\urcorner` / `\llcorner` / `\lrcorner` / `\varnothing` / `\checkmark` 等
+AMS 符号由 amsfonts 提供、amssymb 依赖并加载它，片段里可直接使用。典型场景是 tikz-cd 的
+pullback corner 写法：`\begin{tikzcd}` 里 `\arrow[dr, phantom, "\ulcorner"]`——tikz-cd 标签
+默认数学模式（`\iftikzcd@mathmode`），缺 amssymb 会在 `\end{tikzcd}` 报 "Undefined control
+sequence"。这里**不做内容探测**：符号族太大，且子串会误中 `\node` 文本里的同名文字，故与
+amsmath 同级常驻。TL2026 与 tectonic 2021 bundle 均自带 amssymb，两后端同一路径。片段里
+显式写 `\usepackage{amssymb}` 会被提升到导言区，此时重复加载是 no-op（LaTeX 的 `\ver@` 去重）。
+
 ## 构建与测试
 
 | 命令 | 说明 |
