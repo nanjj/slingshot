@@ -88,8 +88,8 @@ slingshot tikz fig.tikz fig.png --engine auto       # 优先 xe，缺失时回�
 `--engine` 默认 `xe`（latexmk `-xelatex`，TeX Live 2026 新版语法）；`tectonic` 使用内置的
 2021 年旧包（旧版 tkz-euclide / circuitikz，自动启用兼容翻译）；`auto` 优先 xe、不可用时回退
 tectonic。显式指定时探测失败直接报错，不静默回退。`pdf`（pdfLaTeX）与 `lua`（LuaLaTeX）
-是保留取值，尚未实现。含中文（CJK）的片段通过 xeCJK 排版，字体可用 `TIKZ_CJK_FONT` 覆盖
-（默认 Noto Sans CJK SC）。
+是保留取值，尚未实现。含中文（CJK）的片段通过 xeCJK 排版（文本与数学模式均可，如 tikz-cd
+的节点与箭头标签），字体可用 `TIKZ_CJK_FONT` 覆盖（默认 Noto Sans CJK SC）。
 
 单条外部命令（latexmk / tectonic / mutool / gs）默认 60 秒超时，超时杀掉整个进程组——死循环的
 TikZ（例如旧语法 `\tkzDrawCircle[circum](A,B,C)` 把逗号参数喂给 pgfkeys）不会再挂死终端。

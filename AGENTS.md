@@ -203,6 +203,15 @@ CJK：内容含 CJK 时两个后端都注入 fontspec + xeCJK 前导（tectonic 
 环境变量覆盖（默认 Noto Sans CJK SC）；该值必须是有效字体族名，不要包含 `{` `}` `%` `\`
 等 TeX 特殊字符（会直接拼进 `\setCJKmainfont{...}`）。字体缺失时 fontspec 会报错退出。
 
+数学模式（tikz-cd 节点与箭头标签、`$...$`、矩阵等）不在 xeCJK 的默认处理范围：CJK
+字符回退到 lmroman，报 "Missing character" 后被**静默丢弃**（编译 exit 0、字形空白，
+pdftotext 提取不到）。内容含 CJK 时前导追加 `\xeCJKsetup{CJKmath=true}`：CJK 区段字符
+的数学码被路由到 CJK 字体族（math family `sym CJKmath`，默认复制 `\CJKfamilydefault`），
+一处生效即覆盖全部数学模式语境；路由实际发生在 xeCJK 的 end-preamble 钩子，与
+`\setCJKmainfont` 的先后无关。三版实测：tectonic bundle 3.8.8 / TL2026 发行版 3.9.1 /
+3.10.6 用户树——缺失字符 0、pdftotext 可提取 CJK、CJK 字体嵌入。不含 CJK 的片段前导
+逐字不变。
+
 AMS 符号：导言区固定加载 `amsmath` + `amssymb`（`tikzWrapper` 模板固定部分，与四个 %s 注入槽无关）。
 `\ulcorner` / `\urcorner` / `\llcorner` / `\lrcorner` / `\varnothing` / `\checkmark` 等
 AMS 符号由 amsfonts 提供、amssymb 依赖并加载它，片段里可直接使用。典型场景是 tikz-cd 的
