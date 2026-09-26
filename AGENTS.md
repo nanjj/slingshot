@@ -210,7 +210,7 @@ pdftotext 提取不到）。内容含 CJK 时前导追加 `\xeCJKsetup{CJKmath=t
 一处生效即覆盖全部数学模式语境；路由实际发生在 xeCJK 的 end-preamble 钩子，与
 `\setCJKmainfont` 的先后无关。三版实测：tectonic bundle 3.8.8 / TL2026 发行版 3.9.1 /
 3.10.6 用户树——缺失字符 0、pdftotext 可提取 CJK、CJK 字体嵌入。不含 CJK 的片段前导
-逐字不变。
+逐字不变；前导契约由 `TestTikzCJKPreamble` 逐字节钉住。
 
 AMS 符号：导言区固定加载 `amsmath` + `amssymb`（`tikzWrapper` 模板固定部分，与四个 %s 注入槽无关）。
 `\ulcorner` / `\urcorner` / `\llcorner` / `\lrcorner` / `\varnothing` / `\checkmark` 等

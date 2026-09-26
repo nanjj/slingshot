@@ -519,6 +519,7 @@ func TestRenderTikzIntegrationTectonic(t *testing.T) {
 \end{tikzcd}
 `
 	t.Run("cjk_math", func(t *testing.T) {
+		requirePDFTextTool(t)
 		mathPDF := renderTikzSample(t, "tectonic", "cjk_math", cjkMath)
 		assertPDFContainsText(t, mathPDF, "左")
 		assertPDFContainsText(t, mathPDF, "右")
@@ -833,6 +834,7 @@ func TestRenderTikzIntegrationCJK(t *testing.T) {
 	if err := latexmkAvailable(true); err != nil {
 		t.Skipf("latexmk + xelatex + xeCJK unavailable: %v", err)
 	}
+	requirePDFTextTool(t)
 	sample := `\begin{tikzpicture}
 \node at (0,0) {\text{中文}};
 \end{tikzpicture}
@@ -852,7 +854,21 @@ func TestRenderTikzIntegrationCJK(t *testing.T) {
 \node at (0,0) {$甲+乙$};
 \end{tikzpicture}
 `
-	assertPDFContainsText(t, renderTikzSample(t, "xe", "cjk_inline_math", inlineSample), "甲")
+	inlinePDF := renderTikzSample(t, "xe", "cjk_inline_math", inlineSample)
+	assertPDFContainsText(t, inlinePDF, "甲")
+	assertPDFContainsText(t, inlinePDF, "乙")
+}
+
+// requirePDFTextTool skips the calling test when pdftotext is unavailable.
+// assertPDFContainsText only logs a missing tool (fine for incidental
+// assertions), but for the CJK glyph-extraction regressions the assertion IS
+// the test - a silent log-and-pass would turn the regression into a no-op.
+// Skipping keeps the gap visible in -v output.
+func requirePDFTextTool(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		t.Skipf("pdftotext unavailable, cannot verify CJK glyph extraction: %v", err)
+	}
 }
 
 // assertPDFContainsText 用 pdftotext 提取 PDF 文本并断言包含 want。
