@@ -96,8 +96,8 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 
 // tikzWrapper 是 LaTeX 编译用的 standalone 模板。
 // 四个 %s 依次为: 额外加载的包、自动探测的 tikz 库、兼容 shim、CJK 前导
-// (fontspec + xeCJK + \setCJKmainfont; 内容含 CJK 时两个后端都注入,
-// 其余情况为空串)。shim 与 CJK 前导均可为空。
+// (fontspec + xeCJK + \setCJKmainfont + \xeCJKsetup{CJKmath=true}; 内容含 CJK 时
+// 两个后端都注入, 其余情况为空串)。shim 与 CJK 前导均可为空。
 // \usetikzlibrary 放在所有 \usepackage 之后、\begin{document} 之前,
 // 确保 fit / calc 等库在输入内容执行前生效。
 // amssymb 与 amsmath 同级常驻: \ulcorner / \urcorner / \llcorner /
@@ -2014,6 +2014,29 @@ func tikzOutputFormat(outFile string) (string, error) {
 	return "", fmt.Errorf("unsupported output format %q (want .png, .jpg, .svg or .pdf)", filepath.Ext(outFile))
 }
 
+// tikzCJKPreamble 返回内容含 CJK 时注入的 CJK 前导 (不含则空串); 字体可用
+// TIKZ_CJK_FONT 环境变量覆盖 (默认 Noto Sans CJK SC)。
+//
+// 文本模式之外, 数学模式 (tikz-cd 节点与箭头标签、$...$、矩阵等) 同样要覆盖:
+// xeCJK 默认不处理数学模式中的 CJK 字符, 字符回退到拉丁字体 (lmroman) 报
+// "Missing character" 后被静默丢弃——编译 exit 0、字形空白 (pdftotext 提取不到)。
+// 追加 \xeCJKsetup{CJKmath=true} 把 CJK 区段字符的数学码路由到 CJK 字体族
+// (math family `sym CJKmath`, 默认复制 \CJKfamilydefault, 即 \setCJKmainfont
+// 选择的字体), 一处生效即覆盖全部数学模式语境; 实际路由发生在 xeCJK 的
+// end-preamble 钩子, 与 \setCJKmainfont 的先后无关。三个在役 xeCJK 版本
+// (tectonic bundle 3.8.8 / TL2026 发行版 3.9.1 / 3.10.6 用户树) 均支持。
+func tikzCJKPreamble(content string) string {
+	if !contentHasCJK(content) {
+		return ""
+	}
+	font := os.Getenv("TIKZ_CJK_FONT")
+	if font == "" {
+		font = "Noto Sans CJK SC"
+	}
+	return "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n" +
+		"\\xeCJKsetup{CJKmath=true}\n"
+}
+
 // renderTikz 渲染 inFile 为 outFile 指定格式的图片。
 // engine 选择 TeX 引擎 (xe / tectonic / auto, 见 selectTikzEngine); 在临时目录中工作
 // (LaTeX 引擎会产出 aux 文件); 失败时保留现场便于调试。
@@ -2082,16 +2105,10 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		}
 	}()
 
-	// CJK 前导: 内容含 CJK 时两个后端都注入 fontspec+xeCJK。tectonic bundle 自带
-	// xeCJK, 但同样需要 \setCJKmainfont 才能正确排版中文字形, 否则会出 tofu。
-	var cjkPreamble string
-	if contentHasCJK(orig) {
-		font := os.Getenv("TIKZ_CJK_FONT")
-		if font == "" {
-			font = "Noto Sans CJK SC"
-		}
-		cjkPreamble = "\\usepackage{fontspec}\n\\usepackage{xeCJK}\n\\setCJKmainfont{" + font + "}\n"
-	}
+	// CJK 前导: 内容含 CJK 时两个后端都注入 fontspec+xeCJK(+CJKmath, 覆盖数学
+	// 模式; 见 tikzCJKPreamble)。tectonic bundle 自带 xeCJK, 但同样需要
+	// \setCJKmainfont 才能正确排版中文字形, 否则会出 tofu。
+	cjkPreamble := tikzCJKPreamble(orig)
 	// 兼容 shim 按后端 profile 组装 (见 tikzShims); tcblisting 的 tcolorbox
 	// 配置也随 profile 分叉 (minted 库只在支持受限 shell escape 的后端加载,
 	// 见 tcblistingSetup), 文档局部颜色兜底 (tikzDocColorShims) 与后端无关。

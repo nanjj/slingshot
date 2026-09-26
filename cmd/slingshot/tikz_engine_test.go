@@ -513,6 +513,16 @@ func TestRenderTikzIntegrationTectonic(t *testing.T) {
 	t.Run("cjk", func(t *testing.T) {
 		assertPDFContainsText(t, renderTikzSample(t, "tectonic", "cjk", cjk), "中文")
 	})
+	// 数学模式与 xe 腿同契约: bundle 的 xeCJK 3.8.8 同样支持 CJKmath。
+	cjkMath := `\begin{tikzcd}
+  左 \ar[r, "右"] & 右
+\end{tikzcd}
+`
+	t.Run("cjk_math", func(t *testing.T) {
+		mathPDF := renderTikzSample(t, "tectonic", "cjk_math", cjkMath)
+		assertPDFContainsText(t, mathPDF, "左")
+		assertPDFContainsText(t, mathPDF, "右")
+	})
 }
 
 // TestRenderTikzTcblistingNotBlank 是 tcblisting_figchild 的像素级回归。
@@ -828,6 +838,21 @@ func TestRenderTikzIntegrationCJK(t *testing.T) {
 \end{tikzpicture}
 `
 	assertPDFContainsText(t, renderTikzSample(t, "xe", "cjk", sample), "中文")
+	// 数学模式: tikz-cd 的节点内容与引号标签默认数学模式。修复前 CJK 字符回退
+	// lmroman 报 "Missing character" 被静默丢弃, pdftotext 提取不到任何 CJK 字形。
+	mathSample := `\begin{tikzcd}
+  左 \ar[r, "右"] & 右
+\end{tikzcd}
+`
+	mathPDF := renderTikzSample(t, "xe", "cjk_math", mathSample)
+	assertPDFContainsText(t, mathPDF, "左")
+	assertPDFContainsText(t, mathPDF, "右")
+	// $...$ 行内数学是数学模式覆盖的另一语境 (普通 tikz 节点)。
+	inlineSample := `\begin{tikzpicture}
+\node at (0,0) {$甲+乙$};
+\end{tikzpicture}
+`
+	assertPDFContainsText(t, renderTikzSample(t, "xe", "cjk_inline_math", inlineSample), "甲")
 }
 
 // assertPDFContainsText 用 pdftotext 提取 PDF 文本并断言包含 want。

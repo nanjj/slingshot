@@ -2896,6 +2896,35 @@ func TestTikzAssetsSHA256(t *testing.T) {
 	}
 }
 
+// TestTikzCJKPreamble 钉住 CJK 前导的内容契约: 含 CJK 才注入; 数学模式
+// (tikz-cd 节点与引号标签、$...$ 等) 依赖 \xeCJKsetup{CJKmath=true} —— 缺它时
+// CJK 字符在数学模式回退 lmroman, 报 "Missing character" 后被静默丢弃 (字形
+// 空白), pdftotext 提取不到; 字体可用 TIKZ_CJK_FONT 覆盖 (默认 Noto Sans CJK SC)。
+func TestTikzCJKPreamble(t *testing.T) {
+	if got := tikzCJKPreamble(`\node at (0,0) {plain latin};`); got != "" {
+		t.Fatalf("tikzCJKPreamble(non-CJK) = %q, want empty", got)
+	}
+	t.Setenv("TIKZ_CJK_FONT", "")
+	got := tikzCJKPreamble(`\begin{tikzcd}
+  左 \ar[r, "右"] & 右
+\end{tikzcd}
+`)
+	for _, want := range []string{
+		`\usepackage{fontspec}`,
+		`\usepackage{xeCJK}`,
+		`\setCJKmainfont{Noto Sans CJK SC}`,
+		`\xeCJKsetup{CJKmath=true}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("CJK preamble misses %q:\n%s", want, got)
+		}
+	}
+	t.Setenv("TIKZ_CJK_FONT", "Some Test Font")
+	if override := tikzCJKPreamble("中文"); !strings.Contains(override, `\setCJKmainfont{Some Test Font}`) {
+		t.Errorf("TIKZ_CJK_FONT override not honored:\n%s", override)
+	}
+}
+
 // TestTikzWrapperLoadsAmsSymb 钉住导言区常驻 amssymb: \ulcorner / \urcorner /
 // \llcorner / \lrcorner 等 AMS 符号由 amsfonts 提供、amssymb 依赖并加载它,
 // tikz-cd 的标签默认数学模式, 缺包即在 \end{tikzcd} 报 "Undefined control
