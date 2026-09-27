@@ -46,6 +46,7 @@ slingshot
 把 TikZ 片段渲染成图片或 PDF，输出格式由输出文件扩展名决定。输入可以是一个完整的
 `tikzpicture` / `circuitikz` / `tikzcd` / `forest` 环境，也可以只是环境内部的命令
 （自动补 `tikzpicture` 外壳）；`\usetikzlibrary` 与显式 `\usepackage` 会被提升到导言区。
+常用 tikz 库（fit / calc / positioning / arrows / matrix 等）也按内容特征自动加载。
 导言区常驻 `amsmath` + `amssymb`（AMS 数学符号，`\ulcorner` / `\checkmark` 等可直接使用）。
 amscd 的 `CD` 交换图（`\begin{CD}...\end{CD}`，amscd.sty 在 TeX Live 2026 与 tectonic 2021
 bundle 中均自带）按数学材料原样排版，**不**补 `tikzpicture`

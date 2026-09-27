@@ -231,6 +231,29 @@ picture 不兼容——补 `tikzpicture` 外壳后 pgf **静默丢弃**内容（
 片段的既有取舍一致。像素级回归 `TestRenderTikzAmscdNotBlank`：空白对照 9x9px、修复后标准
 交换方阵 133x114px @150dpi（全图暗像素 476，阈值 150；高度 >= 80px 区分单行退化）。
 
+TikZ 的 **matrix 摆法**交换图（`\matrix(m)[matrix of math nodes, row sep=..., column sep=...]{A&B\\C&D\\}`
+后接 `\path[->, >=angle 90] (m-1-1) edge node {$a$} (m-1-2) ...`）由 `tikzExtraLibraries` 的两条新特征覆盖。
+**matrix 库**：`matrix of nodes` / `matrix of math nodes` 样式与单元格/行分隔处理都来自
+`tikzlibrarymatrix.code.tex`（`\matrix` 命令虽由核心 `tikz.code.tex` 的 `\tikz@installcommands`
+安装器定义，但无库时矩阵不可用，实测裸 `\matrix` 报 `! Missing } inserted.`）；漏检时手册示例
+先报 pgfkeys "I do not know the key '/tikz/matrix of math nodes'"。探测正则取 `\matrix\b`，
+amsmath 的 `\begin{matrix}` / `\pmatrix` 命令名前没有反斜杠，不会命中（它们由 amsmath 提供，
+与 tikz 库无关）。TL2026 与 tectonic 2021 bundle 均自带该库，**无后端门控**。
+**箭头 tip 的 setter 写法**：旧探测只认 `-name` 形式（`-stealth`），`>=angle 90` 这类手册惯用的
+setter 写法漏检；而 `angle <45|60|90>` / `hooks` / `triangle <45|60|90>` 只在
+`pgflibraryarrows.code.tex` 声明（核心 `pgfcorearrows.code.tex` 只声明 stealth / latex / to /
+to reversed，另有内部 @bar / space，故
+`>=stealth` / `>=latex` / `>=to` / `->` / `<->` 无需任何库，行为不变），缺库时报
+"Unknown arrow tip kind 'angle 90'"。因此 `tikzExtraLibraries` 增加词面正则
+`\b(?:angle\s+\d+|hooks|triangle\s+\d+)\b` → `arrows`，覆盖全部端点写法（`>=angle 90` /
+`-angle 90` / `-{angle 90}` / 源端 `angle 90-`）。同时 `arrows.meta` 条目改为同时认 setter 前缀
+（`>=Stealth` / `>={Stealth[length=2mm]}`，旧版只认 `-Stealth`），否则裸编译报
+"Unknown arrow tip kind 'Stealth'"。
+**过加载取舍**：词面匹配会让散文与 tkz-euclide 关键字 `angle 60`（集成样例 `through`）也命中 `arrows`，
+代价仅为多加载一个无副作用的库，同 `\bsnake\b` / 3d 的"宁多加载不漏加载"取舍。像素级回归
+`TestRenderTikzMatrixNotBlank`（故障原文 `matrixSample` 单一来源）：修复后 149x136px @150dpi
+（全图暗像素 514，阈值 150；高度 >= 80px 区分单行退化），xe 与 tectonic 两腿实测同值。
+
 ## 构建与测试
 
 | 命令 | 说明 |

@@ -687,8 +687,36 @@ var tikzExtraLibraries = []struct {
 	{regexp.MustCompile(`\bfit\s*=`), "fit"}, // node[fit=(a)(b)] 包围盒
 	{regexp.MustCompile(`\(\$`), "calc"},     // ($(a)!0.5!(b)$) 坐标运算
 	{regexp.MustCompile(`\b(?:above|below|left|right)\s*=\s*of\b`), "positioning"},
-	{regexp.MustCompile(`-\{?(?:Stealth|Latex|Triangle|Circle|Square|Diamond|Kite|To)\b`), "arrows.meta"},
+	// matrix: 手册的 "matrix 摆法" 交换图 (\matrix(m)[matrix of math nodes, ...] 后接
+	// edge 箭头) 依赖 tikzlibrarymatrix.code.tex: matrix of nodes / matrix of math
+	// nodes 样式与单元格/行分隔处理都来自该库——\matrix 命令虽由核心 tikz.code.tex
+	// 的 \tikz@installcommands 安装器定义, 但无库时矩阵不可用 (实测裸 \matrix 报
+	// "! Missing } inserted."); 手册示例缺库时先报 "! Package pgfkeys Error:
+	// I do not know the key '/tikz/matrix of math nodes'" (用户故障原文)。探测正则
+	// 取 \matrix\b 覆盖真实用法; amsmath 的 \begin{matrix} / \pmatrix 命令名前没有
+	// 反斜杠, 不会命中 (与 tikz 库无关)。TL2026 与 tectonic 2021 bundle 均自带该
+	// 库; 散文/注释里的 "\matrix" 属可接受过加载 (库对现有片段无副作用), 同
+	// \bsnake\b / 3d 的"宁多加载不漏加载"取舍。
+	{regexp.MustCompile(`\\matrix\b`), "matrix"},
+	// 箭头 tip 的 setter 写法 (>=Stealth) 与端点写法 (-Stealth) 都要认:
+	// Stealth / Latex / Triangle / Circle / Square / Diamond / Kite / To 只在
+	// pgflibraryarrows.meta.code.tex 声明 (核心 pgfcorearrows.code.tex 只声明
+	// stealth / latex / to / to reversed, 另有内部 @bar / space), 漏检时裸编译报
+	// "Unknown arrow tip kind 'Stealth'"。
+	// 前缀 (?:>=|<=|-) 后允许空白与一层等价花括号, 覆盖 >=Stealth /
+	// >={Stealth[length=2mm]} 等手册惯用 setter 写法 (旧版只认 -name)。
+	{regexp.MustCompile(`(?:>=|<=|-)\s*\{?\s*(?:Stealth|Latex|Triangle|Circle|Square|Diamond|Kite|To)\b`), "arrows.meta"},
 	{regexp.MustCompile(`-\{?(?:stealth|latex|to|triangle)\b`), "arrows"},
+	// 旧式箭头 tip 的 setter / 端点写法: >=angle 90 / -angle 90 / -{angle 90} /
+	// 源端 angle 90-。angle <45|60|90> / hooks / triangle <45|60|90> 只在
+	// pgflibraryarrows.code.tex 声明 (核心 pgfcorearrows.code.tex 只声明 stealth /
+	// latex / to / to reversed, 另有内部 @bar / space, 故 >=stealth / >=latex /
+	// >=to / -> / <-> 无需库), 缺库时报
+	// "Unknown arrow tip kind 'angle 90'"; 手册交换图 (含本次故障原文) 惯用
+	// >=angle 90。词面匹配 (而非只认 -name 形式) 覆盖全部端点写法; 散文与
+	// tkz-euclide 关键字 angle 60 会误中, 代价仅为多加载无副作用的库,
+	// 同 \bsnake\b / 3d 的"宁多加载不漏加载"取舍。
+	{regexp.MustCompile(`\b(?:angle\s+\d+|hooks|triangle\s+\d+)\b`), "arrows"},
 	{regexp.MustCompile(`\bpattern\s*=`), "patterns"},
 	{regexp.MustCompile(`\bdecorate\b|\bdecoration\s*=`), "decorations.pathreplacing"},
 	{regexp.MustCompile(`\bsnake\b`), "decorations.pathmorphing"},

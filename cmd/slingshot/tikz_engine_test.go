@@ -686,6 +686,71 @@ func TestRenderTikzAmscdNotBlank(t *testing.T) {
 	}
 }
 
+// TestRenderTikzMatrixNotBlank 是 "matrix 摆法" 交换图的像素级回归。
+//
+// 此前两个缺陷叠加: (1) 探测表没有 matrix 库条目, \usetikzlibrary{matrix} 未注入,
+// 编译报 "! Package pgfkeys Error: I do not know the key '/tikz/matrix of math
+// nodes'"; (2) 箭头 tip 只认 -name 形式 (-stealth), >=angle 90 这种 setter 写法
+// 漏检, 报 "Unknown arrow tip kind 'angle 90'"。修复 = tikzExtraLibraries 增加
+// matrix 与 arrows 两条内容特征 (见 tikz.go)。
+//
+// 像素级回归: 解码栅格图后统计暗像素, 兜住编译成功但布局退化/内容丢失类缺陷,
+// 并作为端到端渲染证明。实测 (@150dpi, 由 renderTikz 经 mutool 栅格化): 149x136px,
+// 全图暗像素 514。阈值 150 留约
+// 3.4 倍余量; 高度 >= 80px 把交换方阵与单行退化区分开。
+//
+// 两后端都跑 (各自可用才跑): matrix 与 arrows 库在 TL2026 与 2021 bundle 里都自带,
+// 探测无后端门控, 因此两条腿都必须通过。
+func TestRenderTikzMatrixNotBlank(t *testing.T) {
+	engines := []struct {
+		name   string
+		avail  func() error
+		reason string
+	}{
+		{name: "xe", avail: func() error { return latexmkAvailable(false) },
+			reason: "latexmk unavailable"},
+		{name: "tectonic", avail: tectonicAvailable,
+			reason: "tectonic unavailable"},
+	}
+	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	for _, e := range engines {
+		t.Run(e.name, func(t *testing.T) {
+			if err := e.avail(); err != nil {
+				t.Skipf("%s: %v", e.reason, err)
+			}
+			in := filepath.Join(t.TempDir(), "matrix.tikz")
+			out := filepath.Join(t.TempDir(), "matrix.png")
+			if err := os.WriteFile(in, []byte(matrixSample), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := renderTikz(in, out, e.name); err != nil {
+				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
+			}
+			f, err := os.Open(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			img, _, err := image.Decode(f)
+			if err != nil {
+				t.Fatalf("decoding png: %v", err)
+			}
+			// 断言 1: 内容存在 (空白对照暗像素≈0, 修复后实测 514); 阈值与
+			// 消息格式与 amscd CD 渲染测试共用同一 helper。
+			assertRegionNotBlank(t, img, "tikz matrix", "full image", 0, 100, 0, 100, 150,
+				"the matrix diagram was silently dropped or degenerated (matrix layout not rendered)")
+			// 断言 2: 交换方阵的高度远大于单行退化。
+			if h := img.Bounds().Dy(); h < 80 {
+				t.Fatalf("tikz matrix rendered %dx%d px, want height >= 80 (square layout, not single-row fallback)",
+					img.Bounds().Dx(), h)
+			}
+		})
+	}
+}
+
 // TestRenderTikzTcblistingMintedNotBlank 是 tcblisting 的 minted 引擎回归
 // (tikzlings 手册"练习 6"场景: listing engine=minted + minted options={linenos})。
 //

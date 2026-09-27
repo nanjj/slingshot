@@ -21,6 +21,27 @@ const amscdCDSample = `$\begin{CD}
   C@>d>>D
 \end{CD}$`
 
+// matrixSample 是 "matrix 摆法" 交换图片段 (临帖文章 tikzlings / tikzcd / mtikz.org
+// 的第二个例子), 逐字节等于用户原始故障输入 (370 字节, sha256
+// c0d7204aa9f3b006b7b492ef238ea31e3cfb4f3ccaa30d817dc8a81febf32644)。
+// 单一来源: 库探测组合用例、函数级库探测用例与像素回归测试共用本常量。
+// 此前报 "! Package pgfkeys Error: I do not know the key '/tikz/matrix of math
+// nodes'" (缺 matrix 库), 随后是 "Unknown arrow tip kind 'angle 90'"
+// (缺 arrows 库: >=angle 90 是 setter 写法, 旧探测只认 -name 形式)。
+const matrixSample = `\begin{tikzpicture}
+  \matrix(m)[matrix of math nodes,
+    row sep=2.6em, column sep=2.8em,
+    text height=1.5ex, text depth=0.25ex]{
+    A&B\\
+    C&D\\};
+  \path[->, font=\scriptsize, >=angle 90]
+  (m-1-1) edge node[auto] {$a$} (m-1-2)
+  edge node[auto] {$b$} (m-2-1)
+  (m-1-2) edge node[auto] {$c$} (m-2-2)
+  (m-2-1) edge node[auto] {$d$} (m-2-2);
+\end{tikzpicture}
+`
+
 func TestNormalizeTikz(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1512,6 +1533,26 @@ func TestDetectTikzLibraries(t *testing.T) {
 		{name: "randuck loads ducks library", content: "\\randuck[body=blue]", want: []string{"ducks"}},
 		{name: "ducksay is not duck", content: "\\ducksay{quack}"},
 		{name: "duckling is not duck", content: "\\duckling"},
+		// matrix 摆法: \matrix 命令与 matrix of nodes / matrix of math nodes 样式都由
+		// tikzlibrarymatrix.code.tex 提供, 漏检时 pgfkeys 报未知键
+		// '/tikz/matrix of math nodes' (用户故障原文)。
+		{name: "matrix of math nodes", content: "\\matrix (m) [matrix of math nodes] {A & B \\\\ C & D \\\\};", want: []string{"matrix"}},
+		// amsmath 的矩阵环境: 命令名前无反斜杠, 不是 tikz 的 \matrix。
+		{name: "amsmath matrix env not tikz matrix", content: "\\begin{matrix} a & b \\\\ c & d \\end{matrix}"},
+		{name: "amsmath pmatrix not tikz matrix", content: "\\pmatrix{a & b \\\\ c & d}"},
+		// 旧式箭头 tip (arrows 库) 的 setter / 端点写法 (pgflibraryarrows 独有)。
+		{name: "arrow tip setter angle 90", content: "\\path[->, font=\\scriptsize, >=angle 90] (m-1-1) edge (m-1-2);", want: []string{"arrows"}},
+		{name: "arrow tip braced angle 90", content: "\\draw[-{angle 90}] (0,0) -- (1,0);", want: []string{"arrows"}},
+		{name: "arrow tip setter hooks", content: "\\path[->, >=hooks] (0,0) -- (1,0);", want: []string{"arrows"}},
+		{name: "arrow tip setter triangle 45", content: "\\path[->, >=triangle 45] (0,0) -- (1,0);", want: []string{"arrows"}},
+		// arrows.meta 的 setter 写法 (旧版只认 -name 形式)。
+		{name: "arrows.meta setter Stealth", content: "\\path[->, >=Stealth] (0,0) -- (1,0);", want: []string{"arrows.meta"}},
+		{name: "arrows.meta setter braced Stealth", content: "\\path[->, >={Stealth[length=2mm]}] (0,0) -- (1,0);", want: []string{"arrows.meta"}},
+		// 核心 pgfcorearrows 自带的 tip (stealth/latex/to) 与无 tip 的箭头: 不加载库。
+		{name: "core arrow no library", content: "\\draw[->] (0,0) -- (1,0);"},
+		{name: "core arrow both ends no library", content: "\\draw[<->] (0,0) -- (1,0);"},
+		// 组合回归: 故障原文同时命中 matrix 与 arrows (表顺序)。
+		{name: "matrix fault sample", content: matrixSample, want: []string{"matrix", "arrows"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1679,6 +1720,18 @@ func TestTikzLibraries(t *testing.T) {
 	}
 	if got := tikzLibraries(tectonicProfile(), duck); !slices.Contains(got, "ducks") {
 		t.Errorf("tikzLibraries(tectonic, duck) = %v, want ducks", got)
+	}
+	// matrix 库: "matrix 摆法"交换图 (\matrix(m)[matrix of math nodes] + >=angle 90)
+	// 需要它; 两个后端都注入 (TL2026 与 2021 bundle 均自带该库, 无后端门控)。
+	if got := tikzLibraries(latexmkProfile(), matrixSample); !slices.Contains(got, "matrix") {
+		t.Errorf("tikzLibraries(latexmk, matrixSample) = %v, want matrix", got)
+	}
+	if got := tikzLibraries(tectonicProfile(), matrixSample); !slices.Contains(got, "matrix") {
+		t.Errorf("tikzLibraries(tectonic, matrixSample) = %v, want matrix (bundle ships the library too)", got)
+	}
+	// 同一片段还要 arrows: >=angle 90 只在 pgflibraryarrows 声明。
+	if got := tikzLibraries(latexmkProfile(), matrixSample); !slices.Contains(got, "arrows") {
+		t.Errorf("tikzLibraries(latexmk, matrixSample) = %v, want arrows (>=angle 90)", got)
 	}
 }
 
