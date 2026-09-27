@@ -312,11 +312,7 @@ var tikzIntegrationSamples = map[string]string{
 	// 此前报 "! LaTeX Error: Environment CD undefined." (未探测到 CD 则不加载
 	// amscd); 修复后还要注意 CD 不能进 tikzpicture (pgf 静默丢弃内容), 配套
 	// normalizeTikz 的 hasCDDiagram 早退。TL2026 与 2021 bundle 均自带 amscd。
-	"amscd_cd": `$\begin{CD}
-  A@>a>>B\\
-  @VVbV@VVcV\\
-  C@>d>>D
-\end{CD}$`,
+	"amscd_cd": amscdCDSample,
 
 	"buzzer": `\begin{circuitikz}
 \draw (0,0) to[buzzer] (0,2);
@@ -565,16 +561,17 @@ func countDarkPixels(img image.Image, x0f, x1f, y0f, y1f int) (dark, x0, x1, y0,
 }
 
 // assertRegionNotBlank 断言 img 的归一化区域 x[x0f,x1f) y[y0f,y1f) 内暗像素数
-// > minDark; 不足时以 what 说明该区域的语义并失败。抓的是"编译成功但内容空白"
-// 这类静默丢失。阈值与消息格式单点化, 三个 tcblisting 渲染测试共用。
-func assertRegionNotBlank(t *testing.T, img image.Image, name string,
+// > minDark; 不足时以 what 说明该区域的语义并失败。kind 是被渲染对象的类型名
+// (如 "tcblisting" / "amscd CD"), 只用于失败消息前缀。抓的是"编译成功但内容
+// 空白"这类静默丢失。阈值与消息格式单点化, 各渲染测试共用。
+func assertRegionNotBlank(t *testing.T, img image.Image, kind, name string,
 	x0f, x1f, y0f, y1f, minDark int, what string) {
 	t.Helper()
 	dark, x0, x1, y0, y1 := countDarkPixels(img, x0f, x1f, y0f, y1f)
 	if dark <= minDark {
 		b := img.Bounds()
-		t.Fatalf("tcblisting %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
-			name, dark, x0, x1, y0, y1, b.Dx(), b.Dy(), minDark, what)
+		t.Fatalf("%s %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
+			kind, name, dark, x0, x1, y0, y1, b.Dx(), b.Dy(), minDark, what)
 	}
 }
 
@@ -619,7 +616,7 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decoding png: %v", err)
 			}
-			assertRegionNotBlank(t, img, "lower half", 60, 92, 20, 95, 200,
+			assertRegionNotBlank(t, img, "tcblisting", "lower half", 60, 92, 20, 95, 200,
 				"the figchild drawing was silently dropped")
 		})
 	}
@@ -635,16 +632,11 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 // 静默丢失编译级断言抓不住, 必须解码栅格图后统计暗像素。实测 (@150dpi, 由
 // renderTikz 经 mutool 栅格化): 空白对照 9x9px (几乎无暗像素); 单行退化约高
 // 46px; 修复后标准交换方阵 133x114px, 全图暗像素 476。阈值 150 留约 3 倍余量;
-// 高度 >= 80px 把方阵与单行退化区分开。参考图 /tmp/amscd-fix-ref/expected-150dpi.png。
+// 高度 >= 80px 把方阵与单行退化区分开。
 //
 // 两后端都跑 (各自可用才跑)。tectonic 分支后续计划淘汰, 不为它做 amscd 专门
 // 适配; 若 tectonic 腿不稳定则降级为 xe 单腿。
 func TestRenderTikzAmscdNotBlank(t *testing.T) {
-	const sample = `$\begin{CD}
-  A@>a>>B\\
-  @VVbV@VVcV\\
-  C@>d>>D
-\end{CD}$`
 	engines := []struct {
 		name   string
 		avail  func() error
@@ -666,7 +658,7 @@ func TestRenderTikzAmscdNotBlank(t *testing.T) {
 			}
 			in := filepath.Join(t.TempDir(), "amscd_cd.tikz")
 			out := filepath.Join(t.TempDir(), "amscd_cd.png")
-			if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
+			if err := os.WriteFile(in, []byte(amscdCDSample), 0644); err != nil {
 				t.Fatal(err)
 			}
 			if err := renderTikz(in, out, e.name); err != nil {
@@ -681,11 +673,10 @@ func TestRenderTikzAmscdNotBlank(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decoding png: %v", err)
 			}
-			// 断言 1: 内容存在 (空白对照暗像素≈0, 修复后实测 476)。
-			if dark, _, _, _, _ := countDarkPixels(img, 0, 100, 0, 100); dark < 150 {
-				t.Fatalf("amscd CD looks blank: %d dark pixels in %dx%d (want >= 150); the CD diagram was silently dropped",
-					dark, img.Bounds().Dx(), img.Bounds().Dy())
-			}
+			// 断言 1: 内容存在 (空白对照暗像素≈0, 修复后实测 476); 阈值与
+			// 消息格式与 tcblisting 渲染测试共用同一 helper。
+			assertRegionNotBlank(t, img, "amscd CD", "full image", 0, 100, 0, 100, 150,
+				"the CD diagram was silently dropped")
 			// 断言 2: 标准交换方阵的高度远大于单行退化 (~46px)。
 			if h := img.Bounds().Dy(); h < 80 {
 				t.Fatalf("amscd CD rendered %dx%d px, want height >= 80 (square layout, not single-row fallback)",
@@ -765,7 +756,7 @@ func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
 			emptyDetection: "the code side of the box is blank"},
 	}
 	for _, rg := range regions {
-		assertRegionNotBlank(t, img, "minted "+rg.name,
+		assertRegionNotBlank(t, img, "tcblisting", "minted "+rg.name,
 			rg.x0f, rg.x1f, rg.y0f, rg.y1f, rg.minDark, rg.emptyDetection)
 	}
 }
@@ -845,7 +836,7 @@ func TestRenderTikzTcblistingCommentFamilyNotBlank(t *testing.T) {
 			emptyDetection: "the comment side of the box is blank"},
 	}
 	for _, rgg := range regions {
-		assertRegionNotBlank(t, img, "comment-family "+rgg.name,
+		assertRegionNotBlank(t, img, "tcblisting", "comment-family "+rgg.name,
 			rgg.x0f, rgg.x1f, rgg.y0f, rgg.y1f, rgg.minDark, rgg.emptyDetection)
 	}
 }
@@ -903,9 +894,9 @@ func TestRenderTikzTcblistingListingAndCommentNotBlank(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decoding png: %v", err)
 	}
-	assertRegionNotBlank(t, img, "listing and comment listing side", 5, 95, 2, 45, 800,
+	assertRegionNotBlank(t, img, "tcblisting", "listing and comment listing side", 5, 95, 2, 45, 800,
 		"the listing (code) side of the box is blank")
-	assertRegionNotBlank(t, img, "listing and comment comment side", 5, 95, 55, 98, 600,
+	assertRegionNotBlank(t, img, "tcblisting", "listing and comment comment side", 5, 95, 55, 98, 600,
 		"the comment side of the box is blank")
 }
 

@@ -11,9 +11,11 @@ import (
 	"testing"
 )
 
-// normalizeCDSample 是 amscd CD 交换图片段, 逐字节等于用户原始故障输入
+// amscdCDSample 是 amscd CD 交换图片段, 逐字节等于用户原始故障输入
 // (行尾的双反斜杠是 TeX 换行, 必须保留: 写成单个会静默退化为单行)。
-const normalizeCDSample = `$\begin{CD}
+// 单一来源: 归一化测试、集成样例与像素回归测试共用本常量,
+// 避免副本各自被改坏而其它测试仍绿。
+const amscdCDSample = `$\begin{CD}
   A@>a>>B\\
   @VVbV@VVcV\\
   C@>d>>D
@@ -349,8 +351,8 @@ func TestNormalizeTikz(t *testing.T) {
 		{
 			// amscd CD 交换图: 数学材料, 原样放行 (不补 tikzpicture 外壳)。
 			name:  "CD diagram passed through, not wrapped",
-			input: normalizeCDSample,
-			want:  normalizeCDSample,
+			input: amscdCDSample,
+			want:  amscdCDSample,
 		},
 		{
 			// 注释里的 CD 不算数: 剥离注释后仍补外壳 (与自包含命令契约一致)。
@@ -362,8 +364,8 @@ func TestNormalizeTikz(t *testing.T) {
 			// 固有取舍: 混合 CD 与裸 tikz 的内容无法自动修好 (包一层会破坏 CD),
 			// 保持原样 (contains 语义, 与自包含命令混用一致)。
 			name:  "mixed CD and raw tikz stays unwrapped",
-			input: normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
-			want:  normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
+			input: amscdCDSample + "\n\\draw (0,0) -- (1,1);",
+			want:  amscdCDSample + "\n\\draw (0,0) -- (1,1);",
 		},
 	}
 	for _, tt := range tests {
@@ -433,8 +435,8 @@ func TestNormalizeTikzLatexmkProfile(t *testing.T) {
 		{
 			// amscd CD 交换图: 数学材料, 原样放行 (不补 tikzpicture 外壳)。
 			name:  "CD diagram passed through, not wrapped",
-			input: normalizeCDSample,
-			want:  normalizeCDSample,
+			input: amscdCDSample,
+			want:  amscdCDSample,
 		},
 		{
 			// 注释里的 CD 不算数: 剥离注释后仍补外壳 (与自包含命令契约一致)。
@@ -446,8 +448,8 @@ func TestNormalizeTikzLatexmkProfile(t *testing.T) {
 			// 固有取舍: 混合 CD 与裸 tikz 的内容无法自动修好 (包一层会破坏 CD),
 			// 保持原样 (contains 语义, 与自包含命令混用一致)。
 			name:  "mixed CD and raw tikz stays unwrapped",
-			input: normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
-			want:  normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
+			input: amscdCDSample + "\n\\draw (0,0) -- (1,1);",
+			want:  amscdCDSample + "\n\\draw (0,0) -- (1,1);",
 		},
 	}
 	for _, tt := range tests {
@@ -941,6 +943,15 @@ func TestDetectTikzPackages(t *testing.T) {
 			name:    "tikzcd and CD in table order",
 			content: "\\begin{tikzcd}A \\arrow[r] & B\\end{tikzcd}\n\\begin{CD}A@>a>>B\\end{CD}",
 			want:    []string{"tikz-cd", "amscd"},
+		},
+		{
+			// 刻意保留的 comment-blind 探测: tikzExtraPackages 用 strings.Contains
+			// (不剥注释), 与 hasCDDiagram 的"先剥注释"形成刻意不对称 —— 探测侧
+			// 宁可多加载也不漏加载 (与其它 marker 同一取舍), 否则注释里的 CD
+			// 会让真正的 CD 片段漏装 amscd。
+			name:    "commented-out CD still loads amscd (comment-blind probe)",
+			content: "% \\begin{CD} example",
+			want:    []string{"amscd"},
 		},
 		{
 			name:    "tkz-euclide",

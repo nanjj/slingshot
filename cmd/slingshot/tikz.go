@@ -510,8 +510,8 @@ var usetikzlibraryIECRe = regexp.MustCompile(`(?m)^[ \t]*\\usetikzlibrary\{circu
 var tikzExtraPackages = []struct{ marker, pkg string }{
 	{`\begin{tikzcd}`, "tikz-cd"},
 	{`\tikzcdset`, "tikz-cd"},
-	// amscd (AMS 交换图; amscd.sty 随 amsmath 发行版提供): CD 是 amscd 唯一的
-	// 用户环境, `\begin{CD}` 子串无歧义。TL2026 与 tectonic bundle 均自带。
+	// amscd (AMS 交换图; amscd.sty 在 TeX Live 2026 与 tectonic 2021 bundle 中均自带):
+	// CD 是 amscd 唯一的用户环境, `\begin{CD}` 子串无歧义。
 	// 注意 CD 内容是数学模式材料, 不能进 tikzpicture (会被 pgf 静默丢弃),
 	// 与 normalizeTikz 的 hasCDDiagram 早退配套; 只加载包是不够的。
 	{`\begin{CD}`, "amscd"},

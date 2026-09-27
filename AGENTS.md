@@ -222,8 +222,8 @@ amsmath 同级常驻。TL2026 与 tectonic 2021 bundle 均自带 amssymb，两�
 显式写 `\usepackage{amssymb}` 会被提升到导言区，此时重复加载是 no-op（LaTeX 的 `\ver@` 去重）。
 
 amscd 的 `CD` 交换图：`tikzExtraPackages` 用 `\begin{CD}` 子串探测（CD 是 amscd 唯一的用户
-环境，子串无歧义），命中即 `\usepackage{amscd}`；TL2026 与 tectonic 2021 bundle 均自带，
-两后端同一路径。**只加载包还不够**：CD 内容是数学模式材料（`\vcenter` + `\halign`），与
+环境，子串无歧义），命中即 `\usepackage{amscd}`；amscd.sty 在 TeX Live 2026 与 tectonic 2021
+bundle 中均自带，两后端同一路径。**只加载包还不够**：CD 内容是数学模式材料（`\vcenter` + `\halign`），与
 picture 不兼容——补 `tikzpicture` 外壳后 pgf **静默丢弃**内容（编译 exit 0、页面只剩 2pt 边框，
 实测 4x4pt / PNG 9x9px），放进 `\node` 则 amscd 报 "Invalid use of @"。因此 `normalizeTikz`
 新增 `hasCDDiagram` 早退（先 `stripTikzComments`，注释里的 CD 不算数），与自包含环境/命令同一
