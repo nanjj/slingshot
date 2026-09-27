@@ -510,6 +510,11 @@ var usetikzlibraryIECRe = regexp.MustCompile(`(?m)^[ \t]*\\usetikzlibrary\{circu
 var tikzExtraPackages = []struct{ marker, pkg string }{
 	{`\begin{tikzcd}`, "tikz-cd"},
 	{`\tikzcdset`, "tikz-cd"},
+	// amscd (AMS 交换图; amscd.sty 随 amsmath 发行版提供): CD 是 amscd 唯一的
+	// 用户环境, `\begin{CD}` 子串无歧义。TL2026 与 tectonic bundle 均自带。
+	// 注意 CD 内容是数学模式材料, 不能进 tikzpicture (会被 pgf 静默丢弃),
+	// 与 normalizeTikz 的 hasCDDiagram 早退配套; 只加载包是不够的。
+	{`\begin{CD}`, "amscd"},
 	{`\begin{axis}`, "pgfplots"},
 	{`\begin{semilogxaxis}`, "pgfplots"},
 	{`\begin{semilogyaxis}`, "pgfplots"},
@@ -993,6 +998,16 @@ func selfContainedCmd(content string) bool {
 		}
 	}
 	return false
+}
+
+// hasCDDiagram 报告内容是否使用 amscd 的 CD 环境。
+// 先剥离注释, 与 selfContainedCmd 的判定契约一致 (注释里的 CD 不算数)。
+// CD 是数学模式 (\vcenter + \halign) 材料, 与 picture 不兼容: 包进 tikzpicture
+// 后 pgf 静默丢弃内容 (编译 exit 0、页面只剩 2pt 边框), 放进 \node 则 amscd
+// 报 "Invalid use of @"。命中时与自包含环境/命令同一早退位置, 原样放行,
+// 让 CD 在文档层按 amscd 的正常方式排版。
+func hasCDDiagram(content string) bool {
+	return strings.Contains(stripTikzComments(content), `\begin{CD}`)
 }
 
 // stripTikzComments 删除未转义 % 至行尾的注释, 保留换行符。
@@ -1996,6 +2011,10 @@ func normalizeTikz(content string, p tikzProfile) string {
 	// 自包含命令 (figchild / tikz-triminos / scsnowman) 自带 tikzpicture 或
 	// inline 图形盒, 同样不包外壳; 与上面的 env 早退同位置同语义。
 	if selfContainedCmd(content) {
+		return head + content
+	}
+	// amscd 的 CD 交换图: 数学材料, 不能进 tikzpicture (pgf 静默丢弃)。
+	if hasCDDiagram(content) {
 		return head + content
 	}
 	return head + "\\begin{tikzpicture}\n" + content + "\n\\end{tikzpicture}\n"

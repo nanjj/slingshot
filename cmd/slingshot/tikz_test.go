@@ -11,6 +11,14 @@ import (
 	"testing"
 )
 
+// normalizeCDSample 是 amscd CD 交换图片段, 逐字节等于用户原始故障输入
+// (行尾的双反斜杠是 TeX 换行, 必须保留: 写成单个会静默退化为单行)。
+const normalizeCDSample = `$\begin{CD}
+  A@>a>>B\\
+  @VVbV@VVcV\\
+  C@>d>>D
+\end{CD}$`
+
 func TestNormalizeTikz(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -338,6 +346,25 @@ func TestNormalizeTikz(t *testing.T) {
 			input: "\\node[inner sep=0] {\\begin{picture}(42,44)\\picduck\\end{picture}};",
 			want:  "\\begin{tikzpicture}\n\\node[inner sep=0] {\\begin{picture}(42,44)\\picduck\\end{picture}};\n\\end{tikzpicture}\n",
 		},
+		{
+			// amscd CD 交换图: 数学材料, 原样放行 (不补 tikzpicture 外壳)。
+			name:  "CD diagram passed through, not wrapped",
+			input: normalizeCDSample,
+			want:  normalizeCDSample,
+		},
+		{
+			// 注释里的 CD 不算数: 剥离注释后仍补外壳 (与自包含命令契约一致)。
+			name:  "commented-out CD still wrapped",
+			input: "% \\begin{CD} renders a square\n\\draw (0,0) -- (1,1);",
+			want:  "\\begin{tikzpicture}\n% \\begin{CD} renders a square\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n",
+		},
+		{
+			// 固有取舍: 混合 CD 与裸 tikz 的内容无法自动修好 (包一层会破坏 CD),
+			// 保持原样 (contains 语义, 与自包含命令混用一致)。
+			name:  "mixed CD and raw tikz stays unwrapped",
+			input: normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
+			want:  normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -402,6 +429,25 @@ func TestNormalizeTikzLatexmkProfile(t *testing.T) {
 			name:  "picture env passed through, not wrapped",
 			input: "\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
 			want:  "\\begin{picture}(42,44)\n  \\picduck\n\\end{picture}\n",
+		},
+		{
+			// amscd CD 交换图: 数学材料, 原样放行 (不补 tikzpicture 外壳)。
+			name:  "CD diagram passed through, not wrapped",
+			input: normalizeCDSample,
+			want:  normalizeCDSample,
+		},
+		{
+			// 注释里的 CD 不算数: 剥离注释后仍补外壳 (与自包含命令契约一致)。
+			name:  "commented-out CD still wrapped",
+			input: "% \\begin{CD} renders a square\n\\draw (0,0) -- (1,1);",
+			want:  "\\begin{tikzpicture}\n% \\begin{CD} renders a square\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}\n",
+		},
+		{
+			// 固有取舍: 混合 CD 与裸 tikz 的内容无法自动修好 (包一层会破坏 CD),
+			// 保持原样 (contains 语义, 与自包含命令混用一致)。
+			name:  "mixed CD and raw tikz stays unwrapped",
+			input: normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
+			want:  normalizeCDSample + "\n\\draw (0,0) -- (1,1);",
 		},
 	}
 	for _, tt := range tests {
@@ -878,6 +924,24 @@ func TestDetectTikzPackages(t *testing.T) {
 		want    []string
 	}{
 		{name: "plain tikz", content: "\\draw (0,0) -- (1,1);"},
+		{
+			name:    "amscd CD environment",
+			content: "\\begin{CD}\nA@>a>>B\n\\end{CD}",
+			want:    []string{"amscd"},
+		},
+		{
+			name:    "amscd prose is not a CD environment",
+			content: "the amscd package typesets CD diagrams",
+		},
+		{
+			name:    "CDX is not the CD environment",
+			content: "\\begin{CDX}A\\end{CDX}",
+		},
+		{
+			name:    "tikzcd and CD in table order",
+			content: "\\begin{tikzcd}A \\arrow[r] & B\\end{tikzcd}\n\\begin{CD}A@>a>>B\\end{CD}",
+			want:    []string{"tikz-cd", "amscd"},
+		},
 		{
 			name:    "tkz-euclide",
 			content: "\\tkzDefPoint(0,0){A}\n\\tkzDrawPoints(A,B)",

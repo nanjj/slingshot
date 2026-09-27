@@ -308,6 +308,16 @@ var tikzIntegrationSamples = map[string]string{
 \tkzDrawPoint(h)
 \end{tikzpicture}
 `,
+	// amscd_cd: 用户原始故障片段 ($\begin{CD}...\end{CD}$, 行尾双反斜杠换行)。
+	// 此前报 "! LaTeX Error: Environment CD undefined." (未探测到 CD 则不加载
+	// amscd); 修复后还要注意 CD 不能进 tikzpicture (pgf 静默丢弃内容), 配套
+	// normalizeTikz 的 hasCDDiagram 早退。TL2026 与 2021 bundle 均自带 amscd。
+	"amscd_cd": `$\begin{CD}
+  A@>a>>B\\
+  @VVbV@VVcV\\
+  C@>d>>D
+\end{CD}$`,
+
 	"buzzer": `\begin{circuitikz}
 \draw (0,0) to[buzzer] (0,2);
 \end{circuitikz}
@@ -611,6 +621,76 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 			}
 			assertRegionNotBlank(t, img, "lower half", 60, 92, 20, 95, 200,
 				"the figchild drawing was silently dropped")
+		})
+	}
+}
+
+// TestRenderTikzAmscdNotBlank 是 amscd CD 交换图的像素级回归。
+//
+// 此前两个缺陷叠加: (1) 未探测到 \begin{CD} 则不加载 amscd, 编译报
+// "! LaTeX Error: Environment CD undefined."; (2) CD 是数学模式材料, 被补
+// tikzpicture 外壳后 pgf 静默丢弃内容 (编译 exit 0, 页面只剩 2pt 边框)。
+// 修复 = 探测表加载 amscd + normalizeTikz 的 hasCDDiagram 早退 (不包外壳)。
+//
+// 静默丢失编译级断言抓不住, 必须解码栅格图后统计暗像素。实测 (@150dpi, 由
+// renderTikz 经 mutool 栅格化): 空白对照 9x9px (几乎无暗像素); 单行退化约高
+// 46px; 修复后标准交换方阵 133x114px, 全图暗像素 476。阈值 150 留约 3 倍余量;
+// 高度 >= 80px 把方阵与单行退化区分开。参考图 /tmp/amscd-fix-ref/expected-150dpi.png。
+//
+// 两后端都跑 (各自可用才跑)。tectonic 分支后续计划淘汰, 不为它做 amscd 专门
+// 适配; 若 tectonic 腿不稳定则降级为 xe 单腿。
+func TestRenderTikzAmscdNotBlank(t *testing.T) {
+	const sample = `$\begin{CD}
+  A@>a>>B\\
+  @VVbV@VVcV\\
+  C@>d>>D
+\end{CD}$`
+	engines := []struct {
+		name   string
+		avail  func() error
+		reason string
+	}{
+		{name: "xe", avail: func() error { return latexmkAvailable(false) },
+			reason: "latexmk unavailable"},
+		{name: "tectonic", avail: tectonicAvailable,
+			reason: "tectonic unavailable"},
+	}
+	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	for _, e := range engines {
+		t.Run(e.name, func(t *testing.T) {
+			if err := e.avail(); err != nil {
+				t.Skipf("%s: %v", e.reason, err)
+			}
+			in := filepath.Join(t.TempDir(), "amscd_cd.tikz")
+			out := filepath.Join(t.TempDir(), "amscd_cd.png")
+			if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := renderTikz(in, out, e.name); err != nil {
+				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
+			}
+			f, err := os.Open(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			img, _, err := image.Decode(f)
+			if err != nil {
+				t.Fatalf("decoding png: %v", err)
+			}
+			// 断言 1: 内容存在 (空白对照暗像素≈0, 修复后实测 476)。
+			if dark, _, _, _, _ := countDarkPixels(img, 0, 100, 0, 100); dark < 150 {
+				t.Fatalf("amscd CD looks blank: %d dark pixels in %dx%d (want >= 150); the CD diagram was silently dropped",
+					dark, img.Bounds().Dx(), img.Bounds().Dy())
+			}
+			// 断言 2: 标准交换方阵的高度远大于单行退化 (~46px)。
+			if h := img.Bounds().Dy(); h < 80 {
+				t.Fatalf("amscd CD rendered %dx%d px, want height >= 80 (square layout, not single-row fallback)",
+					img.Bounds().Dx(), h)
+			}
 		})
 	}
 }
