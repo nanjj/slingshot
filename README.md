@@ -47,7 +47,9 @@ slingshot
 `tikzpicture` / `circuitikz` / `tikzcd` / `forest` 环境，也可以只是环境内部的命令
 （自动补 `tikzpicture` 外壳）；`\usetikzlibrary` 与显式 `\usepackage` 会被提升到导言区。
 导言区常驻 `amsmath` + `amssymb`（AMS 数学符号，`\ulcorner` / `\checkmark` 等可直接使用）。
-宏包按内容自动加载（tkz-euclide / tikz-cd / pgfplots / circuitikz / tikzlings / bearwear /
+amscd 的 `CD` 交换图（`\begin{CD}...\end{CD}`）按数学材料原样排版，**不**补 `tikzpicture`
+外壳——CD 是数学模式材料，包进 picture 会被 pgf **静默丢弃**（编译 exit 0、页面空白）。
+宏包按内容自动加载（tkz-euclide / tikz-cd / amscd / pgfplots / circuitikz / tikzlings / bearwear /
 tikzducks / tikzpeople / figchild / tikz-triminos / scsnowman / tcolorbox 等）；手册常用的
 `tcblisting` 盒子会自动补上 tcolorbox 的 `listings` 库、`tikz lower`（盒子里的 TikZ 代码必须
 在 `tikzpicture` 内执行）与手册同款的左右布局（代码在左、编译结果在右并居中）。当片段提到
