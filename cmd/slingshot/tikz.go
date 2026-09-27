@@ -700,18 +700,22 @@ var tikzExtraLibraries = []struct {
 	{regexp.MustCompile(`\\matrix\b`), "matrix"},
 	// 箭头 tip 的 setter 写法 (>=Stealth) 与端点写法 (-Stealth) 都要认:
 	// Stealth / Latex / Triangle / Circle / Square / Diamond / Kite / To 只在
-	// pgflibraryarrows.meta.code.tex 声明 (核心 pgfcorearrows.code.tex 只声明
-	// stealth / latex / to / to reversed, 另有内部 @bar / space), 漏检时裸编译报
+	// pgflibraryarrows.meta.code.tex 声明 (核心 pgfcorearrows.code.tex:1118-1244 仅有
+	// stealth / latex / to / to reversed 与内部 @bar / space 六条声明), 漏检时裸编译报
 	// "Unknown arrow tip kind 'Stealth'"。
 	// 前缀 (?:>=|<=|-) 后允许空白与一层等价花括号, 覆盖 >=Stealth /
 	// >={Stealth[length=2mm]} 等手册惯用 setter 写法 (旧版只认 -name)。
 	{regexp.MustCompile(`(?:>=|<=|-)\s*\{?\s*(?:Stealth|Latex|Triangle|Circle|Square|Diamond|Kite|To)\b`), "arrows.meta"},
 	{regexp.MustCompile(`-\{?(?:stealth|latex|to|triangle)\b`), "arrows"},
 	// 旧式箭头 tip 的 setter / 端点写法: >=angle 90 / -angle 90 / -{angle 90} /
-	// 源端 angle 90-。angle <45|60|90> / hooks / triangle <45|60|90> 只在
-	// pgflibraryarrows.code.tex 声明 (核心 pgfcorearrows.code.tex 只声明 stealth /
-	// latex / to / to reversed, 另有内部 @bar / space, 故 >=stealth / >=latex /
-	// >=to / -> / <-> 无需库), 缺库时报
+	// 源端 angle 90-。angle <45|60|90> (pgflibraryarrows.code.tex:72/96/121) /
+	// hooks / triangle <45|60|90> 只在 pgflibraryarrows.code.tex 声明; 核心
+	// pgfcorearrows.code.tex 只声明 stealth (1118) / to (1143) / to reversed
+	// (1171) / latex (1198) / @bar (1229) / space (1244), 故 >=stealth /
+	// >=latex / >=to / -> / <-> 无需库 (旧条目 `-\{?(?:stealth|latex|to|triangle)\b`
+	// 对 stealth / latex / to 属历史宽匹配——核心自带, 多加载 arrows 无害;
+	// 真正依赖该库的是 triangle 编号变体, 与本条目的 `triangle\s+\d+` 对
+	// `-triangle 45` 写法有意重叠, 同库去重无害)。缺库时报
 	// "Unknown arrow tip kind 'angle 90'"; 手册交换图 (含本次故障原文) 惯用
 	// >=angle 90。词面匹配 (而非只认 -name 形式) 覆盖全部端点写法; 散文与
 	// tkz-euclide 关键字 angle 60 会误中, 代价仅为多加载无副作用的库,

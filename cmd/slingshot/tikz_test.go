@@ -42,6 +42,20 @@ const matrixSample = `\begin{tikzpicture}
 \end{tikzpicture}
 `
 
+// TestMatrixSampleSHA256 钉住 matrixSample 与用户原始故障输入的逐字节一致性声明
+// (370 字节, sha256 c0d7204a…f32644; 先例: TestTikzAssetsSHA256)。夹具被有意改动时,
+// 本测试与常量注释里的哈希必须一起更新。
+func TestMatrixSampleSHA256(t *testing.T) {
+	sum := sha256.Sum256([]byte(matrixSample))
+	const want = "c0d7204aa9f3b006b7b492ef238ea31e3cfb4f3ccaa30d817dc8a81febf32644"
+	if got := hex.EncodeToString(sum[:]); got != want {
+		t.Fatalf("matrixSample sha256 = %s, want %s (update this test and the comment together if the fixture intentionally changed)", got, want)
+	}
+	if len(matrixSample) != 370 {
+		t.Fatalf("matrixSample = %d bytes, want 370", len(matrixSample))
+	}
+}
+
 func TestNormalizeTikz(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1553,6 +1567,11 @@ func TestDetectTikzLibraries(t *testing.T) {
 		{name: "core arrow both ends no library", content: "\\draw[<->] (0,0) -- (1,0);"},
 		// 组合回归: 故障原文同时命中 matrix 与 arrows (表顺序)。
 		{name: "matrix fault sample", content: matrixSample, want: []string{"matrix", "arrows"}},
+		// 核心 pgfcorearrows 自带 stealth / latex (实测裸编译 OK): setter 写法
+		// (>=stealth / >=latex) 不加载任何库——旧条目要求 -name 前缀, 新条目只覆盖
+		// angle / hooks / triangle, 均不命中; 负例钉住该既定行为。
+		{name: "core stealth setter needs no library", content: "\\path[->, >=stealth] (0,0) -- (1,0);"},
+		{name: "core latex setter needs no library", content: "\\path[->, >=latex] (0,0) -- (1,0);"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -241,8 +241,8 @@ amsmath 的 `\begin{matrix}` / `\pmatrix` 命令名前没有反斜杠，不会�
 与 tikz 库无关）。TL2026 与 tectonic 2021 bundle 均自带该库，**无后端门控**。
 **箭头 tip 的 setter 写法**：旧探测只认 `-name` 形式（`-stealth`），`>=angle 90` 这类手册惯用的
 setter 写法漏检；而 `angle <45|60|90>` / `hooks` / `triangle <45|60|90>` 只在
-`pgflibraryarrows.code.tex` 声明（核心 `pgfcorearrows.code.tex` 只声明 stealth / latex / to /
-to reversed，另有内部 @bar / space，故
+`pgflibraryarrows.code.tex` 声明（核心 `pgfcorearrows.code.tex` 的声明仅 stealth (1118) / to (1143) / to reversed (1171) /
+latex (1198) / @bar (1229) / space (1244) 六条，故
 `>=stealth` / `>=latex` / `>=to` / `->` / `<->` 无需任何库，行为不变），缺库时报
 "Unknown arrow tip kind 'angle 90'"。因此 `tikzExtraLibraries` 增加词面正则
 `\b(?:angle\s+\d+|hooks|triangle\s+\d+)\b` → `arrows`，覆盖全部端点写法（`>=angle 90` /
