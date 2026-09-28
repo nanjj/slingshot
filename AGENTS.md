@@ -152,13 +152,16 @@ tikzlibrarycd.code.tex:41 与 :562），而 tcblisting 盒子的正文底色是 
 会整体替换默认钩子）——样式值里直接引用宏；（2）默认 `tikz lower` 路径——用
 `\g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}` 把宏追加到 tcolorbox 内部
 钩子宏末尾（追加发生在导言区，晚于本函数的 `\tcbset{tikz lower}`；`\ifcsname` 守卫覆盖未来
-tcolorbox 内部宏改名的情形）。宏在盒子正文的 sbox 内执行，pgfkeys 赋值为局部定义，
+tcolorbox 内部宏改名的情形——宏改名时守卫静默 no-op 是刻意取舍，不让导言区报错，
+是否真的注入由像素级回归兜底）。这里的 `\kvtcb@before@lower` 与本文件下文注释族小节引用的
+`\tcb@insert@before@lower` 是同一机制的两个侧面：前者是执行处的内部钩子宏名，后者是它在
+`\sbox` 排版 lower 槽时的取值 (tcolorbox.sty:1301)，同源。宏在盒子正文的 sbox 内执行，pgfkeys 赋值为局部定义，
 盒子结束即失效——同文档其它图（含独立 tikzcd）标签不受影响（泄漏位点实测 0）。用户
 优先：片段源码里自己写 `\tikzcdset{background color=...}` 在正文中执行（晚于钩子）仍优先；
 用户在盒子选项里显式覆盖 `before lower*` / `tikz lower` 时（2）的追加钩子会丢——与
 "用户显式设置总是优先"的既有取舍一致。`\g@addto@macro` 是 LaTeX 内核宏，tcolorbox
 已加载 etoolbox 但这里不依赖它。回归：单测 `TestTcblistingSetupDefinesNoWrapStyle`
-（样式值引用宏）与像素级 `TestRenderTikzTcblistingBackgroundNotBlank`（标签区底色
+（样式值引用宏）与像素级 `TestRenderTikzTcblistingBackgroundAndBorderNotBlank`（标签区底色
 = 盒底、边缘亮度 < 128、纯白像素 < 500；负对照裸 tikzcd 逐像素不变）。
 片段的盒子实例选项晚于导言区执行、总是优先。tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
 内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；sidebyside
@@ -240,10 +243,12 @@ pdftotext 提取不到）。内容含 CJK 时前导追加 `\xeCJKsetup{CJKmath=t
 `\documentclass[border=%s]{standalone}` 行内，不是注入点；后 4 个槽（`%s%s%s%s`）才是调用方
 拼进来的内容。**边距按内容分叉**（缺陷 B 修复）：standalone 默认 `border=2pt` 在
 @150dpi 栅格化后约为 4px 纯白圈，对自带边框与底色的 tcblisting 盒子很难看；
-`tikzBorderSpec` 命中 `\begin{tcblisting}` 子串时返回 `0pt`（裁掉），其余内容保持
-`2pt`。命中口径与 `tcblistingSetup` 一致（同为宽进的子串匹配），因此无 tcblisting 的
-片段（含裸 tikzcd / tikzpicture）输出与改动前**逐像素 0 差异**。回归：单测
-`TestTikzBorderSpec`（表驱动）与像素级 `TestRenderTikzTcblistingBackgroundNotBlank`
+`tikzBorderSpec` 在 `stripTikzComments` 之后命中 `\begin{tcblisting}` 子串时返回 `0pt`
+（裁掉），其余内容保持 `2pt`。这里刻意比 `tcblistingSetup` 的宽口 `Contains` 更严：边距分叉会
+改变渲染结果，注释里的伪标记（`% \begin{tcblisting}`）不应误裁边，故先剥离注释
+（用法同 `hasCDDiagram` / `selfContainedCmd`）。因此无 tcblisting 的片段（含裸 tikzcd /
+tikzpicture）输出与改动前**逐像素 0 差异**。回归：单测
+`TestTikzBorderSpec`（表驱动）与像素级 `TestRenderTikzTcblistingBackgroundAndBorderNotBlank`
 （负对照边缘亮度 > 200 = 2pt 白边保留）。
 
 AMS 符号：导言区固定加载 `amsmath` + `amssymb`（`tikzWrapper` 模板固定部分，与五个 %s 注入槽无关；

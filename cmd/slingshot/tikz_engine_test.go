@@ -594,6 +594,22 @@ func countPureWhitePixels(img image.Image) int {
 	return n
 }
 
+// countExactColor 统计 img 全图内精确等于 (r,g,b) 的像素数。用于锁定用户
+// colback 生效: 标签底色既不该回退到默认纯白, 也不该是硬编码盒底灰。
+func countExactColor(img image.Image, wantR, wantG, wantB uint8) int {
+	b := img.Bounds()
+	n := 0
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			if uint8(r>>8) == wantR && uint8(g>>8) == wantG && uint8(bl>>8) == wantB {
+				n++
+			}
+		}
+	}
+	return n
+}
+
 // edgeLuminance 返回归一化边缘中点 (w/2,0) 与 (0,h/2) 的 BT.601 亮度。
 // 修复后 standalone 边距被裁掉 (tikzBorderSpec = 0pt), 页面边缘落在 tcblisting
 // 盒子框线上 (暗); 未修复 / 无盒子的情形边缘是 2pt 纯白。
@@ -606,37 +622,43 @@ func edgeLuminance(img image.Image) (int, int) {
 	return lum(b.Min.X+b.Dx()/2, b.Min.Y), lum(b.Min.X, b.Min.Y+b.Dy()/2)
 }
 
-// TestRenderTikzTcblistingBackgroundNotBlank 是本次两处修复的像素级回归:
-// (A) tikz-cd 的 description 标签 / crossing over 遮挡线底色取自
+// TestRenderTikzTcblistingBackgroundAndBorderNotBlank 是本次两处修复的像素级回归:
 //
-//	/tikz/commutative diagrams/background color (默认 white), 贴在 tcolorbox
-//	的灰底 (colback=black!5!white ≈ 242) 上像膏药; tcblistingSetup 注入
-//	\tikzcdset{background color=tcbcolback} 后标签底色 = 当前盒子的 colback。
+// (A) 标签底色融入盒底: tikz-cd 的 description 标签 / crossing over 遮挡线底色取自
+// /tikz/commutative diagrams/background color (默认 white), 贴在 tcolorbox 的灰底
+// (colback=black!5!white ≈ 242) 上像膏药; tcblistingSetup 注入
+// \tikzcdset{background color=tcbcolback} 后标签底色 = 当前盒子的 colback。
 //
-// (B) standalone 的 border=2pt 在 @150dpi 栅格化后约 4px 纯白圈, 对自带边框
-//
-//	底色的 tcblisting 盒子很难看; tikzBorderSpec 命中 tcblisting 时裁掉。
+// (B) 裁掉盒子外白边: standalone 的 border=2pt 在 @150dpi 栅格化后约 4px 纯白圈,
+// 对自带边框底色的 tcblisting 盒子很难看; tikzBorderSpec 命中 (stripTikzComments 后
+// 的) tcblisting 时裁掉。
 //
 // 断言 (实测 @150dpi):
-//   - input2 (xe 腿, minted): 717x254, 纯白像素 135 (修复前 8786), 边缘亮度 63
-//     (修复前 255)。阈值 500 留约 3.7 倍余量。
-//   - mixed  (tectonic 腿, 无 minted): 717x110, 纯白 0; 该样本走非 nowrap 路径,
+//   - input2 (xe, minted): 717x254, 纯白 135 (修复前 8786), 边缘亮度 63 (修复前 255)。
+//   - mixed  (tectonic, 无 minted 孪生样本): 717x110, 纯白 0; 走非 nowrap 路径,
 //     验证默认 tikz lower 钩子 (g@addto@macro) 也注入了标签底色。
-//   - only2  (负对照, 裸 tikzcd): 278x175, 边缘亮度 > 200 (2pt 白边保留, 行为不变)。
+//   - leak   (xe, colback=red!30): 标签底色为盒底 red!30 (255,178,178);
+//     纯白 < 500 且硬编码灰 (242,242,242) < 500, 两种回退态都能抓住。
+//   - only2  (xe / tectonic 双引擎负对照, 裸 tikzcd): 边缘亮度 > 200 (2pt 保留)。
 //
 // input2 含 minted, 故只设 xe 腿; tectonic 腿用无 minted 的孪生样本 (minted 在
 // tectonic 禁用 shell escape 时导言区即失败, 与本次修复无关)。
-func TestRenderTikzTcblistingBackgroundNotBlank(t *testing.T) {
+//
+// 阈值是版本耦合的 golden 值: tcolorbox 默认盒底 black!5!white ≈ 242 与纯白截断
+// 250 仅差 8 级, 边缘采样同理; tcolorbox 默认值或栅格器变化时需重新校准 (先例:
+// TestRenderTikzMatrixNotBlank / TestRenderTikzAmscdNotBlank 的阈值注释)。
+func TestRenderTikzTcblistingBackgroundAndBorderNotBlank(t *testing.T) {
 	if _, err := exec.LookPath("mutool"); err != nil {
 		t.Skipf("mutool unavailable: %v", err)
 	}
 	legs := []struct {
-		name       string
-		engine     string
-		avail      func() error
-		reason     string
-		sample     string
-		wantEdgeLo bool
+		name        string
+		engine      string
+		avail       func() error
+		reason      string
+		sample      string
+		wantEdgeLo  bool
+		wantColback bool
 	}{
 		{name: "xe tcblisting", engine: "xe",
 			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
@@ -644,8 +666,14 @@ func TestRenderTikzTcblistingBackgroundNotBlank(t *testing.T) {
 		{name: "tectonic tcblisting twin", engine: "tectonic",
 			avail: tectonicAvailable, reason: "tectonic unavailable",
 			sample: tcblistingBgTwinSample, wantEdgeLo: true},
+		{name: "xe user colback (red!30)", engine: "xe",
+			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
+			sample: tcblistingBgColbackSample, wantEdgeLo: true, wantColback: true},
 		{name: "xe negative control (bare tikzcd)", engine: "xe",
 			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
+			sample: tcblistingBgOnlySample, wantEdgeLo: false},
+		{name: "tectonic negative control (bare tikzcd)", engine: "tectonic",
+			avail: tectonicAvailable, reason: "tectonic unavailable",
 			sample: tcblistingBgOnlySample, wantEdgeLo: false},
 	}
 	for _, leg := range legs {
@@ -679,9 +707,21 @@ func TestRenderTikzTcblistingBackgroundNotBlank(t *testing.T) {
 				if midY >= 128 || midX >= 128 {
 					t.Errorf("edge luminance = (top %d, left %d), want < 128 (white border should be cropped)", midY, midX)
 				}
-				// 标签/遮挡线底色不再纯白 (实测 135, 修复前 8786)。
+				// 标签/遮挡线底色不再纯白 (实测 135, 修复前 8786)。阈值 500 是版本
+				// 耦合的 golden 值: tcolorbox 默认盒底 black!5!white ≈ 242, 与纯白截断
+				// 250 仅差 8 级, tcolorbox 默认值或栅格器变化时需重新校准。
 				if n := countPureWhitePixels(img); n >= 500 {
 					t.Errorf("%d pure-white pixels, want < 500 (tikzcd label background should match the box background)", n)
+				}
+				if leg.wantColback {
+					// 用户 colback=red!30: 标签底色应为盒底 red!30 (255,178,178),
+					// 既非默认纯白也非硬编码盒底灰 (242,242,242)。
+					if nw := countExactColor(img, 255, 255, 255); nw >= 500 {
+						t.Errorf("%d exact-white pixels, want < 500 (background color fell back to the default white, user colback ignored)", nw)
+					}
+					if ng := countExactColor(img, 242, 242, 242); ng >= 500 {
+						t.Errorf("%d exact (242,242,242) pixels, want < 500 (box background must follow user colback=red!30, not the hardcoded gray)", ng)
+					}
 				}
 			} else {
 				// 负对照: 裸 tikzcd 无盒子, 2pt 白边必须保留。

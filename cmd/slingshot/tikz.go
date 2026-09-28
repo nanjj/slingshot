@@ -120,11 +120,12 @@ const tikzWrapper = `\documentclass[border=%s]{standalone}
 
 // tikzBorderSpec 返回 standalone 类的页面外边距值 (tikzWrapper 的第 1 个 %s)。
 // 默认 2pt 在 @150dpi 栅格化后约为 4px 白圈; 对自带边框与底色的 tcblisting 盒子,
-// 这圈白边很难看且不携带信息, 故裁掉 (0pt)。命中口径与 tcblistingSetup 一致 ——
-// 只看子串 \begin{tcblisting}, 与内容探测同为宽进取舍; 不命中 (含裸 tikzcd /
-// tikzpicture) 一律保持 2pt, 行为与改动前逐像素一致。
+// 这圈白边很难看且不携带信息, 故裁掉 (0pt)。命中前先剥离注释 (stripTikzComments,
+// 用法同 hasCDDiagram / selfContainedCmd): 与 tcblistingSetup 的宽口 Contains 不同,
+// 边距分叉会改变渲染结果, 注释里的伪标记 ("% \begin{tcblisting}") 不应误裁边;
+// 不命中 (含裸 tikzcd / tikzpicture) 一律保持 2pt, 行为与改动前逐像素一致。
 func tikzBorderSpec(raw string) string {
-	if strings.Contains(raw, `\begin{tcblisting}`) {
+	if strings.Contains(stripTikzComments(raw), `\begin{tcblisting}`) {
 		return "0pt"
 	}
 	return "2pt"
@@ -1612,6 +1613,8 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
   listing engine=listings,
 }
 \makeatletter
+% 宏改名时本守卫静默 no-op 是刻意取舍: 旧 tcolorbox 或未来重命名都不应让导言区报错,
+% 标签底色是否真的注入由像素级回归 (BackgroundAndBorder) 兜底。
 \ifcsname kvtcb@before@lower\endcsname
   \g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}%
 \fi

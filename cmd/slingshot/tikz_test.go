@@ -100,7 +100,20 @@ const tcblistingBgOnlySample = `\begin{tikzcd}
 \end{tikzcd}
 `
 
-// TestTcblistingBgSamplesSHA256 钉住三个样本与用户原始输入的逐字节一致性声明
+// tcblistingBgColbackSample 是用户显式指定盒底色的 tcblisting 盒子 (仅盒子, 无下方裸图),
+// 选项含 colback=red!30 且正文是带 description 标签的 tikzcd。它锁定"用户 colback 生效":
+// tikzcd 标签底色取当前盒实例的 tcbcolback (= red!30, RGB 255,178,178), 整图既不该出现
+// 纯白 (背景色回退到默认 white) 也不该出现硬编码灰 (242,242,242)。选项写法参考
+// /tmp/tcbg/leak.tikz, 但样本只保留盒子本身 (148 字节, sha256
+// 81c6f0073f8a577a53966a9afc0b85e9394417e3c5de6dca5fdc3e0d000767ce)。
+const tcblistingBgColbackSample = `\begin{tcblisting}{lower separated, righthand ratio=0.5, colback=red!30}
+\begin{tikzcd}
+A \ar[r, "f" description] & B
+\end{tikzcd}
+\end{tcblisting}
+`
+
+// TestTcblistingBgSamplesSHA256 钉住四个样本与用户原始输入的逐字节一致性声明
 // (先例: TestMatrixSampleSHA256)。夹具被有意改动时, 本测试与常量注释里的哈希
 // 必须一起更新。
 func TestTcblistingBgSamplesSHA256(t *testing.T) {
@@ -116,6 +129,8 @@ func TestTcblistingBgSamplesSHA256(t *testing.T) {
 			sum: "652e294ce78679d12e97ff2c3c622753abf92c6bad64717dea096bf441d106b5"},
 		{name: "only2 (negative control, bare tikzcd)", raw: tcblistingBgOnlySample, size: 197,
 			sum: "bcd75f5d909087352925acce4de44c50d8594449c1c33bc5e2e5c497b46a3ed7"},
+		{name: "leak box (colback=red!30, box only)", raw: tcblistingBgColbackSample, size: 148,
+			sum: "81c6f0073f8a577a53966a9afc0b85e9394417e3c5de6dca5fdc3e0d000767ce"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2107,6 +2122,8 @@ func tcblistingWant(libs string) string {
   listing engine=listings,
 }
 \makeatletter
+% 宏改名时本守卫静默 no-op 是刻意取舍: 旧 tcolorbox 或未来重命名都不应让导言区报错,
+% 标签底色是否真的注入由像素级回归 (BackgroundAndBorder) 兜底。
 \ifcsname kvtcb@before@lower\endcsname
   \g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}%
 \fi
@@ -3178,6 +3195,16 @@ func TestTikzWrapperLoadsAmsSymb(t *testing.T) {
 	if n := strings.Count(tikzWrapper, "%s"); n != 5 {
 		t.Fatalf("tikzWrapper has %d %%s slots, want 5", n)
 	}
+	// 第 1 个槽必须落在 \documentclass[ 行内 (即边框值), 防未来静默重排槽位。
+	docLine := strings.Index(tikzWrapper, `\documentclass[`)
+	if docLine < 0 {
+		t.Fatalf("tikzWrapper missing \\documentclass[")
+	}
+	docEnd := strings.Index(tikzWrapper[docLine:], "\n")
+	first := strings.Index(tikzWrapper, "%s")
+	if first < 0 || docEnd < 0 || first > docLine+docEnd {
+		t.Fatalf("first %%s slot at %d must be inside the \\documentclass[ line [%d,%d) (the border value)", first, docLine, docLine+docEnd)
+	}
 	if slots := strings.Index(tikzWrapper, "%s%s%s%s"); slots >= 0 && symb > slots {
 		t.Fatalf("amssymb must be in the fixed preamble before the injection slots (%s): amssymb at %d, injection slots at %d", "%s%s%s%s", symb, slots)
 	}
@@ -3185,8 +3212,9 @@ func TestTikzWrapperLoadsAmsSymb(t *testing.T) {
 
 // TestTikzBorderSpec 钉住 standalone 边距分叉: tcblisting 盒子自带边框与底色,
 // 页面边距 (默认 2pt 在 @150dpi 栅格化后约 4px) 会渲染成盒子外一圈难看的白边,
-// 此时裁掉; 其余内容保持 2pt, 行为与改动前一致。判据是子串命中, 与
-// tcblistingSetup 同口径 (宽进: 只看字节里有没有 \begin{tcblisting})。
+// 此时裁掉; 其余内容保持 2pt, 行为与改动前一致。判据是 stripTikzComments 之后的
+// 子串命中: 与 tcblistingSetup 的宽口 Contains 不同, 边距分叉改变渲染结果, 注释里
+// 的伪标记 ("% \begin{tcblisting}") 必须按 2pt 处理, 不得误裁边。
 func TestTikzBorderSpec(t *testing.T) {
 	tests := []struct {
 		name string
@@ -3195,6 +3223,9 @@ func TestTikzBorderSpec(t *testing.T) {
 	}{
 		{name: "tcblisting box", raw: tcblistingBgSample, want: "0pt"},
 		{name: "bare tikzcd", raw: tcblistingBgOnlySample, want: "2pt"},
+		{name: "commented-out marker", raw: `% \begin{tcblisting}
+\end{tcblisting}`, want: "2pt"},
+		{name: "real marker after other content", raw: `\draw (0,0)--(1,1);` + "\n" + tcblistingBgSample, want: "0pt"},
 		{name: "plain tikz", raw: `\draw (0,0)--(1,1);`, want: "2pt"},
 		{name: "empty", raw: "", want: "2pt"},
 	}
