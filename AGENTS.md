@@ -154,8 +154,9 @@ tikzlibrarycd.code.tex:41 与 :562），而 tcblisting 盒子的正文底色是 
 钩子宏末尾（追加发生在导言区，晚于本函数的 `\tcbset{tikz lower}`；`\ifcsname` 守卫覆盖未来
 tcolorbox 内部宏改名的情形——宏改名时守卫静默 no-op 是刻意取舍，不让导言区报错，
 是否真的注入由像素级回归兜底）。这里的 `\kvtcb@before@lower` 与本文件下文注释族小节引用的
-`\tcb@insert@before@lower` 是同一机制的两个侧面：前者是执行处的内部钩子宏名，后者是它在
-`\sbox` 排版 lower 槽时的取值 (tcolorbox.sty:1301)，同源。宏在盒子正文的 sbox 内执行，pgfkeys 赋值为局部定义，
+`\tcb@insert@before@lower` 是同一机制的两个侧面：前者是执行处的内部钩子宏名（由
+`before lower*/.code` 定义，tcolorbox.sty:720），后者是它在 `\sbox` 排版 lower 槽时的取值
+（tcolorbox.sty:257-258 把 `\tcb@insert@before@lower` 绑定到 `\kvtcb@before@lower`，:1301 处使用），同源。宏在盒子正文的 sbox 内执行，pgfkeys 赋值为局部定义，
 盒子结束即失效——同文档其它图（含独立 tikzcd）标签不受影响（泄漏位点实测 0）。用户
 优先：片段源码里自己写 `\tikzcdset{background color=...}` 在正文中执行（晚于钩子）仍优先；
 用户在盒子选项里显式覆盖 `before lower*` / `tikz lower` 时（2）的追加钩子会丢——与
@@ -246,8 +247,11 @@ pdftotext 提取不到）。内容含 CJK 时前导追加 `\xeCJKsetup{CJKmath=t
 `tikzBorderSpec` 在 `stripTikzComments` 之后命中 `\begin{tcblisting}` 子串时返回 `0pt`
 （裁掉），其余内容保持 `2pt`。这里刻意比 `tcblistingSetup` 的宽口 `Contains` 更严：边距分叉会
 改变渲染结果，注释里的伪标记（`% \begin{tcblisting}`）不应误裁边，故先剥离注释
-（用法同 `hasCDDiagram` / `selfContainedCmd`）。因此无 tcblisting 的片段（含裸 tikzcd /
-tikzpicture）输出与改动前**逐像素 0 差异**。回归：单测
+（用法同 `hasCDDiagram` / `selfContainedCmd`）。这类"宽口 vs 剥离注释"的取舍在仓库里按后果
+分档：`tikzSelfContainedEnvs` 的环境检查不做注释剥离（注释里的伪环境标记最多多摘一层包裹，
+不改变可编译性），而边距分叉与内容探测（`hasCDDiagram` / 自包含命令）会影响渲染结果，故先剥离。
+因此无 tcblisting 的片段（含裸 tikzcd / tikzpicture）输出与引入边距分叉**之前**（2pt 原始行为）
+**逐像素 0 差异**。回归：单测
 `TestTikzBorderSpec`（表驱动）与像素级 `TestRenderTikzTcblistingBackgroundAndBorderNotBlank`
 （负对照边缘亮度 > 200 = 2pt 白边保留）。
 
