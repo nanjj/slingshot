@@ -78,8 +78,12 @@ LR mode"（`\end{tcblisting}` 处）；`comment and listing` / `comment side lis
 里若写可执行 TikZ（如 `\draw`）将没有 picture 可跑——注释定位为散文，不支持是预期行为。盒子选项里显式写在后面的
 `tikz lower` / `before lower*` 仍然优先。注意自包含命令与裸 TikZ **混用**时（按"包含即命中"
 判定）同样会摘掉包裹，其中的裸 TikZ 代码因没有 picture 会编译报错——与 `standalone` 片段的既有
-取舍一致，混用时请自行补 `tikzpicture`。大图建议在内容里用 `[scale=...]` 缩小，或加宽盒子选项
-（`width` / `righthand width`）。
+取舍一致，混用时请自行补 `tikzpicture`。tcblisting 盒子还有两处自动处理：盒内 tikz-cd 的
+`description` 标签与 `crossing over` 遮挡线底色自动取当前盒子的 `colback`（不再是与盒底
+不一致的纯白"膏药"；用户写 `colback=red!30` 标签也跟着变红，显式覆盖 `background color`
+仍然优先）；渲染产物会裁掉 standalone 的 `border=2pt` 外边距，盒子自带的边框与底色直达页面
+边缘，不再被一圈白边包围（不含 tcblisting 的片段保持原有 2pt，输出逐像素不变）。大图建议
+在内容里用 `[scale=...]` 缩小，或加宽盒子选项（`width` / `righthand width`）。
 
 ```bash
 slingshot tikz fig.tikz fig.png     # latexmk -xelatex → mutool 栅格化 150dpi

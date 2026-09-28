@@ -137,6 +137,29 @@ tcblisting，故 tectonic profile 不加载 minted（此时 `listing engine=mint
 `TestRenderTikzTcblistingMintedNotBlank` 只设 xe 腿，分档契约由
 `TestTcblistingSetupMintedGatedByProfile` 单测钉住）。`\tcbset` 末项
 `listing engine=listings` 钉住默认引擎（minted 库一加载，tcolorbox 默认引擎可能跟着变），
+**标签底色注入**（缺陷 A 修复）：tikz-cd 的 `description` 标签与 `crossing over` 遮挡线的
+描边色取自 `/tikz/commutative diagrams/background color`（默认 `white`，见
+tikzlibrarycd.code.tex:41 与 :562），而 tcblisting 盒子的正文底色是 tcolorbox 默认
+`colback=black!5!white`（实测 RGB 242,242,242）——纯白标签贴在灰底上像"膏药"。
+`tcblistingSetup` 因此注入内部宏
+`\def\slingshotTcblistingTikzcdBg{\ifcsname tikzcdset\endcsname\tikzcdset{background color=tcbcolback}\fi}`
+（宏名不含 `@`，无需 `makeatletter`）：`\ifcsname tikzcdset\endcsname` 是双重守卫——
+片段不含 tikz-cd 时（cd 库与 `tikzcdset` 在导言区随内容命中加载）不注入任何行为，
+`\tikzcdset{background color=tcbcolback}` 把标签底色设为当前盒实例的 `colback`
+（tcolorbox 将其导出为 xcolor 颜色 `tcbcolback`），用户写 `colback=red!30` 时标签自动
+变红（实测 RGB 255,178,178，盒外零泄漏）。覆盖两条执行路径：
+（1）`slingshot nowrap` 样式（重写器对自包含正文/注释族盒子插入；其 `before lower*`
+会整体替换默认钩子）——样式值里直接引用宏；（2）默认 `tikz lower` 路径——用
+`\g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}` 把宏追加到 tcolorbox 内部
+钩子宏末尾（追加发生在导言区，晚于本函数的 `\tcbset{tikz lower}`；`\ifcsname` 守卫覆盖未来
+tcolorbox 内部宏改名的情形）。宏在盒子正文的 sbox 内执行，pgfkeys 赋值为局部定义，
+盒子结束即失效——同文档其它图（含独立 tikzcd）标签不受影响（泄漏位点实测 0）。用户
+优先：片段源码里自己写 `\tikzcdset{background color=...}` 在正文中执行（晚于钩子）仍优先；
+用户在盒子选项里显式覆盖 `before lower*` / `tikz lower` 时（2）的追加钩子会丢——与
+"用户显式设置总是优先"的既有取舍一致。`\g@addto@macro` 是 LaTeX 内核宏，tcolorbox
+已加载 etoolbox 但这里不依赖它。回归：单测 `TestTcblistingSetupDefinesNoWrapStyle`
+（样式值引用宏）与像素级 `TestRenderTikzTcblistingBackgroundNotBlank`（标签区底色
+= 盒底、边缘亮度 < 128、纯白像素 < 500；负对照裸 tikzcd 逐像素不变）。
 片段的盒子实例选项晚于导言区执行、总是优先。tcblisting 的 text 部分默认在 tikzpicture 之外，而 TikZ 只在 picture
 内安装 `\path` / `\draw` / `scope`，不注入就报 "Environment scope undefined"；sidebyside
 系列选项复刻手册盒内的左右布局（代码在左、编译结果在右并居中、无虚线分隔，取值来自
@@ -212,7 +235,19 @@ pdftotext 提取不到）。内容含 CJK 时前导追加 `\xeCJKsetup{CJKmath=t
 3.10.6 用户树——缺失字符 0、pdftotext 可提取 CJK、CJK 字体嵌入。不含 CJK 的片段前导
 逐字不变；前导契约由 `TestTikzCJKPreamble` 逐字节钉住。
 
-AMS 符号：导言区固定加载 `amsmath` + `amssymb`（`tikzWrapper` 模板固定部分，与四个 %s 注入槽无关）。
+**渲染管线 / Wrapper**：`tikzWrapper` 模板有**五个** `%s` 注入槽，依次为：边框值
+（`tikzBorderSpec`）、额外包、自动探测的 tikz 库、兼容 shim、CJK 前导。第 1 个槽在
+`\documentclass[border=%s]{standalone}` 行内，不是注入点；后 4 个槽（`%s%s%s%s`）才是调用方
+拼进来的内容。**边距按内容分叉**（缺陷 B 修复）：standalone 默认 `border=2pt` 在
+@150dpi 栅格化后约为 4px 纯白圈，对自带边框与底色的 tcblisting 盒子很难看；
+`tikzBorderSpec` 命中 `\begin{tcblisting}` 子串时返回 `0pt`（裁掉），其余内容保持
+`2pt`。命中口径与 `tcblistingSetup` 一致（同为宽进的子串匹配），因此无 tcblisting 的
+片段（含裸 tikzcd / tikzpicture）输出与改动前**逐像素 0 差异**。回归：单测
+`TestTikzBorderSpec`（表驱动）与像素级 `TestRenderTikzTcblistingBackgroundNotBlank`
+（负对照边缘亮度 > 200 = 2pt 白边保留）。
+
+AMS 符号：导言区固定加载 `amsmath` + `amssymb`（`tikzWrapper` 模板固定部分，与五个 %s 注入槽无关；
+第 1 个槽是 \documentclass 行内的边框值，后 4 个才是注入点）。
 `\ulcorner` / `\urcorner` / `\llcorner` / `\lrcorner` / `\varnothing` / `\checkmark` 等
 AMS 符号由 amsfonts 提供、amssymb 依赖并加载它，片段里可直接使用。典型场景是 tikz-cd 的
 pullback corner 写法：`\begin{tikzcd}` 里 `\arrow[dr, phantom, "\ulcorner"]`——tikz-cd 标签
