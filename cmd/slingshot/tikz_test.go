@@ -56,6 +56,80 @@ func TestMatrixSampleSHA256(t *testing.T) {
 	}
 }
 
+// tcblistingBgSample 是用户报障的 tcblisting 元块 (含 CJK 标题 "示例二" 与
+// tikz-cd 的 description / swap 标签), 逐字节等于用户原始输入 (323 字节, sha256
+// 48504527400025cdaa072825b255a6d4f5c461ffdbbc7152a9b5bb8a14017f51)。
+// 它同时覆盖两条修复: 标签底色注入 (tikzcdset background color=tcbcolback) 与
+// standalone 边距裁剪 (tikzBorderSpec)。
+const tcblistingBgSample = `\begin{tcblisting}{lower separated, righthand ratio=0.4,
+  title={示例二},
+  listing engine=minted,
+}
+  \begin{tikzcd}
+    T \ar[rrd, "x"]
+    \ar[rd, "{(x,y)}" description]
+    \ar[rdd, "y" swap]\\
+    & X\times_Z Y \ar[r, "p"]
+    \ar[d, "q"] & X \ar[d, "f"] \\
+    & Y \ar[r, "g"] & Z
+  \end{tikzcd}
+\end{tcblisting}
+`
+
+// tcblistingBgTwinSample 是与 tcblistingBgSample 同构但**不含** minted 的孪生样本
+// (143 字节, sha256 652e294ce78679d12e97ff2c3c622753abf92c6bad64717dea096bf441d106b5),
+// 让 standalone 边距分叉能在 tectonic 后端上验证 —— minted 在 tectonic 禁用
+// shell escape 时导言区即失败 (见 AGENTS.md), 与本次修复无关。
+const tcblistingBgTwinSample = `\begin{tcblisting}{lower separated, righthand ratio=0.5}
+\phantom{X}\begin{tikzcd}
+A \ar[r, "f" description] & B
+\end{tikzcd}
+\end{tcblisting}
+`
+
+// tcblistingBgOnlySample 是无 tcblisting 的负对照 (裸 tikzcd, 197 字节, sha256
+// bcd75f5d909087352925acce4de44c50d8594449c1c33bc5e2e5c497b46a3ed7): 边距必须
+// 保持 2pt, 即改动对普通 tikzcd 渲染逐像素无影响。
+const tcblistingBgOnlySample = `\begin{tikzcd}
+    T \ar[rrd, "x"]
+    \ar[rd, "{(x,y)}" description]
+    \ar[rdd, "y" swap]\\
+    & X\times_Z Y \ar[r, "p"]
+    \ar[d, "q"] & X \ar[d, "f"] \\
+    & Y \ar[r, "g"] & Z
+\end{tikzcd}
+`
+
+// TestTcblistingBgSamplesSHA256 钉住三个样本与用户原始输入的逐字节一致性声明
+// (先例: TestMatrixSampleSHA256)。夹具被有意改动时, 本测试与常量注释里的哈希
+// 必须一起更新。
+func TestTcblistingBgSamplesSHA256(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		size int
+		sum  string
+	}{
+		{name: "input2 (tcblisting + minted)", raw: tcblistingBgSample, size: 323,
+			sum: "48504527400025cdaa072825b255a6d4f5c461ffdbbc7152a9b5bb8a14017f51"},
+		{name: "mixed (tcblisting twin, no minted)", raw: tcblistingBgTwinSample, size: 143,
+			sum: "652e294ce78679d12e97ff2c3c622753abf92c6bad64717dea096bf441d106b5"},
+		{name: "only2 (negative control, bare tikzcd)", raw: tcblistingBgOnlySample, size: 197,
+			sum: "bcd75f5d909087352925acce4de44c50d8594449c1c33bc5e2e5c497b46a3ed7"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if len(tt.raw) != tt.size {
+				t.Fatalf("%s = %d bytes, want %d", tt.name, len(tt.raw), tt.size)
+			}
+			sum := sha256.Sum256([]byte(tt.raw))
+			if got := hex.EncodeToString(sum[:]); got != tt.sum {
+				t.Fatalf("%s sha256 = %s, want %s (update this test and the comment together if the fixture intentionally changed)", tt.name, got, tt.sum)
+			}
+		})
+	}
+}
+
 func TestNormalizeTikz(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -2020,9 +2094,10 @@ func TestTikzShims(t *testing.T) {
 // ("listings" 或 "listings,minted"), 其余 \tcbset 条目在 profile 之间不共享,
 // 故由本函数统一, 测试只需给出 libs。
 func tcblistingWant(libs string) string {
-	return `\tcbuselibrary{` + libs + `}
+	return `\def\slingshotTcblistingTikzcdBg{\ifcsname tikzcdset\endcsname\tikzcdset{background color=tcbcolback}\fi}
+\tcbuselibrary{` + libs + `}
 \tcbset{
-  slingshot nowrap/.style={before lower*={\centering}, after lower*={}},
+  ` + tcblistingNoWrapStyle + `/.style={before lower*={\centering\slingshotTcblistingTikzcdBg}, after lower*={}},
   tikz lower,
   sidebyside,
   center lower,
@@ -2031,6 +2106,11 @@ func tcblistingWant(libs string) string {
   lower separated=false,
   listing engine=listings,
 }
+\makeatletter
+\ifcsname kvtcb@before@lower\endcsname
+  \g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}%
+\fi
+\makeatother
 `
 }
 
@@ -2164,7 +2244,7 @@ func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
 // 不存在的样式 (pgfkeys 报 unknown key / 或静默保留 picture 包裹)。
 // 两个 profile 都定义该样式 (与后端无关)。
 func TestTcblistingSetupDefinesNoWrapStyle(t *testing.T) {
-	want := tcblistingNoWrapStyle + "/.style={before lower*={\\centering}, after lower*={}}"
+	want := tcblistingNoWrapStyle + "/.style={before lower*={\\centering\\slingshotTcblistingTikzcdBg}, after lower*={}}"
 	for name, profile := range map[string]tikzProfile{
 		"latexmk":  latexmkProfile(),
 		"tectonic": tectonicProfile(),
@@ -3090,13 +3170,39 @@ func TestTikzWrapperLoadsAmsSymb(t *testing.T) {
 	if symb < math {
 		t.Fatalf("amssymb (%d) must come after amsmath (%d)", symb, math)
 	}
-	// 结构断言: 四个 %s 注入槽是 tikzWrapper 与调用方之间的契约, 不能被
-	// 新加的导言行破坏; amssymb 必须落在固定导言区 (第一个槽之前), 而不是
-	// 落进调用方拼进来的额外包/库/shim/CJK 前导里。
-	if n := strings.Count(tikzWrapper, "%s"); n != 4 {
-		t.Fatalf("tikzWrapper has %d %%s slots, want 4", n)
+	// 结构断言: 五个 %s 注入槽是 tikzWrapper 与调用方之间的契约, 不能被
+	// 新加的导言行破坏。第 1 个槽是 \documentclass 行内的边框值
+	// (tikzBorderSpec), 不是注入点; 后 4 个槽 (%s%s%s%s) 才是调用方拼进来的
+	// 额外包/库/shim/CJK 前导。amssymb 必须落在固定导言区 (注入槽之前),
+	// 而不是落进调用方拼进来的内容里。
+	if n := strings.Count(tikzWrapper, "%s"); n != 5 {
+		t.Fatalf("tikzWrapper has %d %%s slots, want 5", n)
 	}
-	if slot := strings.Index(tikzWrapper, "%s"); slot >= 0 && symb > slot {
-		t.Fatalf("amssymb must be in the fixed preamble before the %%s slots: amssymb at %d, first slot at %d", symb, slot)
+	if slots := strings.Index(tikzWrapper, "%s%s%s%s"); slots >= 0 && symb > slots {
+		t.Fatalf("amssymb must be in the fixed preamble before the injection slots (%s): amssymb at %d, injection slots at %d", "%s%s%s%s", symb, slots)
+	}
+}
+
+// TestTikzBorderSpec 钉住 standalone 边距分叉: tcblisting 盒子自带边框与底色,
+// 页面边距 (默认 2pt 在 @150dpi 栅格化后约 4px) 会渲染成盒子外一圈难看的白边,
+// 此时裁掉; 其余内容保持 2pt, 行为与改动前一致。判据是子串命中, 与
+// tcblistingSetup 同口径 (宽进: 只看字节里有没有 \begin{tcblisting})。
+func TestTikzBorderSpec(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "tcblisting box", raw: tcblistingBgSample, want: "0pt"},
+		{name: "bare tikzcd", raw: tcblistingBgOnlySample, want: "2pt"},
+		{name: "plain tikz", raw: `\draw (0,0)--(1,1);`, want: "2pt"},
+		{name: "empty", raw: "", want: "2pt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tikzBorderSpec(tt.raw); got != tt.want {
+				t.Errorf("tikzBorderSpec(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
 	}
 }

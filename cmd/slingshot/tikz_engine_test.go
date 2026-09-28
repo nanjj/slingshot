@@ -575,6 +575,124 @@ func assertRegionNotBlank(t *testing.T, img image.Image, kind, name string,
 	}
 }
 
+// countPureWhitePixels 统计 img 全图内亮度 >= 250 的像素数。tcblisting 标签底色
+// 修复前是纯白 (255), 与盒底 (tcolorbox 默认 colback=black!5!white ≈ RGB 242)
+// 形成"膏药"状白块; 修复后标签底色等于盒底, 纯白像素只剩标题白字。
+// 亮度按 ITU-R BT.601, 与 countDarkPixels 同一口径。
+func countPureWhitePixels(img image.Image) int {
+	b := img.Bounds()
+	n := 0
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := img.At(x, y).RGBA()
+			lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
+			if lum >= 250 {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// edgeLuminance 返回归一化边缘中点 (w/2,0) 与 (0,h/2) 的 BT.601 亮度。
+// 修复后 standalone 边距被裁掉 (tikzBorderSpec = 0pt), 页面边缘落在 tcblisting
+// 盒子框线上 (暗); 未修复 / 无盒子的情形边缘是 2pt 纯白。
+func edgeLuminance(img image.Image) (int, int) {
+	b := img.Bounds()
+	lum := func(x, y int) int {
+		r, g, bl, _ := img.At(x, y).RGBA()
+		return (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
+	}
+	return lum(b.Min.X+b.Dx()/2, b.Min.Y), lum(b.Min.X, b.Min.Y+b.Dy()/2)
+}
+
+// TestRenderTikzTcblistingBackgroundNotBlank 是本次两处修复的像素级回归:
+// (A) tikz-cd 的 description 标签 / crossing over 遮挡线底色取自
+//
+//	/tikz/commutative diagrams/background color (默认 white), 贴在 tcolorbox
+//	的灰底 (colback=black!5!white ≈ 242) 上像膏药; tcblistingSetup 注入
+//	\tikzcdset{background color=tcbcolback} 后标签底色 = 当前盒子的 colback。
+//
+// (B) standalone 的 border=2pt 在 @150dpi 栅格化后约 4px 纯白圈, 对自带边框
+//
+//	底色的 tcblisting 盒子很难看; tikzBorderSpec 命中 tcblisting 时裁掉。
+//
+// 断言 (实测 @150dpi):
+//   - input2 (xe 腿, minted): 717x254, 纯白像素 135 (修复前 8786), 边缘亮度 63
+//     (修复前 255)。阈值 500 留约 3.7 倍余量。
+//   - mixed  (tectonic 腿, 无 minted): 717x110, 纯白 0; 该样本走非 nowrap 路径,
+//     验证默认 tikz lower 钩子 (g@addto@macro) 也注入了标签底色。
+//   - only2  (负对照, 裸 tikzcd): 278x175, 边缘亮度 > 200 (2pt 白边保留, 行为不变)。
+//
+// input2 含 minted, 故只设 xe 腿; tectonic 腿用无 minted 的孪生样本 (minted 在
+// tectonic 禁用 shell escape 时导言区即失败, 与本次修复无关)。
+func TestRenderTikzTcblistingBackgroundNotBlank(t *testing.T) {
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	legs := []struct {
+		name       string
+		engine     string
+		avail      func() error
+		reason     string
+		sample     string
+		wantEdgeLo bool
+	}{
+		{name: "xe tcblisting", engine: "xe",
+			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
+			sample: tcblistingBgSample, wantEdgeLo: true},
+		{name: "tectonic tcblisting twin", engine: "tectonic",
+			avail: tectonicAvailable, reason: "tectonic unavailable",
+			sample: tcblistingBgTwinSample, wantEdgeLo: true},
+		{name: "xe negative control (bare tikzcd)", engine: "xe",
+			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
+			sample: tcblistingBgOnlySample, wantEdgeLo: false},
+	}
+	for _, leg := range legs {
+		t.Run(leg.name, func(t *testing.T) {
+			if err := leg.avail(); err != nil {
+				t.Skipf("%s: %v", leg.reason, err)
+			}
+			in := filepath.Join(t.TempDir(), "bg.tikz")
+			out := filepath.Join(t.TempDir(), "bg.png")
+			if err := os.WriteFile(in, []byte(leg.sample), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := renderTikz(in, out, leg.engine); err != nil {
+				t.Fatalf("renderTikz(%s) failed: %v", leg.engine, err)
+			}
+			f, err := os.Open(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			img, _, err := image.Decode(f)
+			if err != nil {
+				t.Fatalf("decoding png: %v", err)
+			}
+			// 内容非空白复核 (兜住编译成功但内容丢失)。
+			assertRegionNotBlank(t, img, "tcblisting", leg.name, 0, 100, 0, 100, 150,
+				"the diagram was silently dropped")
+			midY, midX := edgeLuminance(img)
+			if leg.wantEdgeLo {
+				// 裁边后页面边缘落在盒子框线上 (实测 63), 修复前是 255。
+				if midY >= 128 || midX >= 128 {
+					t.Errorf("edge luminance = (top %d, left %d), want < 128 (white border should be cropped)", midY, midX)
+				}
+				// 标签/遮挡线底色不再纯白 (实测 135, 修复前 8786)。
+				if n := countPureWhitePixels(img); n >= 500 {
+					t.Errorf("%d pure-white pixels, want < 500 (tikzcd label background should match the box background)", n)
+				}
+			} else {
+				// 负对照: 裸 tikzcd 无盒子, 2pt 白边必须保留。
+				if midY <= 200 || midX <= 200 {
+					t.Errorf("edge luminance = (top %d, left %d), want > 200 (2pt white border must be preserved for non-tcblisting content)", midY, midX)
+				}
+			}
+		})
+	}
+}
+
 func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 	const sample = `\begin{tcblisting}{title={Abajour}}
 \fcAbajourA

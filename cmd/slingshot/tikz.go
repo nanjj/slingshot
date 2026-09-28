@@ -95,7 +95,8 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 }
 
 // tikzWrapper 是 LaTeX 编译用的 standalone 模板。
-// 四个 %s 依次为: 额外加载的包、自动探测的 tikz 库、兼容 shim、CJK 前导
+// 五个 %s 依次为: 边框值 (tikzBorderSpec)、额外加载的包、自动探测的 tikz 库、
+// 兼容 shim、CJK 前导
 // (fontspec + xeCJK + \setCJKmainfont + \xeCJKsetup{CJKmath=true}; 内容含 CJK 时
 // 两个后端都注入, 其余情况为空串)。shim 与 CJK 前导均可为空。
 // \usetikzlibrary 放在所有 \usepackage 之后、\begin{document} 之前,
@@ -107,7 +108,7 @@ func (c *cmdTikz) run(cmd *cobra.Command, args []string) error {
 // 不现实 (符号族太大且会与 \node 文本里的普通文本混淆), 故固定加载;
 // 重复加载无害 (LaTeX 记录已加载宏包 \ver@<name>.sty 并跳过重复加载,
 // 片段里显式 \usepackage{amssymb} 是 no-op)。
-const tikzWrapper = `\documentclass[border=2pt]{standalone}
+const tikzWrapper = `\documentclass[border=%s]{standalone}
 \usepackage{tikz}
 \usepackage{xcolor}
 \usepackage{amsmath}
@@ -116,6 +117,18 @@ const tikzWrapper = `\documentclass[border=2pt]{standalone}
 \input{input.tikz}
 \end{document}
 `
+
+// tikzBorderSpec 返回 standalone 类的页面外边距值 (tikzWrapper 的第 1 个 %s)。
+// 默认 2pt 在 @150dpi 栅格化后约为 4px 白圈; 对自带边框与底色的 tcblisting 盒子,
+// 这圈白边很难看且不携带信息, 故裁掉 (0pt)。命中口径与 tcblistingSetup 一致 ——
+// 只看子串 \begin{tcblisting}, 与内容探测同为宽进取舍; 不命中 (含裸 tikzcd /
+// tikzpicture) 一律保持 2pt, 行为与改动前逐像素一致。
+func tikzBorderSpec(raw string) string {
+	if strings.Contains(raw, `\begin{tcblisting}`) {
+		return "0pt"
+	}
+	return "2pt"
+}
 
 // tikzBuzzerShim 为旧版 circuitikz 补齐 buzzer / rbuzzer 双端元件。
 // buzzer (蜂鸣器) 是 circuitikz 1.5.0 才加入的元件, tectonic bundle 自带的
@@ -1586,9 +1599,10 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
 	if profile.supportsMinted && strings.Contains(raw, "minted") {
 		libs += ",minted"
 	}
-	return `\tcbuselibrary{` + libs + `}
+	return `\def\slingshotTcblistingTikzcdBg{\ifcsname tikzcdset\endcsname\tikzcdset{background color=tcbcolback}\fi}
+\tcbuselibrary{` + libs + `}
 \tcbset{
-  ` + tcblistingNoWrapStyle + `/.style={before lower*={\centering}, after lower*={}},
+  ` + tcblistingNoWrapStyle + `/.style={before lower*={\centering\slingshotTcblistingTikzcdBg}, after lower*={}},
   tikz lower,
   sidebyside,
   center lower,
@@ -1597,6 +1611,11 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
   lower separated=false,
   listing engine=listings,
 }
+\makeatletter
+\ifcsname kvtcb@before@lower\endcsname
+  \g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}%
+\fi
+\makeatother
 `
 }
 
@@ -2170,7 +2189,7 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		return fmt.Errorf("writing input.tikz: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tex"),
-		fmt.Appendf(nil, tikzWrapper, tikzPackageLines(pkgs, compat),
+		fmt.Appendf(nil, tikzWrapper, tikzBorderSpec(raw), tikzPackageLines(pkgs, compat),
 			tikzLibraryLines(libs), shims, cjkPreamble), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
 	}
