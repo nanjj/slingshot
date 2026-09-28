@@ -624,12 +624,13 @@ func edgeLuminance(img image.Image) (int, int) {
 
 // tcblistingFallbackPixelLimit 是“底色未融入盒底”类缺陷的像素上限: 标签/遮挡线
 // 底色一旦回退到默认白或硬编码盒底灰, 色块面积会远超此值。校准 (本机 @150dpi,
-// colback 样本的宽 description 标签): 修复前 (默认 white) 精确 (255,255,255) = 7786;
-// 硬编码灰 (242,242,242) 回退同理量级; 修复后 (标签 = tcbcolback) 两者都 ≈ 0
-// (实测 white 60)。阈值取 500, 显著低于修复前 (约 1/15)、远高于修复后。
-// 版本耦合: tcolorbox 默认盒底 black!5!white ≈ 242 与纯白截断 250 仅差 8 级,
-// tcolorbox 默认值或栅格器变化时需重新校准。
-const tcblistingFallbackPixelLimit = 500
+// colback 样本的宽 description 标签): 修复前 (默认 white) 整图精确 (255,255,255) = 7786,
+// 但其中大头是 2pt 白圈; 单看标签补丁本体 (回退态在裁边上下文里的真实信号) = 863
+// (紧凑 45x23 块); 硬编码灰 (242,242,242) 回退同理量级; 修复后 (标签 = tcbcolback)
+// 实测 60。阈值取 300: 低于回退态真实信号 863 约 2.9x, 高于修复后 60 约 5x, 两侧
+// 余量同量级。版本耦合: tcolorbox 默认盒底 black!5!white ≈ 242 与纯白截断 250 仅差
+// 8 级, tcolorbox 默认值或栅格器变化时需重新校准。
+const tcblistingFallbackPixelLimit = 300
 
 // TestRenderTikzTcblistingBackgroundAndBorderNotBlank 是本次两处修复的像素级回归:
 //
@@ -647,8 +648,9 @@ const tcblistingFallbackPixelLimit = 500
 //   - mixed  (tectonic, 无 minted 孪生样本): 717x110, 纯白 0; 走非 nowrap 路径,
 //     验证默认 tikz lower 钩子 (g@addto@macro) 也注入了标签底色。
 //   - colback box (xe, colback=red!30, 宽 description 标签): 标签底色为盒底 red!30
-//     (255,178,178); 回退态实测 (修复前, 默认 white) 精确纯白 7786、修复后 60,
-//     硬编码灰 242 同理 —— 阈值 tcblistingFallbackPixelLimit=500 两种回退态都能抓住。
+//     (255,178,178); 回退态实测 (修复前, 默认 white) 整图纯白 7786 (含 2pt 白圈),
+//     单看标签补丁本体 = 863、修复后 60, 硬编码灰 242 同理 —— 阈值
+//     tcblistingFallbackPixelLimit=300 两种回退态都能抓住。
 //   - only2  (xe / tectonic 双引擎负对照, 裸 tikzcd): 边缘亮度 > 200 (2pt 保留)。
 //
 // input2 含 minted, 故只设 xe 腿; tectonic 腿用无 minted 的孪生样本 (minted 在
