@@ -1614,7 +1614,7 @@ func tcblistingSetup(profile tikzProfile, raw string, pkgs []string) string {
 }
 \makeatletter
 % 宏改名时本守卫静默 no-op 是刻意取舍: 旧 tcolorbox 或未来重命名都不应让导言区报错,
-% 标签底色是否真的注入由像素级回归 (BackgroundAndBorder) 兜底。
+% 标签底色是否真的注入由像素级回归 TestRenderTikzTcblistingBackgroundAndBorderNotBlank 兜底。
 \ifcsname kvtcb@before@lower\endcsname
   \g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}%
 \fi

@@ -101,14 +101,16 @@ const tcblistingBgOnlySample = `\begin{tikzcd}
 `
 
 // tcblistingBgColbackSample 是用户显式指定盒底色的 tcblisting 盒子 (仅盒子, 无下方裸图),
-// 选项含 colback=red!30 且正文是带 description 标签的 tikzcd。它锁定"用户 colback 生效":
-// tikzcd 标签底色取当前盒实例的 tcbcolback (= red!30, RGB 255,178,178), 整图既不该出现
-// 纯白 (背景色回退到默认 white) 也不该出现硬编码灰 (242,242,242)。选项写法参考
-// /tmp/tcbg/leak.tikz, 但样本只保留盒子本身 (148 字节, sha256
-// 81c6f0073f8a577a53966a9afc0b85e9394417e3c5de6dca5fdc3e0d000767ce)。
+// 选项含 colback=red!30 且正文是带多字符 description 标签 ("{(x,y)}") 的 tikzcd —— 标签
+// 取宽标签, 让回退态 (默认白 / 硬编码灰) 的色块面积远大于阈值, 断言才有区分力。它锁定
+// "用户 colback 生效": tikzcd 标签底色取当前盒实例的 tcbcolback (= red!30, RGB 255,178,178),
+// 整图既不该出现纯白 (背景色回退到默认 white) 也不该出现硬编码灰 (242,242,242)。
+// 导出方式: 取上游 leak 验证片段 (colback=red!30 + 带 description 标签的 tikzcd) 的盒子
+// 部分, 去掉紧随其后的裸 tikzcd (那是 per-box 泄漏验证的对照, 与本样本无关)。
+// 154 字节, sha256 2f53cfaaabd3fdadd12b990116e24f7f930a83da332c26a6c415617f4d6e7516。
 const tcblistingBgColbackSample = `\begin{tcblisting}{lower separated, righthand ratio=0.5, colback=red!30}
 \begin{tikzcd}
-A \ar[r, "f" description] & B
+A \ar[r, "{(x,y)}" description] & B
 \end{tikzcd}
 \end{tcblisting}
 `
@@ -129,8 +131,8 @@ func TestTcblistingBgSamplesSHA256(t *testing.T) {
 			sum: "652e294ce78679d12e97ff2c3c622753abf92c6bad64717dea096bf441d106b5"},
 		{name: "only2 (negative control, bare tikzcd)", raw: tcblistingBgOnlySample, size: 197,
 			sum: "bcd75f5d909087352925acce4de44c50d8594449c1c33bc5e2e5c497b46a3ed7"},
-		{name: "leak box (colback=red!30, box only)", raw: tcblistingBgColbackSample, size: 148,
-			sum: "81c6f0073f8a577a53966a9afc0b85e9394417e3c5de6dca5fdc3e0d000767ce"},
+		{name: "colback box (colback=red!30, box only)", raw: tcblistingBgColbackSample, size: 154,
+			sum: "2f53cfaaabd3fdadd12b990116e24f7f930a83da332c26a6c415617f4d6e7516"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2123,7 +2125,7 @@ func tcblistingWant(libs string) string {
 }
 \makeatletter
 % 宏改名时本守卫静默 no-op 是刻意取舍: 旧 tcolorbox 或未来重命名都不应让导言区报错,
-% 标签底色是否真的注入由像素级回归 (BackgroundAndBorder) 兜底。
+% 标签底色是否真的注入由像素级回归 TestRenderTikzTcblistingBackgroundAndBorderNotBlank 兜底。
 \ifcsname kvtcb@before@lower\endcsname
   \g@addto@macro\kvtcb@before@lower{\slingshotTcblistingTikzcdBg}%
 \fi
@@ -3202,8 +3204,13 @@ func TestTikzWrapperLoadsAmsSymb(t *testing.T) {
 	}
 	docEnd := strings.Index(tikzWrapper[docLine:], "\n")
 	first := strings.Index(tikzWrapper, "%s")
-	if first < 0 || docEnd < 0 || first > docLine+docEnd {
+	if first < 0 || docEnd < 0 || first < docLine || first >= docLine+docEnd {
 		t.Fatalf("first %%s slot at %d must be inside the \\documentclass[ line [%d,%d) (the border value)", first, docLine, docLine+docEnd)
+	}
+	// \\documentclass[ 行内必须是 border=%s, 即第 1 个槽就是边框值。
+	docSpec := tikzWrapper[docLine : docLine+docEnd]
+	if !strings.Contains(docSpec, "border=%s") {
+		t.Fatalf("first slot line %q must contain border=%%s", docSpec)
 	}
 	if slots := strings.Index(tikzWrapper, "%s%s%s%s"); slots >= 0 && symb > slots {
 		t.Fatalf("amssymb must be in the fixed preamble before the injection slots (%s): amssymb at %d, injection slots at %d", "%s%s%s%s", symb, slots)
