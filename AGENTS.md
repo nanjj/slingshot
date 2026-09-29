@@ -225,9 +225,10 @@ tikz-cd 的 **cd 库裸样式写法**（不用 `tikzcd` 环境、直接写 `comm
 用户渲染手册"五边形公理"示例（`\begin{tikzpicture}[commutative diagrams/every diagram]` +
 `\path[commutative diagrams/.cd, every arrow, every label]`）时裸 cd 样式是漏网之鱼，编译报
 `! Package pgfkeys Error: I do not know the key '/tikz/commutative diagrams/every diagram'`（用户
-故障原文）。`\s+` 而非字面单空格：TeX 把连续空白折叠为单空格 token，字面单空格会漏检双空格写法，与 3d 条目 `\bcanvas\s+is\s+...` 先例一致。cd 库随 tikz-cd 发行（`kpsewhich tikzlibrarycd.code.tex` 在 TL2026 与 tectonic 2021
-bundle 均命中，两后端同路径），库内部 `\usetikzlibrary{matrix,quotes,arrows.meta}`、无
-`\usepackage`，只定义 `commutative diagrams/*` 样式与标签键，对现有片段无副作用；命中即加载
+故障原文）。`\s+` 而非字面单空格：TeX 把连续空白折叠为单空格 token，字面单空格会漏检双空格
+写法，与 3d 条目 `\bcanvas\s+is\s+...` 先例一致。cd 库随 tikz-cd 发行
+（`kpsewhich tikzlibrarycd.code.tex` 在 TL2026 与 tectonic 2021 bundle 均命中，两后端同路径），库内部
+`\usetikzlibrary{matrix,quotes,arrows.meta}`、无 `\usepackage`，只定义 `commutative diagrams/*` 样式与标签键，对现有片段无副作用；命中即加载
 属"宁多加载不漏加载"取舍（注释/散文命中可接受，同 3d / ducks / matrix 先例）。`\b` 词边界避免
 误中其他含 "diagrams" 的文字；与 `\begin{tikzcd}`→tikz-cd 宏包条目分工互补（前者认裸样式、
 后者认环境/配置命令），同一文档两者都命中时重复加载同一库幂等。回归：单测
