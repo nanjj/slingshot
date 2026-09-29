@@ -115,6 +115,50 @@ A \ar[r, "{(x,y)}" description] & B
 \end{tcblisting}
 `
 
+// tikzcdRawCdSample 是 tikz-cd 手册"不用 tikzcd 环境、直接用 cd 库样式"的五边形
+// 公理图片段, 逐字节等于用户原始故障输入 (692 字节, sha256
+// 1d4b710c31eca9616db88ccc519837f23c6d6568090301edce1b023499263ebd)。
+// 此前报 "! Package pgfkeys Error: I do not know the key
+// '/tikz/commutative diagrams/every diagram'" (缺 cd 库); 修复 = tikzExtraLibraries
+// 增加 commutative diagrams 条目, 命中即注入 \usetikzlibrary{cd}。
+// 单一来源: 库探测组合用例、集成样例与像素回归测试共用本常量。
+const tikzcdRawCdSample = `\begin{tikzpicture}[commutative diagrams/every diagram]
+  \node (P0) at (90:2.3cm) {$X\otimes (Y\otimes (Z\otimes T))$};
+  \node (P1) at (90+72:2cm) {$X\otimes ((Y\otimes Z)\otimes T))$} ;
+  \node (P2) at (90+2*72:2cm) {\makebox[5ex][r]{$(X\otimes (Y\otimes Z))\otimes T$}};
+  \node (P3) at (90+3*72:2cm) {\makebox[5ex][l]{$((X\otimes Y)\otimes Z)\otimes T$}};
+  \node (P4) at (90+4*72:2cm) {$(X\otimes Y)\otimes (Z\otimes T)$};
+  \path[commutative diagrams/.cd, every arrow, every label]
+  (P0) edge node[swap] {$1\otimes\phi$} (P1)
+  (P1) edge node[swap] {$\phi$} (P2)
+  (P2) edge node {$\phi\otimes 1$} (P3)
+  (P4) edge node {$\phi$} (P3)
+  (P0) edge node {$\phi$} (P4);
+\end{tikzpicture}
+`
+
+// tikzcdRawCdTcblistingSample 是 tikzcdRawCdSample 外包 tcblisting 盒子 (含
+// lower separated / righthand ratio=0.5, 正文同前者) 的版本, 无 \usetikzlibrary 行,
+// 逐字节等于用户原始故障输入 (792 字节, sha256
+// 31105083aedb8e22dc39889537fa51e90ab20d35539e32acf2b19735a54fc397)。像素级回归 TestRenderTikzRawCdStylesNotBlank 用它复现"盒子右侧
+// 结果区空白"类静默丢失 (与 tcblisting_figchild 同一故障族)。
+const tikzcdRawCdTcblistingSample = `\begin{tcblisting}{lower separated, righthand ratio=0.5}
+  \begin{tikzpicture}[commutative diagrams/every diagram]
+    \node (P0) at (90:2.3cm) {$X\otimes (Y\otimes (Z\otimes T))$};
+    \node (P1) at (90+72:2cm) {$X\otimes ((Y\otimes Z)\otimes T))$} ;
+    \node (P2) at (90+2*72:2cm) {\makebox[5ex][r]{$(X\otimes (Y\otimes Z))\otimes T$}};
+    \node (P3) at (90+3*72:2cm) {\makebox[5ex][l]{$((X\otimes Y)\otimes Z)\otimes T$}};
+    \node (P4) at (90+4*72:2cm) {$(X\otimes Y)\otimes (Z\otimes T)$};
+    \path[commutative diagrams/.cd, every arrow, every label]
+    (P0) edge node[swap] {$1\otimes\phi$} (P1)
+    (P1) edge node[swap] {$\phi$} (P2)
+    (P2) edge node {$\phi\otimes 1$} (P3)
+    (P4) edge node {$\phi$} (P3)
+    (P0) edge node {$\phi$} (P4);
+  \end{tikzpicture}
+\end{tcblisting}
+`
+
 // TestTcblistingBgSamplesSHA256 钉住四个样本与用户原始输入的逐字节一致性声明
 // (先例: TestMatrixSampleSHA256)。夹具被有意改动时, 本测试与常量注释里的哈希
 // 必须一起更新。
@@ -133,6 +177,34 @@ func TestTcblistingBgSamplesSHA256(t *testing.T) {
 			sum: "bcd75f5d909087352925acce4de44c50d8594449c1c33bc5e2e5c497b46a3ed7"},
 		{name: "colback box (colback=red!30, box only)", raw: tcblistingBgColbackSample, size: 154,
 			sum: "2f53cfaaabd3fdadd12b990116e24f7f930a83da332c26a6c415617f4d6e7516"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if len(tt.raw) != tt.size {
+				t.Fatalf("%s = %d bytes, want %d", tt.name, len(tt.raw), tt.size)
+			}
+			sum := sha256.Sum256([]byte(tt.raw))
+			if got := hex.EncodeToString(sum[:]); got != tt.sum {
+				t.Fatalf("%s sha256 = %s, want %s (update this test and the comment together if the fixture intentionally changed)", tt.name, got, tt.sum)
+			}
+		})
+	}
+}
+
+// TestTikzcdRawCdSamplesSHA256 钉住两个裸 cd 样式样本与用户原始输入的逐字节
+// 一致性声明 (先例: TestMatrixSampleSHA256)。夹具被有意改动时, 本测试与常量
+// 注释里的哈希必须一起更新。
+func TestTikzcdRawCdSamplesSHA256(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		size int
+		sum  string
+	}{
+		{name: "raw cd styles (bare fragment)", raw: tikzcdRawCdSample, size: 692,
+			sum: "1d4b710c31eca9616db88ccc519837f23c6d6568090301edce1b023499263ebd"},
+		{name: "raw cd styles (tcblisting wrapped)", raw: tikzcdRawCdTcblistingSample, size: 792,
+			sum: "31105083aedb8e22dc39889537fa51e90ab20d35539e32acf2b19735a54fc397"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1658,6 +1730,19 @@ func TestDetectTikzLibraries(t *testing.T) {
 		{name: "core arrow both ends no library", content: "\\draw[<->] (0,0) -- (1,0);"},
 		// 组合回归: 故障原文同时命中 matrix 与 arrows (表顺序)。
 		{name: "matrix fault sample", content: matrixSample, want: []string{"matrix", "arrows"}},
+		// 裸 cd 库样式写法 (不用 tikzcd 环境): [commutative diagrams/every diagram]
+		// 选项与 commutative diagrams/.cd 路径都由 tikzlibrarycd.code.tex 定义,
+		// 漏检时报 "I do not know the key '/tikz/commutative diagrams/every diagram'"
+		// (用户故障原文)。探测词面取 `\bcommutative diagrams\b`, 两种写法都命中。
+		{name: "cd option form", content: "\\begin{tikzpicture}[commutative diagrams/every diagram]\\end{tikzpicture}", want: []string{"cd"}},
+		{name: "cd prefix path form", content: "\\path[commutative diagrams/.cd, every arrow, every label] (P0) edge (P1);", want: []string{"cd"}},
+		// comment-blind 钉住: 探测表不剥离注释 (与既有 "commented-out CD still loads amscd"
+		// 对称), 注释里的 commutative diagrams 仍注入 cd —— 库无副作用, 属可接受过加载。
+		{name: "commented-out raw cd still loads cd (comment-blind probe)", content: "% \\path[commutative diagrams/.cd, every arrow] (P0) edge (P1);", want: []string{"cd"}},
+		// 组合顺序 (按表顺序): matrix 条目在 cd 之前, 同时命中得 [matrix cd]。
+		{name: "matrix plus raw cd order", content: "\\matrix (m) [matrix of math nodes] {A & B \\\\ C & D \\\\};\n\\path[commutative diagrams/.cd, every arrow] (P0) edge (P1);", want: []string{"matrix", "cd"}},
+		// 负例: 纯 tikz 无 cd 样式写法。
+		{name: "plain tikz no cd library", content: "\\draw (0,0) -- (1,1);"},
 		// 核心 pgfcorearrows 自带 stealth / latex (实测裸编译 OK): setter 写法
 		// (>=stealth / >=latex) 不加载任何库——旧条目要求 -name 前缀, 新条目只覆盖
 		// angle / hooks / triangle, 均不命中; 负例钉住该既定行为。

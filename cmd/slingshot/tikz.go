@@ -712,6 +712,19 @@ var tikzExtraLibraries = []struct {
 	// 库; 散文/注释里的 "\matrix" 属可接受过加载 (库对现有片段无副作用), 同
 	// \bsnake\b / 3d 的"宁多加载不漏加载"取舍。
 	{regexp.MustCompile(`\\matrix\b`), "matrix"},
+	// cd: tikz-cd 手册"不用 tikzcd 环境、直接用 cd 库样式"的裸写法——
+	// [commutative diagrams/every diagram] 选项与 commutative diagrams/.cd 路径——由
+	// tikzlibrarycd.code.tex 定义。探测表原先只认 \begin{tikzcd} / \tikzcdset
+	// (走 tikz-cd 宏包), 裸 cd 样式写法是漏网之鱼, 用户故障原文
+	// "! Package pgfkeys Error: I do not know the key
+	// '/tikz/commutative diagrams/every diagram'"。命中即注入 \usetikzlibrary{cd};
+	// cd 库随 tikz-cd 发行 (TL2026 与 tectonic 2021 bundle 均自带, 两后端同路径),
+	// 库内部 \usetikzlibrary{matrix,quotes,arrows.meta}、无 \usepackage, 只定义
+	// commutative diagrams/* 样式与标签键, 对现有片段无副作用。\b 词边界避免误中
+	// 其他含 "diagrams" 的文字; 注释/散文里的命中属可接受过加载, 同 3d / ducks /
+	// matrix 的"宁多加载不漏加载"取舍。与 \begin{tikzcd}→tikz-cd 宏包条目互补,
+	// 两者命中同一库时重复加载幂等。
+	{regexp.MustCompile(`\bcommutative diagrams\b`), "cd"},
 	// 箭头 tip 的 setter 写法 (>=Stealth) 与端点写法 (-Stealth) 都要认:
 	// Stealth / Latex / Triangle / Circle / Square / Diamond / Kite / To 只在
 	// pgflibraryarrows.meta.code.tex 声明 (核心 pgfcorearrows.code.tex:1118-1244 仅有

@@ -453,11 +453,15 @@ scale=.3,
 	// 在 \end{tikzcd} 报 "Undefined control sequence" (tikz-cd 标签默认数学
 	// 模式 \iftikzcd@mathmode, 角标在编译期展开); 这是编译级失败而非静默丢失,
 	// PDF 头断言即可。TL2026 与 tectonic 2021 bundle 均自带 amssymb, 两后端同路径。
-	"tikzcd_pullback_corner": `\begin{tikzcd}
-  A \arrow[r, "f"] \arrow[d, "g'"] \arrow[dr, phantom, "\ulcorner"] & B \arrow[d, "h"] \\
-  C \arrow[r, "k'"] & D
-\end{tikzcd}
-`,
+	// tikzcd_raw_cd_styles: tikz-cd 手册"不用 tikzcd 环境、直接用 cd 库样式"的
+	// 五边形公理图片段 (用户原始故障输入 tikzcdRawCdSample)。此前探测表只认
+	// \begin{tikzcd} / \tikzcdset (走 tikz-cd 宏包), 裸 cd 样式写法是漏网之鱼,
+	// 编译报 "! Package pgfkeys Error: I do not know the key
+	// '/tikz/commutative diagrams/every diagram'"; 修复 = tikzExtraLibraries 增加
+	// commutative diagrams 条目, 命中即注入 \usetikzlibrary{cd}。cd 库随 tikz-cd
+	// 发行 (TL2026 与 tectonic 2021 bundle 均自带), 两后端同路径, 因此两条集成腿
+	// (xe / tectonic) 都自动覆盖本样例。
+	"tikzcd_raw_cd_styles": tikzcdRawCdSample,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。
@@ -919,6 +923,67 @@ func TestRenderTikzMatrixNotBlank(t *testing.T) {
 				t.Fatalf("tikz matrix rendered %dx%d px, want height >= 80 (square layout, not single-row fallback)",
 					img.Bounds().Dx(), h)
 			}
+		})
+	}
+}
+
+// TestRenderTikzRawCdStylesNotBlank 是 "裸 cd 库样式" 交换图的像素级回归。
+//
+// 此前探测表只认 \begin{tikzcd} / \tikzcdset (走 tikz-cd 宏包), tikz-cd 手册
+// "不用 tikzcd 环境、直接用 cd 库样式"的五边形公理图 (tikzcdRawCdTcblistingSample,
+// 用户原始故障输入) 未命中 cd 条目, 编译报 "! Package pgfkeys Error: I do not know
+// the key '/tikz/commutative diagrams/every diagram'"; 修复 = tikzExtraLibraries
+// 增加 commutative diagrams → cd 条目 (见 tikz.go)。
+//
+// 像素级回归: 解码栅格图后统计暗像素, 兜住编译成功但内容丢失/布局退化类缺陷。
+// 样例是 tcblisting 包裹版 (盒子右侧为编译结果区, 代码在左), 区域取右侧结果区
+// x ∈ (60%, 92%)、y ∈ (20%, 95%)。实测 (@150dpi, 由 renderTikz 经 mutool 栅格化):
+// 空白对照 0, 修复后 1617 (717x750px, xe 与 tectonic 同值); 阈值 500 约为实测的
+// 1/3, 留约 3.2 倍余量, 与矩阵/amscd 像素回归同一标定风格。
+//
+// 两后端都跑 (各自可用才跑): cd 库随 tikz-cd 发行, TL2026 与 2021 bundle 均自带,
+// 探测无后端门控, 因此两条腿都必须通过。
+func TestRenderTikzRawCdStylesNotBlank(t *testing.T) {
+	engines := []struct {
+		name   string
+		avail  func() error
+		reason string
+	}{
+		{name: "xe", avail: func() error { return latexmkAvailable(false) },
+			reason: "latexmk unavailable"},
+		{name: "tectonic", avail: tectonicAvailable,
+			reason: "tectonic unavailable"},
+	}
+	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
+	if _, err := exec.LookPath("mutool"); err != nil {
+		t.Skipf("mutool unavailable: %v", err)
+	}
+	for _, e := range engines {
+		t.Run(e.name, func(t *testing.T) {
+			if err := e.avail(); err != nil {
+				t.Skipf("%s: %v", e.reason, err)
+			}
+			in := filepath.Join(t.TempDir(), "tikzcd_raw_cd.tikz")
+			out := filepath.Join(t.TempDir(), "tikzcd_raw_cd.png")
+			if err := os.WriteFile(in, []byte(tikzcdRawCdTcblistingSample), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := renderTikz(in, out, e.name); err != nil {
+				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
+			}
+			f, err := os.Open(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			img, _, err := image.Decode(f)
+			if err != nil {
+				t.Fatalf("decoding png: %v", err)
+			}
+			// 空白对照 0, 修复后实测 1617 (两后端同值); 阈值 500 留约 3.2 倍余量。
+			assertRegionNotBlank(t, img, "tikzcd raw cd styles", "result area",
+				60, 92, 20, 95, 500,
+				"the cd-styles diagram was silently dropped (cd library not loaded)")
 		})
 	}
 }
