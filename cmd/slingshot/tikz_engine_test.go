@@ -453,6 +453,11 @@ scale=.3,
 	// 在 \end{tikzcd} 报 "Undefined control sequence" (tikz-cd 标签默认数学
 	// 模式 \iftikzcd@mathmode, 角标在编译期展开); 这是编译级失败而非静默丢失,
 	// PDF 头断言即可。TL2026 与 tectonic 2021 bundle 均自带 amssymb, 两后端同路径。
+	"tikzcd_pullback_corner": `\begin{tikzcd}
+  A \arrow[r, "f"] \arrow[d, "g'"] \arrow[dr, phantom, "\ulcorner"] & B \arrow[d, "h"] \\
+  C \arrow[r, "k'"] & D
+\end{tikzcd}
+`,
 	// tikzcd_raw_cd_styles: tikz-cd 手册"不用 tikzcd 环境、直接用 cd 库样式"的
 	// 五边形公理图片段 (用户原始故障输入 tikzcdRawCdSample)。此前探测表只认
 	// \begin{tikzcd} / \tikzcdset (走 tikz-cd 宏包), 裸 cd 样式写法是漏网之鱼,

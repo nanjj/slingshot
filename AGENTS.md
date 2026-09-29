@@ -220,19 +220,19 @@ pgf 的 `3d` 库（`tikzlibrary3d.code.tex`）定义 `canvas is <xy|yx|xz|zx|yz|
 手册的 z-order/rhino 分层切片示例依赖它。
 
 tikz-cd 的 **cd 库裸样式写法**（不用 `tikzcd` 环境、直接写 `commutative diagrams/*` 样式）由
-`tikzExtraLibraries` 的 `\bcommutative diagrams\b` → `cd` 条目覆盖（命中即注入
+`tikzExtraLibraries` 的 `\bcommutative\s+diagrams\b` → `cd` 条目覆盖（命中即注入
 `\usetikzlibrary{cd}`）。此前探测只认 `\begin{tikzcd}` / `\tikzcdset`（走 tikz-cd 宏包），
 用户渲染手册"五边形公理"示例（`\begin{tikzpicture}[commutative diagrams/every diagram]` +
 `\path[commutative diagrams/.cd, every arrow, every label]`）时裸 cd 样式是漏网之鱼，编译报
 `! Package pgfkeys Error: I do not know the key '/tikz/commutative diagrams/every diagram'`（用户
-故障原文）。cd 库随 tikz-cd 发行（`kpsewhich tikzlibrarycd.code.tex` 在 TL2026 与 tectonic 2021
+故障原文）。`\s+` 而非字面单空格：TeX 把连续空白折叠为单空格 token，字面单空格会漏检双空格写法，与 3d 条目 `\bcanvas\s+is\s+...` 先例一致。cd 库随 tikz-cd 发行（`kpsewhich tikzlibrarycd.code.tex` 在 TL2026 与 tectonic 2021
 bundle 均命中，两后端同路径），库内部 `\usetikzlibrary{matrix,quotes,arrows.meta}`、无
 `\usepackage`，只定义 `commutative diagrams/*` 样式与标签键，对现有片段无副作用；命中即加载
 属"宁多加载不漏加载"取舍（注释/散文命中可接受，同 3d / ducks / matrix 先例）。`\b` 词边界避免
 误中其他含 "diagrams" 的文字；与 `\begin{tikzcd}`→tikz-cd 宏包条目分工互补（前者认裸样式、
 后者认环境/配置命令），同一文档两者都命中时重复加载同一库幂等。回归：单测
-`TestDetectTikzLibraries`（选项形式 / 前缀路径形式 / 注释命中 / matrix+cd 组合顺序 / 纯 tikz
-负例）、样本哈希 `TestTikzcdRawCdSamplesSHA256`（692B / 792B）、双引擎集成样例
+`TestDetectTikzLibraries`（选项形式 / 前缀路径形式 / 注释命中 / matrix+cd 组合顺序 / 双空格
+正例 / `mycommutative`·`diagramsX` 词边界负例 / 纯 tikz 负例）、样本哈希 `TestTikzcdRawCdSamplesSHA256`（692B / 792B）、双引擎集成样例
 `tikzcd_raw_cd_styles` 与像素级 `TestRenderTikzRawCdStylesNotBlank`（修复后 1617 暗像素，
 阈值 500）。
 

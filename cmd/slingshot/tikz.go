@@ -721,10 +721,13 @@ var tikzExtraLibraries = []struct {
 	// cd 库随 tikz-cd 发行 (TL2026 与 tectonic 2021 bundle 均自带, 两后端同路径),
 	// 库内部 \usetikzlibrary{matrix,quotes,arrows.meta}、无 \usepackage, 只定义
 	// commutative diagrams/* 样式与标签键, 对现有片段无副作用。\b 词边界避免误中
-	// 其他含 "diagrams" 的文字; 注释/散文里的命中属可接受过加载, 同 3d / ducks /
+	// 其他含 "diagrams" 的文字; 中间用 \s+ 而非字面单空格——TeX 会把连续空白折叠
+	// 为单个空格 token, 字面单空格会漏检 "commutative  diagrams"(漏检方向不安全),
+	// 与同表 3d 条目 `\bcanvas\s+is\s+...` 的 \s+ 先例一致。注释/散文里的命中属
+	// 可接受过加载, 同 3d / ducks / matrix 的"宁多加载不漏加载"取舍。
 	// matrix 的"宁多加载不漏加载"取舍。与 \begin{tikzcd}→tikz-cd 宏包条目互补,
 	// 两者命中同一库时重复加载幂等。
-	{regexp.MustCompile(`\bcommutative diagrams\b`), "cd"},
+	{regexp.MustCompile(`\bcommutative\s+diagrams\b`), "cd"},
 	// 箭头 tip 的 setter 写法 (>=Stealth) 与端点写法 (-Stealth) 都要认:
 	// Stealth / Latex / Triangle / Circle / Square / Diamond / Kite / To 只在
 	// pgflibraryarrows.meta.code.tex 声明 (核心 pgfcorearrows.code.tex:1118-1244 仅有

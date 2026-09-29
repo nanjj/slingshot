@@ -1743,6 +1743,12 @@ func TestDetectTikzLibraries(t *testing.T) {
 		{name: "matrix plus raw cd order", content: "\\matrix (m) [matrix of math nodes] {A & B \\\\ C & D \\\\};\n\\path[commutative diagrams/.cd, every arrow] (P0) edge (P1);", want: []string{"matrix", "cd"}},
 		// 负例: 纯 tikz 无 cd 样式写法。
 		{name: "plain tikz no cd library", content: "\\draw (0,0) -- (1,1);"},
+		// 边界: \b 词边界要求 "commutative" 前不是词字符、"diagrams" 后不是词字符,
+		// 粘连前后缀的写法不命中 (mycommutative… / …diagramsX)。
+		{name: "cd word boundary prefix not matched", content: "\\path[mycommutative diagrams/.cd] (a) edge (b);"},
+		{name: "cd word boundary suffix not matched", content: "\\path[commutative diagramsX/.cd] (a) edge (b);"},
+		// 正例: TeX 把连续空白折叠为单个空格 token, 正则用 \s+ 覆盖双空格写法。
+		{name: "cd double space matched", content: "\\path[commutative  diagrams/.cd, every arrow] (P0) edge (P1);", want: []string{"cd"}},
 		// 核心 pgfcorearrows 自带 stealth / latex (实测裸编译 OK): setter 写法
 		// (>=stealth / >=latex) 不加载任何库——旧条目要求 -name 前缀, 新条目只覆盖
 		// angle / hooks / triangle, 均不命中; 负例钉住该既定行为。
