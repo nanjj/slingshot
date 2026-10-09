@@ -146,6 +146,87 @@ slingshot meterial show <media_id> --output image.jpg
 slingshot meterial remove <media_id>
 ```
 
+## 更新已发布文章（实战 SOP）
+
+> 场景：文章同时发布到个人站点 + 微信公众号，改完源文件（`.org`/`.md`）后两处同步更新；
+> 按本节顺序执行。
+
+### 关键陷阱：`<name>.html` 被两条管线共用
+
+源文件旁生成的 `<name>.html` 有两个产生者，内容不同、先后互相覆盖：
+
+- `slingshot page update <site> <name>.org` → 生成**站点版**（Emacs 导出）
+- `slingshot draft convert <name>.org --upload` → 生成**微信版**（内联样式、SVG 公式、CDN 图片）
+
+另注意：`slingshot draft update <name>.org`（直接传 .org）在「`.html` 不比 `.org` 旧」时
+**直接复用现有 `.html`**、不重新转换——page 更新后 `.html` 恰是站点版，会原样发进草稿。
+
+**所以：顺序固定「先站点、后微信」；微信侧始终显式 `draft convert` 重建。**
+
+### 标准步骤
+
+```bash
+# 0. 进入文章目录（例：tikzlings/jiheti01），确认源文件已改好
+
+# 1. 站点：重建页面（顺带把 <name>.html 覆盖为站点版，无妨——第 3 步会重建微信版）
+slingshot page update nanjj.dscli.io <name>.org
+
+# 2. 站点：复核 + 提交 + 推送 + 部署（详见 site-page skill）
+cd ~/.local/src/gitlab.com/dscli/nanjj.dscli.io
+git diff <name>/index.html        # 只应有正文变化 + 导出噪声（时间戳/锚点）
+git add <name>/ index.html
+git commit -m "Update <name> page"
+HTTPS_PROXY=socks5h://localhost:8777 git push    # gitlab 需 socks5 代理
+slingshot site rsync nanjj.dscli.io
+curl -s "https://nanjj.dscli.io/<name>/" | grep -c "<新文关键句>"    # ≥1 即上线
+
+# 3. 微信：回到文章目录，重建微信版 HTML（图片/封面全走 images.yaml 缓存，零重传）
+cd -
+slingshot draft convert <name>.org --upload
+
+# 4. 微信：更新草稿（media_id 自动读 sidecar <name>.yaml）
+slingshot draft update <name>.html
+```
+
+### 更新后核验（必做）
+
+```bash
+# 元数据：标题/作者/摘要/来源 URL/封面/评论设置
+slingshot draft show <name>.yaml
+
+# 正文全文：直接调微信 API（密钥只进变量、不回显）
+AID=$(slingshot config get wechat.appid | tr -d '[:space:]"')
+SEC=$(slingshot config get wechat.secret | tr -d '[:space:]"')
+TOK=$(curl -s "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=$AID&secret=$SEC" | jq -r '.access_token')
+MID=$(sed -n 's/^media_id: *//p' <name>.yaml)
+curl -s "https://api.weixin.qq.com/cgi-bin/draft/get?access_token=$TOK" \
+  -H 'Content-Type: application/json' -d "{\"media_id\":\"$MID\"}" \
+  | jq -r '.news_item[0].content' > /tmp/draft-check.html
+
+# 文本：新句在、旧句不在
+grep -c "<新句>" /tmp/draft-check.html            # 期望 ≥1
+grep -c "<被替换的旧句>" /tmp/draft-check.html    # 期望 0
+
+# 图片：数量、域名、缓存归属
+grep -o 'src="[^"]*"' /tmp/draft-check.html | wc -l           # = 文章图片数
+grep -o 'src="[^"]*"' /tmp/draft-check.html | grep -v mmbiz   # 期望空（全部 CDN）
+```
+
+核验要点：
+
+- 草稿保存后微信把图片 URL 从 `/0` 改写为 `/640`（实际服务 ≤1080px rendition）——正常
+  现象。比较图片时先去掉尾部 `/\d+`；精确对比用「回载 + 像素比」而非 md5。
+- 图片 URL 路径集（去尾 `/\d+` 后）应 ⊆ `images.yaml` 缓存路径集。
+- sidecar 的 `need_open_comment` / `only_fans_can_comment` 留空（`null`）时默认 `1/1`（开启、仅粉丝）。
+- 图片与封面缓存按内容 md5 存在 `images.yaml`：源图未变时 `convert --upload` 全部命中缓存（输出「使用缓存」），不重传。
+
+### 网络与凭据
+
+- 微信 API 走**直连**（勿设 `HTTPS_PROXY`）；出口 IP 须在公众号「IP 白名单」内
+  （`curl -s https://ipinfo.io/ip` 查看，变更后到公众号后台更新白名单）。
+- 本机 gitlab 推送需 `HTTPS_PROXY=socks5h://localhost:8777`（端口见 `slingshot config get proxy.port`）；
+  gitcode 走 SSH 直连。
+
 ## 端到端示例
 
 ```bash
@@ -185,6 +266,9 @@ slingshot meterial add cover.jpg
 - **缩略图缓存**：封面图片的 media_id 也会缓存到 `images.yaml`，避免重复上传
 - **Emacs 依赖**：转换 `.org` 文件需要系统安装 `emacs`（Emacs 26+）。
   大多数 Linux/macOS 环境默认可用；若缺失，降级使用 `.md` 文件即可。
+- **微信 API 网络**：直连（勿设 `HTTPS_PROXY`）；出口 IP 须在公众号「IP 白名单」内（`curl -s https://ipinfo.io/ip` 查看）
+- **git 推送网络**：本机 gitlab 需 `HTTPS_PROXY=socks5h://localhost:8777`；gitcode 走 SSH 直连
+- **同名文件 `<name>.html` 双管线**：更新顺序「先站点、后微信」，详见「更新已发布文章（实战 SOP）」
 
 ## SVG 图片处理
 
@@ -222,3 +306,6 @@ pacman -S librsvg
 | `convert --upload` 缩略图 | 自动转换 |
 | `draft add --thumb` | 封面 SVG 自动转换 |
 | `draft update --thumb` | 封面 SVG 自动转换 |
+
+> 维护：本 skill 上游 = slingshot 仓库 `cmd/slingshot/embedded_skills/weixin/SKILL.md`；
+> 修改后 `make install` 重建二进制，再到项目里 `slingshot skill install weixin` 刷新安装副本。

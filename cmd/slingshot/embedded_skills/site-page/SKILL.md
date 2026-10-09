@@ -118,6 +118,37 @@ page 类型 rsync 流程：
 1. 自动优化站点 CSS（检查响应式 sentinel，未优化则升级）
 2. 从站点目录 `./` 执行 rsync
 
+### 更新已发布页面（SOP）
+
+> 本机实例：站点名 `nanjj.dscli.io`（目录 `~/.local/src/gitlab.com/dscli/nanjj.dscli.io`）。
+
+```bash
+# 1. 从源文件重建页面（页面目录须已存在；首次添加用 page add）
+slingshot page update mysite my-article.org
+
+# 2. git 复核 + 提交 + 推送
+cd ~/mysite
+git diff my-article/index.html    # 只应有预期变化；导出噪声见下
+git add my-article/ index.html
+git commit -m "Update my-article page"
+git push                          # gitlab 仓库：HTTPS_PROXY=socks5h://localhost:8777
+
+# 3. 部署 + 线上核验
+slingshot site rsync mysite
+curl -s "https://<域名>/my-article/" | grep -c "<新文关键句>"    # ≥1 即上线
+```
+
+diff 中的正常噪声（别当成异常）：
+
+- Emacs 导出时间戳注释（`<!-- YYYY-MM-DD 周X HH:MM -->`）每次刷新；
+- figure/表格锚点 ID（`orgXXXXXX`）每次重新生成；
+- 图片被重新复制（mtime 刷新），下次 rsync 会重传这些图片（内容不变）；
+- 根 `index.html` 通常不变，除非页面标题或源文件 `#+date:` 变化。
+
+> ⚠️ **与 weixin skill 的同名文件争用**：`page update` 会把转换结果写到源文件旁的
+> `<name>.html`（站点版），与公众号管线（`draft convert` 写微信版）同名互相覆盖。
+> 同一篇若还发公众号：**先站点、后微信**——详见 weixin skill「更新已发布文章（实战 SOP）」。
+
 ## zine 类型工作流
 
 Zine 站点不通过 `slingshot page` 管理页面。内容编辑全在 Zine 源文件中完成。
@@ -228,3 +259,8 @@ slingshot site rsync docs
 - **索引覆盖**：自动 `index.html` 会覆盖自定义首页
 - **zine 依赖**：系统需安装 [Zine](https://zine-ssg.io/)（静态二进制，下载解压即可）
 - **zine 站点**：不适用 `page add/update/remove`，内容管理见 site-zine skill
+- **页面更新**：`page update` 要求页面目录已存在；首次添加用 `page add`
+- **与公众号共文**：同名 `<name>.html` 双管线覆盖，顺序「先站点、后微信」（见上文 SOP）
+
+> 维护：本 skill 上游 = slingshot 仓库 `cmd/slingshot/embedded_skills/site-page/SKILL.md`；
+> 修改后 `make install` 重建二进制，再到项目里 `slingshot skill install site-page` 刷新安装副本。
