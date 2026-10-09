@@ -11,6 +11,8 @@ import (
 	"testing/fstest"
 
 	"github.com/spf13/cobra"
+
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // bt is a single backtick. Test fixtures build fences from it so this file
@@ -399,6 +401,7 @@ func TestIsSinglePathElement(t *testing.T) {
 		{"a/b", false},
 		{"../etc", false},
 		{`a\\b`, false},
+		{"C:\\foo", false},
 		{"/etc/passwd", false},
 	} {
 		if got := isSinglePathElement(tc.name); got != tc.want {
@@ -427,8 +430,16 @@ func TestSkillInstallRejectsTraversalNames(t *testing.T) {
 			cmd.SetOut(&out)
 			cmd.SetErr(&errBuf)
 
-			if err := c.run(cmd, []string{name}); err == nil {
+			err := c.run(cmd, []string{name})
+			if err == nil {
 				t.Fatalf("run(%q) succeeded, want an error", name)
+			}
+			// Assert the guard produced the error, not some later filesystem
+			// accident. The expected message is built through i18n.G so the
+			// assertion holds whatever locale the test runs under.
+			want := fmt.Sprintf(i18n.G("invalid skill name %q: must be a single path element"), name)
+			if err.Error() != want {
+				t.Errorf("run(%q) failed for the wrong reason:\n got: %v\nwant: %v", name, err, want)
 			}
 
 			if _, err := os.Stat(canary); err != nil {

@@ -10,7 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/draft"
+	"github.com/nanjj/slingshot/internal/getaccesstoken"
 )
 
 // writeCachedTokenConfig points HOME at a temporary directory holding a config
@@ -19,7 +21,11 @@ import (
 func writeCachedTokenConfig(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
+	// os.UserHomeDir reads $HOME on Unix and %USERPROFILE% on Windows. Both are
+	// pointed at the same temp dir so the planted config is found on either
+	// platform (and t.Setenv restores them afterwards).
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	dir := filepath.Join(home, ".config", "slingshot")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -33,6 +39,9 @@ func writeCachedTokenConfig(t *testing.T) {
 
 // stubDraftShow points draft.GetURL at an httptest server answering with the
 // given news_item body, and restores the previous endpoint on cleanup.
+//
+// not parallel-safe: mutates a package global (draft.GetURL), so tests using
+// this helper must not call t.Parallel().
 func stubDraftShow(t *testing.T, newsItems string) {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +97,14 @@ func TestDraftExtractRunStdoutIsClean(t *testing.T) {
 	writeCachedTokenConfig(t)
 	stubDraftShow(t, `[{"title":"T","content":"<section>x</section>"}]`)
 
+	// The planted config carries a valid, far-future cached token, so
+	// getaccesstoken.GetToken returns it without a network round-trip; the
+	// only HTTP traffic is the stubbed draft.Show below. If the token were
+	// not used, this call would hang or fail against the real WeChat API.
+	if token, ok := cachedTokenForTest(t); !ok || token != "test-token" {
+		t.Fatalf("planted cached token not found (token=%q ok=%v)", token, ok)
+	}
+
 	c, cmd, out, _ := newExtractCmd()
 	if err := c.run(cmd, []string{"media-id"}); err != nil {
 		t.Fatalf("run: %v", err)
@@ -137,4 +154,21 @@ func TestDraftExtractRunMultiArticleSeparator(t *testing.T) {
 	if out.String() != want {
 		t.Errorf("stdout = %q, want %q", out.String(), want)
 	}
+}
+
+// cachedTokenForTest loads the config the same way the command does and
+// reports whether a valid cached token is present. It makes the "no network
+// for the token step" claim in TestDraftExtractRunStdoutIsClean explicit
+// rather than incidental.
+func cachedTokenForTest(t *testing.T) (string, bool) {
+	t.Helper()
+	cfg, _, err := config.Load()
+	if err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+	token, err := getaccesstoken.GetToken(cfg)
+	if err != nil {
+		return "", false
+	}
+	return token, true
 }
