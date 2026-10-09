@@ -174,9 +174,11 @@ diff 中的正常噪声（别当成异常）：
 - 图片被重新复制（mtime 刷新），下次 rsync 会重传这些图片（内容不变）；
 - 根 `index.html` 通常不变，除非页面标题或源文件 `#+date:` 变化。
 
-> ⚠️ **与 weixin skill 的同名文件争用**：`page update` 会把转换结果写到源文件旁的
-> `<name>.html`（站点版），与公众号管线（`draft convert` 写微信版）同名互相覆盖。
-> 同一篇若还发公众号：**先站点、后微信**——详见 weixin skill「更新已发布文章（实战 SOP）」。
+> ✅ **同名文件争用已结构性修复**（2026-10-09）：`page add/update` 处理 `.org` 时只在
+> 临时目录里做 Emacs 导出，**不再在源目录写出 `<name>.html`**，因此不会覆盖公众号管线
+> （`draft convert` 写微信版）的同名产物，draft 产物也不会被 page 管线静默复用。
+> 同一篇若还发公众号，仍建议微信侧显式 `draft convert` 重建——详见 weixin skill
+> 「更新已发布文章（实战 SOP）」。
 
 ## zine 类型工作流
 
@@ -291,7 +293,7 @@ slingshot site rsync docs
 - **zine 依赖**：系统需安装 [Zine](https://zine-ssg.io/)（静态二进制，下载解压即可）
 - **zine 站点**：不适用 `page add/update/remove`，内容管理见 site-zine skill
 - **页面更新**：`page update` 要求页面目录已存在；首次添加用 `page add`
-- **与公众号共文**：同名 `<name>.html` 双管线覆盖，顺序「先站点、后微信」（见上文 SOP）
+- **与公众号共文**：page 管线在临时目录导出，不再写源目录的 `<name>.html`，与公众号管线不再争用同名文件（见上文说明）
 
 > 维护：本 skill 上游 = slingshot 仓库 `cmd/slingshot/embedded_skills/site-page/SKILL.md`；
 > 修改后 `make install` 重建二进制，再到项目里 `slingshot skill install site-page` 刷新安装副本。

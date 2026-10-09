@@ -151,17 +151,21 @@ slingshot meterial remove <media_id>
 > 场景：文章同时发布到个人站点 + 微信公众号，改完源文件（`.org`/`.md`）后两处同步更新；
 > 按本节顺序执行。
 
-### 关键陷阱：`<name>.html` 被两条管线共用
+### `<name>.html` 共享陷阱（已结构性修复）
 
-源文件旁生成的 `<name>.html` 有两个产生者，内容不同、先后互相覆盖：
+历史上源文件旁的 `<name>.html` 有两个产生者，内容不同、先后互相覆盖：
 
 - `slingshot page update <site> <name>.org` → 生成**站点版**（Emacs 导出）
 - `slingshot draft convert <name>.org --upload` → 生成**微信版**（内联样式、SVG 公式、CDN 图片）
 
-另注意：`slingshot draft update <name>.org`（直接传 .org）在「`.html` 不比 `.org` 旧」时
-**直接复用现有 `.html`**、不重新转换——page 更新后 `.html` 恰是站点版，会原样发进草稿。
+**page 管线现已隔离**：`page add/update` 处理 `.org` 时只在临时目录里做 Emacs 导出，
+不再在源目录写出 `<name>.html`——源目录里同名文件不会再被 page 管线覆盖，draft 管线
+产物也不会被 page 管线静默复用。两条管线不再争用同一个文件。
 
-**所以：顺序固定「先站点、后微信」；微信侧始终显式 `draft convert` 重建。**
+仍需注意：`slingshot draft update <name>.org`（直接传 .org）在「`.html` 不比 `.org` 旧」时
+**直接复用现有 `.html`**、不重新转换——若该 `.html` 是早先的手工/其它产物，可能不是微信版。
+
+**推荐：微信侧始终显式 `draft convert` 重建，得到确定的微信版 HTML。**
 
 > ⚠️ 站点部署不要用裸 `slingshot site rsync`（2026-10-09 实测：重复高亮会把已高亮的代码块
 > 二次转义，一次损坏 26 页）；用 `page update --rsync`——详见 site-page skill「部署」节警告。
@@ -171,7 +175,7 @@ slingshot meterial remove <media_id>
 ```bash
 # 0. 进入文章目录（例：tikzlings/jiheti01），确认源文件已改好
 
-# 1. 站点：重建页面并部署（--rsync 一步完成；顺带把 <name>.html 覆盖为站点版，无妨——第 3 步会重建微信版）
+# 1. 站点：重建页面并部署（--rsync 一步完成；page 管线在临时目录导出，不动源目录的 <name>.html）
 slingshot page update --rsync nanjj.dscli.io <name>.org
 
 # 2. 站点：复核 + 提交 + 推送（部署已在第 1 步完成）
@@ -270,7 +274,7 @@ slingshot meterial add cover.jpg
   大多数 Linux/macOS 环境默认可用；若缺失，降级使用 `.md` 文件即可。
 - **微信 API 网络**：直连（勿设 `HTTPS_PROXY`）；出口 IP 须在公众号「IP 白名单」内（`curl -s https://ipinfo.io/ip` 查看）
 - **git 推送网络**：本机 gitlab 需 `HTTPS_PROXY=socks5h://localhost:8777`；gitcode 走 SSH 直连
-- **同名文件 `<name>.html` 双管线**：更新顺序「先站点、后微信」，详见「更新已发布文章（实战 SOP）」
+- **同名文件 `<name>.html` 双管线**：page 管线已在临时目录导出（不再写源目录），两条管线不再争用同名文件；微信侧仍建议显式 `draft convert` 重建，详见「更新已发布文章（实战 SOP）」
 - **站点部署**：用 `page update --rsync nanjj.dscli.io <name>.org`；避免裸 `slingshot site rsync`（重复高亮会破坏代码块，2026-10-09 实测）
 
 ## SVG 图片处理
