@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 // bt is a single backtick. Test fixtures build fences from it so this file
@@ -275,6 +277,106 @@ func TestWeixinSkillDocumentsDraftAndMaterialCommands(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("weixin SKILL.md is missing documented command %q", want)
+		}
+	}
+}
+
+// skillFixtureFS is a minimal skill tree with a nested script and a reference
+// file, used to exercise installSkillFS without touching the embedded skills.
+func skillFixtureFS() fstest.MapFS {
+	return fstest.MapFS{
+		"skill/SKILL.md": &fstest.MapFile{
+			Data: []byte("---\nname: demo\n---\n\n# demo\n"),
+			Mode: 0644,
+		},
+		"skill/scripts/demo.sh": &fstest.MapFile{
+			Data: []byte("#!/bin/sh\necho demo\n"),
+			Mode: 0644, // MapFS mode is ignored: installSkillFS decides.
+		},
+		"skill/references/note.md": &fstest.MapFile{
+			Data: []byte("# note\n"),
+			Mode: 0644,
+		},
+	}
+}
+
+// TestInstallSkillFSCopiesWholeTree pins the install contract: the whole skill
+// directory is copied (not just SKILL.md), scripts/ stays executable, other
+// files are 0644, and a previous installation is wiped first.
+func TestInstallSkillFSCopiesWholeTree(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "demo")
+
+	// Pre-existing stale file from an older layout must not survive.
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		t.Fatalf("seeding destination: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, "stale.md"), []byte("old"), 0644); err != nil {
+		t.Fatalf("seeding stale file: %v", err)
+	}
+
+	files, err := installSkillFS(skillFixtureFS(), "skill", dest)
+	if err != nil {
+		t.Fatalf("installSkillFS: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(dest, "SKILL.md"),
+		filepath.Join(dest, "references", "note.md"),
+		filepath.Join(dest, "scripts", "demo.sh"),
+	}
+	if strings.Join(files, "\n") != strings.Join(want, "\n") {
+		t.Errorf("installed files = %v, want %v", files, want)
+	}
+
+	for _, tc := range []struct {
+		rel     string
+		content string
+		mode    fs.FileMode
+	}{
+		{"SKILL.md", "---\nname: demo\n---\n\n# demo\n", 0644},
+		{"scripts/demo.sh", "#!/bin/sh\necho demo\n", 0755},
+		{"references/note.md", "# note\n", 0644},
+	} {
+		t.Run(tc.rel, func(t *testing.T) {
+			path := filepath.Join(dest, filepath.FromSlash(tc.rel))
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("reading %q: %v", path, err)
+			}
+			if string(data) != tc.content {
+				t.Errorf("%s content = %q, want %q", tc.rel, data, tc.content)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatalf("stat %q: %v", path, err)
+			}
+			if got := info.Mode().Perm(); got != tc.mode {
+				t.Errorf("%s mode = %o, want %o", tc.rel, got, tc.mode)
+			}
+		})
+	}
+
+	if _, err := os.Stat(filepath.Join(dest, "stale.md")); !os.IsNotExist(err) {
+		t.Errorf("stale file survived reinstall (err=%v)", err)
+	}
+}
+
+// TestIsScriptPath pins the executable-file rule to the scripts/ directory at
+// any depth, and only that directory.
+func TestIsScriptPath(t *testing.T) {
+	for _, tc := range []struct {
+		rel  string
+		want bool
+	}{
+		{"scripts/demo.sh", true},
+		{"scripts/nested/deep.sh", true},
+		{"a/scripts/b.sh", true},
+		{"SKILL.md", false},
+		{"scripts.md", false},
+		{"references/note.md", false},
+	} {
+		if got := isScriptPath(tc.rel); got != tc.want {
+			t.Errorf("isScriptPath(%q) = %v, want %v", tc.rel, got, tc.want)
 		}
 	}
 }

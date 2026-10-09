@@ -3,10 +3,13 @@ package main
 import (
 	"embed"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -109,8 +112,10 @@ func (c *cmdSkillInstall) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Install a built-in skill to the local skills directory.
 
-The skill's SKILL.md is extracted from the binary and written to the
-destination directory. By default the skill is installed under
+The skill's whole directory is extracted from the binary: SKILL.md and every
+companion file (references/, scripts/, ...) are written to the destination
+directory. Regular files are installed with mode 0644; files under scripts/
+are installed executable (0755). By default the skill is installed under
 <project root>/.dscli/skills/<name>/, where <project root> is the nearest
 ancestor of $PWD that contains a .git or .dscli directory (falling back
 to $PWD if none is found). Use --path to specify a custom directory.
@@ -132,19 +137,10 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 	skillName := args[0]
 
 	// Verify the skill exists in embedded FS
-	skillDir := filepath.Join("embedded_skills", skillName)
+	skillDir := path.Join("embedded_skills", skillName)
 	info, err := fs.Stat(skillsFS, skillDir)
-	if err != nil {
+	if err != nil || !info.IsDir() {
 		return fmt.Errorf(i18n.G("skill %q not found"), skillName)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf(i18n.G("skill %q not found"), skillName)
-	}
-
-	// Read SKILL.md
-	skillContent, err := skillsFS.ReadFile(filepath.Join(skillDir, "SKILL.md"))
-	if err != nil {
-		return fmt.Errorf(i18n.G("skill %q has no SKILL.md"), skillName)
 	}
 
 	// Determine install path: use --path, or derive from project root
@@ -161,24 +157,103 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 		installPath = filepath.Join(base, ".dscli", "skills")
 	}
 
-	// Clean any previous installation, then create destination directory
 	destDir := filepath.Join(installPath, skillName)
+	files, err := installSkillFS(skillsFS, skillDir, destDir)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Installed skill %s to %s (%d file(s))\n"),
+		color.GreenString(skillName), color.CyanString(destDir), len(files))
+	return nil
+}
+
+// installSkillFS copies the whole embedded skill tree rooted at srcDir (an
+// fs.FS path such as "embedded_skills/weixin") into destDir on the local
+// filesystem and returns the installed file paths, sorted.
+//
+// Permissions follow one rule: directories are 0755, regular files are 0644,
+// and every file under a "scripts/" directory is 0755 so installed helper
+// scripts are directly executable.
+//
+// The destination is wiped first, so a previous installation that contained
+// extra files (an older layout) cannot leave stale files behind.
+func installSkillFS(fsys fs.FS, srcDir, destDir string) ([]string, error) {
 	if err := os.RemoveAll(destDir); err != nil {
-		return fmt.Errorf("cleaning previous installation %q: %w", destDir, err)
+		return nil, fmt.Errorf("cleaning previous installation %q: %w", destDir, err)
 	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("creating directory %q: %w", destDir, err)
+		return nil, fmt.Errorf("creating directory %q: %w", destDir, err)
 	}
 
-	// Write SKILL.md
-	destFile := filepath.Join(destDir, "SKILL.md")
-	if err := os.WriteFile(destFile, skillContent, 0644); err != nil {
-		return fmt.Errorf("writing %q: %w", destFile, err)
+	var installed []string
+	err := fs.WalkDir(fsys, srcDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(filepath.FromSlash(srcDir), filepath.FromSlash(p))
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		dest := filepath.Join(destDir, rel)
+
+		if d.IsDir() {
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return fmt.Errorf("creating directory %q: %w", dest, err)
+			}
+			return nil
+		}
+
+		// Stream the file rather than buffering it: skills may ship assets.
+		src, err := fsys.Open(p)
+		if err != nil {
+			return fmt.Errorf("opening %q: %w", p, err)
+		}
+		defer src.Close()
+
+		mode := fs.FileMode(0644)
+		if isScriptPath(rel) {
+			mode = 0755
+		}
+		out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+		if err != nil {
+			return fmt.Errorf("creating %q: %w", dest, err)
+		}
+		if _, err := io.Copy(out, src); err != nil {
+			out.Close()
+			return fmt.Errorf("writing %q: %w", dest, err)
+		}
+		if err := out.Close(); err != nil {
+			return fmt.Errorf("writing %q: %w", dest, err)
+		}
+		// OpenFile honours umask on create; chmod restores the intended mode.
+		if err := os.Chmod(dest, mode); err != nil {
+			return fmt.Errorf("setting mode on %q: %w", dest, err)
+		}
+
+		installed = append(installed, dest)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Installed skill %s to %s\n"),
-		color.GreenString(skillName), color.CyanString(destFile))
-	return nil
+	sort.Strings(installed)
+	return installed, nil
+}
+
+// isScriptPath reports whether a skill-relative path lives under a scripts/
+// directory and must therefore be installed executable.
+func isScriptPath(rel string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if part == "scripts" {
+			return true
+		}
+	}
+	return false
 }
 
 // findProjectRoot walks up from the current directory to find the

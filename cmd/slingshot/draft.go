@@ -31,6 +31,10 @@ var draftShowUsage = u.Usage{
 	u.ID,
 }
 
+var draftExtractUsage = u.Usage{
+	u.ID,
+}
+
 // cmdDraft 是 draft 的父命令。
 type cmdDraft struct {
 	global *cmdGlobal
@@ -51,12 +55,13 @@ sidecar YAML automatically. If no sidecar exists, the first draft in
 the list is used as a default.
 
 Subcommands:
-	hILz   list              List all drafts
-	7ckj   add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)
-	qbD5   update <file>     Update a draft from .org/.md/.html (auto-converts if needed)
+  list              List all drafts
+  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)
+  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)
   remove <id>       Remove a draft (id, index, or file with sidecar YAML)
   show   <id>       Show a draft's details (id, index, or file with sidecar YAML)
   convert <file>    Convert Markdown to WeChat HTML format
+  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -71,6 +76,7 @@ Subcommands:
 		c.cmdRemove().command(),
 		c.cmdShow().command(),
 		c.cmdConvert().command(),
+		c.cmdExtract().command(),
 	)
 
 	return cmd
@@ -123,6 +129,12 @@ func (c *cmdDraft) cmdShow() *cmdDraftSub {
 
 func (c *cmdDraft) cmdConvert() *cmdDraftConvert {
 	return &cmdDraftConvert{
+		global: c.global,
+	}
+}
+
+func (c *cmdDraft) cmdExtract() *cmdDraftExtract {
+	return &cmdDraftExtract{
 		global: c.global,
 	}
 }
