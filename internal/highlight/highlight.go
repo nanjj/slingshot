@@ -103,16 +103,21 @@ func Highlight(src []byte, lang string) []byte {
 // HighlightPage processes an HTML page, finding all <pre class="src-XXX"> blocks
 // and syntax-highlighting the code inside their <code> elements.
 //
-// The transformation is idempotent: f(f(x)) == f(x), in the strong sense that a
-// second pass over its own output rewrites no byte and therefore does not touch
-// the file's mtime. Two guards enforce this: a <code> element whose raw content
-// already contains a literal "<span" (case-insensitive) is treated as the
-// output of a previous highlighting pass and written through verbatim, and a
-// block whose highlighting yields its input back (unknown language, empty
-// block, query matched nothing) is likewise written through and not counted.
-// Without the guards a repeated pass would re-escape markup into visible source
-// text (the 2026-10-09 site-rsync corruption), or churn mtimes on trees that
-// need no work.
+// The transformation is idempotent: f(f(x)) == f(x), in the strong sense that
+// from the second pass onward no byte is rewritten and no file mtime is touched.
+// Two guards enforce this: a <code> element whose raw content already contains a
+// literal "<span" (case-insensitive) is treated as the output of a previous
+// highlighting pass and written through verbatim, and a block whose highlighting
+// yields its input back (unknown language, empty block, query matched nothing)
+// is likewise written through and not counted. Without the guards a repeated
+// pass would re-escape markup into visible source text (the 2026-10-09
+// site-rsync corruption), or churn mtimes on trees that need no work.
+//
+// Scope of the byte guarantee: the first pass can still normalize entity
+// encodings that fall outside Go's html escape set (e.g. a source "&nbsp;"
+// decoded for the highlighter and re-emitted as "\u00a0"), so the first pass
+// may differ from the input. From the second pass on the output is a fixed
+// point: bytes and mtime are stable.
 //
 // Returns the modified HTML and the number of code blocks actually rewritten.
 // On error, returns the original HTML with a count of successfully processed
@@ -189,7 +194,7 @@ func HighlightPage(html []byte) ([]byte, int, error) {
 		// "<SPAN>" is caught too. The trade-off: a hand-written, un-escaped
 		// literal "<span" in source text (impossible from org export, possible
 		// in hand-authored HTML) is left unhighlighted.
-		if bytes.Contains(bytes.ToLower(rawCode), []byte("<span")) {
+		if containsSpanTagFold(rawCode) {
 			result.Write(fullPre)
 			continue
 		}
@@ -357,6 +362,45 @@ func htmlUnescape(src []byte) []byte {
 }
 
 // --- HTML parsing helpers ---
+
+// spanTag is the ASCII tag name searched for, in lower case.
+var spanTag = []byte("span")
+
+// containsSpanTagFold reports whether data contains "<span" compared
+// case-insensitively. It is a byte-wise fold instead of
+// bytes.Contains(bytes.ToLower(data), ...) so no lower-cased copy of the code
+// block is allocated on every call. Only ASCII case is folded, which is all the
+// HTML tag name can contain.
+func containsSpanTagFold(data []byte) bool {
+	// Need data[i] == '<' plus len(spanTag) following bytes: the last start
+	// index that can possibly fit is len(data)-len(spanTag)-1.
+	for i := 0; i+1+len(spanTag) <= len(data); i++ {
+		if data[i] != '<' {
+			continue
+		}
+		// Compare the tag name byte by byte, folding ASCII case.
+		match := true
+		for j := 0; j < len(spanTag); j++ {
+			if lowerASCII(data[i+1+j]) != spanTag[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
+// lowerASCII folds a single ASCII upper-case letter to lower case; any other
+// byte is returned unchanged.
+func lowerASCII(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return b + ('a' - 'A')
+	}
+	return b
+}
 
 // preClassPrefix is the start of a <pre> tag with a class attribute.
 // We search for this and then verify a "src-" token exists in the class,

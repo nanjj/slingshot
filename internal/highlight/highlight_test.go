@@ -543,9 +543,10 @@ func TestHighlightDirSecondPassNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading after first pass: %v", err)
 	}
-	firstStat, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("stat after first pass: %v", err)
+	// The first pass must actually have written a highlighted file, otherwise
+	// the no-op assertion below would be vacuous.
+	if !bytes.Contains(firstBytes, []byte(`style="color:`)) {
+		t.Fatalf("first pass produced no highlight spans:\n%s", firstBytes)
 	}
 
 	// Make the mtime distinguishable from any later write.
@@ -580,5 +581,46 @@ func TestHighlightDirSecondPassNoOp(t *testing.T) {
 	if !bytes.Equal(firstBytes, secondBytes) {
 		t.Errorf("second pass changed bytes:\n%s\n%s", firstBytes, secondBytes)
 	}
-	_ = firstStat
+	// The pre-highlighted block survived verbatim (not double-processed) and
+	// the unknown-language block is still raw (not escaped, not wrapped).
+	if !bytes.Contains(secondBytes, []byte(`<span style="color:#d73a49">func</span> done() {}`)) {
+		t.Errorf("pre-highlighted block was altered:\n%s", secondBytes)
+	}
+	if !bytes.Contains(secondBytes, []byte(`<code>plain text</code>`)) {
+		t.Errorf("unknown-language block was altered:\n%s", secondBytes)
+	}
+}
+
+// TestContainsSpanTagFold pins the case-insensitive tag scan used by the
+// idempotency guard: it must match any ASCII casing of "<span" and must not
+// match a tag name that merely starts with the same letters.
+func TestContainsSpanTagFold(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"lower", `<span style="color:#000">`, true},
+		{"upper", `<SPAN style="color:#000">`, true},
+		{"mixed", `<SpAn>`, true},
+		{"bare", `<span>`, true},
+		{"preceded by text", `x <span class="a">y`, true},
+		{"closing tag has no open", `</span>`, false},
+		{"no tag", `func main() {}`, false},
+		{"escaped", `&lt;span&gt;`, false},
+		{"tag name prefix also matches", `<spanx>`, true},
+		{"shorter than tag", `<spa`, false},
+		{"lt at end", `abc<`, false},
+		{"empty", ``, false},
+		{"lt without name", `a < b`, false},
+		{"second occurrence matches", `<b>x</b><span>`, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := containsSpanTagFold([]byte(tt.in)); got != tt.want {
+				t.Errorf("containsSpanTagFold(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
 }
