@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"os/exec"
@@ -30,12 +31,36 @@ import (
 var imgSrcRe = regexp.MustCompile(`<img[^>]+src=["']([^"']+)["']`)
 
 // dateParagraphRe matches <p class="date">...</p> inserted by Emacs org export.
-var dateParagraphRe = regexp.MustCompile(`(?i)<p\s+class="date"[^>]*>.*?</p>\s*`)
+// The class attribute is matched anywhere in the start tag, so a paragraph
+// carrying extra attributes (id, style, ...) is still recognized.
+var dateParagraphRe = regexp.MustCompile(`(?is)<p\s[^>]*class="date"[^>]*>.*?</p>\s*`)
 
 // slingshotDateRe matches the embedded date comment written by page add.
 
 // Format: <!-- slingshot-date: YYYY-MM-DD -->
 var slingshotDateRe = regexp.MustCompile(`(?i)<!--\s*slingshot-date:\s*(\d{4}-\d{2}-\d{2})\s*-->`)
+
+// dateCommentLineRe matches a slingshot-date comment plus one trailing
+// newline, so stripping it does not leave a blank line behind.
+var dateCommentLineRe = regexp.MustCompile(`(?i)<!--\s*slingshot-date:\s*\d{4}-\d{2}-\d{2}\s*-->\n?`)
+
+// dateParagraphBodyRe captures the body of <p class="date">…</p> emitted by
+// Emacs org export. Unlike dateParagraphRe it captures the text, because the
+// date it carries is one of the clues resolvePageDate falls back to.
+var dateParagraphBodyRe = regexp.MustCompile(`(?is)<p\s[^>]*class="date"[^>]*>(.*?)</p>`)
+
+// tagRe matches a single HTML tag; used to reduce a <p> body to plain text.
+var tagRe = regexp.MustCompile(`<[^>]*>`)
+
+// pDateFormats are the lenient layouts accepted for <p class="date"> text.
+var pDateFormats = []string{
+	"January 2, 2006",
+	"Jan 2, 2006",
+	"Monday, January 2, 2006",
+	"Mon, Jan 2, 2006",
+	"2 January 2006",
+	"2006-01-02",
+}
 
 // --- cmdPageAdd ---
 
@@ -155,24 +180,6 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("reading %q: %w", filePath, err)
 		}
 
-		// Strip <p class="date">...</p> inserted by Emacs org export
-		htmlContent = stripDateParagraphs(htmlContent)
-		// If source was Org, extract #+DATE: and embed it as a machine-readable comment
-		if wasOrg {
-			pageDate := extractOrgDate(originalPath)
-			if !pageDate.IsZero() {
-				htmlContent = embedDateComment(htmlContent, pageDate)
-			}
-		}
-
-		// Inject <link> to the shared stylesheet
-		htmlContent = injectStyleLink(htmlContent, "/style.css?v="+site.CSSVersion)
-
-		// Inject site title heading as a clickable link to the homepage
-		htmlContent = injectSiteTitle(htmlContent, siteConfig.Title)
-		// Downgrade the article's <h1 class="title"> to <h2>
-		htmlContent = downgradeTitleHeading(htmlContent)
-
 		// Derive page name from filename (strip extension)
 		pageName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
 		if pageName == "" {
@@ -183,6 +190,35 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		if !isValidPageName(pageName) {
 			return fmt.Errorf(i18n.G("invalid page name %q: use only letters, numbers, hyphens, and underscores"), pageName)
 		}
+
+		// Resolve the page date while every clue is still intact: the
+		// <p class="date"> paragraph is one of them and stripDateParagraphs
+		// removes it a few lines below.
+		pageDate := resolvePageDate(
+			orgDateOf(wasOrg, originalPath),
+			htmlContent,
+			readDateComment(filepath.Join(siteConfig.Dir, pageName, "index.html")),
+			sourceModTime(originalPath),
+		)
+
+		// Strip <p class="date">...</p> inserted by Emacs org export
+		htmlContent = stripDateParagraphs(htmlContent)
+		// Freeze the resolved date into the page as a machine-readable
+		// comment. Embedding replaces any existing comment, so repeated
+		// add/update cycles never stack duplicates. A zero date means every
+		// clue (including the source mtime) was unavailable; skip rather
+		// than stamp a nonsense 0001-01-01.
+		if !pageDate.IsZero() {
+			htmlContent = embedDateComment(htmlContent, pageDate)
+		}
+
+		// Inject <link> to the shared stylesheet
+		htmlContent = injectStyleLink(htmlContent, "/style.css?v="+site.CSSVersion)
+
+		// Inject site title heading as a clickable link to the homepage
+		htmlContent = injectSiteTitle(htmlContent, siteConfig.Title)
+		// Downgrade the article's <h1 class="title"> to <h2>
+		htmlContent = downgradeTitleHeading(htmlContent)
 
 		pageDir := filepath.Join(siteConfig.Dir, pageName)
 
@@ -535,11 +571,124 @@ func parseOrgDate(content string) time.Time {
 	return time.Time{}
 }
 
+// resolvePageDate picks the stable date for a page. The page add/update
+// pipeline freezes it into the page as a machine-readable comment, which the
+// site index (see extractPageDate) then uses for date-grouped rendering.
+// Without a stable value the index falls back to the output file's mtime and
+// the date drifts on every re-render.
+//
+// Clues are tried in order; the first one yielding a date wins:
+//
+//  1. orgDate     — the Org source #+DATE: property (most authoritative);
+//  2. inputHTML   — a slingshot-date comment already in the input; its value
+//     is preserved instead of re-derived (hand-edited or re-added pages);
+//  3. outputHTML  — a slingshot-date comment in the page currently on disk,
+//     so updating a source that carries no date keeps the published date;
+//  4. inputHTML   — a <p class="date">…</p> paragraph from Emacs org export;
+//  5. srcModTime  — the source file's mtime, frozen into the page on first add.
+//
+// The function is pure: every file read happens in the caller, which keeps the
+// precedence chain testable without touching the filesystem.
+func resolvePageDate(orgDate time.Time, inputHTML, outputHTML []byte, srcModTime time.Time) time.Time {
+	if !orgDate.IsZero() {
+		return orgDate
+	}
+	if t := parseDateComment(inputHTML); !t.IsZero() {
+		return t
+	}
+	if t := parseDateComment(outputHTML); !t.IsZero() {
+		return t
+	}
+	if t := parseDateParagraph(inputHTML); !t.IsZero() {
+		return t
+	}
+	return srcModTime
+}
+
+// parseDateComment extracts the date from a slingshot-date comment.
+// Returns the zero time when the content holds no such comment.
+func parseDateComment(content []byte) time.Time {
+	m := slingshotDateRe.FindSubmatch(content)
+	if len(m) < 2 {
+		return time.Time{}
+	}
+	t, err := time.Parse("2006-01-02", string(m[1]))
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// parseDateParagraph extracts the date from the first <p class="date">…</p>
+// element. Returns the zero time when there is no such element or its text is
+// not a recognizable date.
+func parseDateParagraph(content []byte) time.Time {
+	m := dateParagraphBodyRe.FindSubmatch(content)
+	if len(m) < 2 {
+		return time.Time{}
+	}
+	// Reduce the body to plain text: drop tags, decode entities, collapse
+	// whitespace (org export wraps the value across lines).
+	text := string(tagRe.ReplaceAll(m[1], nil))
+	text = html.UnescapeString(text)
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return time.Time{}
+	}
+	for _, f := range pDateFormats {
+		if t, err := time.Parse(f, text); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// orgDateOf returns the #+DATE: timestamp of an Org source, or the zero time
+// when the input did not come from Org.
+func orgDateOf(wasOrg bool, originalPath string) time.Time {
+	if !wasOrg {
+		return time.Time{}
+	}
+	return extractOrgDate(originalPath)
+}
+
+// readDateComment returns the slingshot-date comment of the HTML file at path.
+// A missing or unreadable file is the normal first-add case, not an error, so
+// it yields nil.
+func readDateComment(path string) []byte {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return slingshotDateRe.Find(data)
+}
+
+// sourceModTime returns the modification time of the page's source file, or
+// the zero time when it cannot be stat'ed.
+func sourceModTime(path string) time.Time {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
+}
+
 // embedDateComment prepends a machine-readable date comment to HTML content
 // so the site index generator can use it for date-grouped rendering.
+//
+// It is idempotent: any pre-existing slingshot-date comment is removed first,
+// so re-running the pipeline replaces the old value instead of stacking a
+// second comment on top (and a run over an already-correct page is a no-op).
 func embedDateComment(html []byte, date time.Time) []byte {
+	html = stripDateComments(html)
 	comment := fmt.Sprintf("<!-- slingshot-date: %s -->\n", date.Format("2006-01-02"))
 	return append([]byte(comment), html...)
+}
+
+// stripDateComments removes every slingshot-date comment from HTML content,
+// together with one trailing newline so no blank line is left behind.
+func stripDateComments(html []byte) []byte {
+	return dateCommentLineRe.ReplaceAll(html, nil)
 }
 
 // orgToHTMLFile converts an Org file to HTML using Emacs batch mode.

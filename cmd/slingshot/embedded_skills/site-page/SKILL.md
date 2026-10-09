@@ -102,6 +102,20 @@ slingshot page remove mysite my-article
 - **相对路径**（如 `images/photo.png`）：自动复制到页面目录
 - **缺失图片**：报警告但不中断
 
+### 页面日期
+
+`page add/update` 会为每个页面写入一条机器可读的日期注释：
+
+```html
+<!-- slingshot-date: 2006-01-02 -->
+```
+
+日期按以下优先级解析（取第一个命中）：Org 源 `#+DATE:` → 输入 HTML 中已有的注释 →
+更新场景下当前输出页 `index.html` 中已有的注释 → 输入 HTML 的 `<p class="date">`（org
+导出后遗留）→ 源文件 mtime。注释是幂等的：重复 add/update 会替换旧值而非叠加。
+
+> 固定日期后站点索引按日期分组，且重新生成页面不会让日期漂移到「今天」。
+
 ### 索引自动生成
 
 添加/更新/移除页面后自动重新生成站点根目录的 `index.html`，以页面 `<title>` 作为链接文本。
@@ -111,26 +125,31 @@ slingshot page remove mysite my-article
 ### 部署
 
 ```bash
-slingshot page update --rsync mysite my-article.org   # 推荐：重建页面并部署（只处理目标页）
-slingshot site rsync mysite                            # ⚠️ 全站重复高亮，修复前避免（见下）
+slingshot page update --rsync mysite my-article.org   # 首选：重建页面并部署（只处理目标页）
+slingshot site rsync mysite                            # 全站部署（已幂等，安全）
+slingshot site rsync --no-highlight mysite             # 逃生阀：完全跳过高亮步骤
 ```
 
 page 类型 rsync 流程：
 1. 自动优化站点 CSS（检查响应式 sentinel，未优化则升级）
-2. 对全站所有 HTML 重复执行代码高亮（`highlight.HighlightDir`）
+2. 对全站所有 HTML 执行代码高亮（`highlight.HighlightDir`）
 3. 从站点目录 `./` 执行 rsync
 
-> ⚠️ **修复前避免裸 `slingshot site rsync`**（2026-10-09 实测）：第 2 步的重复高亮对「已高亮的
-> 代码块」不是幂等的——它把上一轮高亮写入的 `<span>` 标签当作源码再次高亮，二次转义成页面
-> 可见的文本，一次运行即可破坏全站所有带代码块的页面。修复前的替代：`slingshot page update
-> --rsync <site> <file>.org`（只处理目标页），或直接执行站点配置里的原生 rsync 命令（纯上传）。
+> ✅ **高亮器已幂等**（2026-10-09 修复）：`HighlightPage` 现在跳过已经高亮的代码块
+> （`<code>` 内含字面量 `<span` 即视为既有高亮输出，原样写出），因此对全站重复执行高亮
+> 不会把上一轮的 `<span>` 当源码二次转义。裸 `slingshot site rsync` 默认安全，可放心使用。
+> 日常单页更新仍推荐 `slingshot page update --rsync <site> <file>.org`——它只处理目标页，
+> 且会把页面日期固化下来（见「页面日期」）。
+>
+> **逃生阀**：`--no-highlight` 跳过整个高亮步骤（不打印计数行）。适用于站点由其它工具
+> 负责高亮、或需要在完全不动 HTML 的前提下纯上传的场景。
 
 ### 更新已发布页面（SOP）
 
 > 本机实例：站点名 `nanjj.dscli.io`（目录 `~/.local/src/gitlab.com/dscli/nanjj.dscli.io`）。
 
 ```bash
-# 1. 重建页面并部署（--rsync 一步完成；不要用裸 site rsync——见「部署」节警告）
+# 1. 重建页面并部署（--rsync 一步完成）
 slingshot page update --rsync mysite my-article.org
 
 # 2. git 复核 + 提交 + 推送
@@ -213,8 +232,10 @@ slingshot site rsync mysite
 ```
 
 slingshot 根据站点类型自动选择流程：
-- **page**：CSS 优化 → 从 `./` rsync
+- **page**：CSS 优化 → 全站高亮（幂等）→ 从 `./` rsync
 - **zine**：`zine release --force` 构建 → 从 `public/` rsync
+
+> 加 `--no-highlight` 可跳过 page 类型的全站高亮步骤。
 
 ## 端到端示例
 
