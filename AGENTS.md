@@ -39,7 +39,7 @@ internal/
 
 ```
 slingshot
-├── draft list|add|update|remove|show|convert|extract <file>
+├── draft list|add|update|remove|show|convert <file>|extract <id>
 ├── config list|show|get|set|unset
 ├── meterial add|list|remove|show
 ├── skill list|install

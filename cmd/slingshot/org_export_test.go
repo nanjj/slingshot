@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -124,6 +125,8 @@ func TestProcessFileOrgDoesNotPolluteSource(t *testing.T) {
 
 	c := &cmdPageAdd{}
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 	if _, err := c.processFile(cmd, orgPath, config.Site{Dir: siteDir}); err != nil {
 		t.Fatalf("processFile: %v", err)
 	}
