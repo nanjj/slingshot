@@ -116,35 +116,14 @@ Use --rsync to automatically deploy the site after adding the pages.`),
 }
 
 func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
-	usage := pageAddUsage
-	if c.update {
-		usage = pageUpdateUsage
-	}
-
-	parsed, err := c.global.Parse(usage, cmd, args)
+	siteName, filePaths, err := c.parseArgs(cmd, args)
 	if err != nil {
 		return err
 	}
-	if len(parsed) < 2 || parsed[0].Skipped {
-		return errors.New(i18n.G("expected site name"))
-	}
-	if len(parsed) < 2 || parsed[1].Skipped || len(parsed[1].StringList) == 0 {
-		return errors.New(i18n.G("expected at least one file argument"))
-	}
-	siteName := parsed[0].String
-	filePaths := parsed[1].StringList
 
-	// Load config and get site (once, before processing files)
-	cfg, _, err := config.Load()
+	siteConfig, err := loadSiteConfig(siteName)
 	if err != nil {
-		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
-	}
-	siteConfig, ok := config.GetSite(cfg, siteName)
-	if !ok {
-		return fmt.Errorf(i18n.G("site %q not found"), siteName)
-	}
-	if siteConfig.Dir == "" {
-		return fmt.Errorf(i18n.G("site %q has no directory configured"), siteName)
+		return err
 	}
 
 	// Ensure site has an optimized style.css (creates if missing, upgrades if old)
@@ -154,106 +133,9 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 
 	var processed int
 	for _, filePath := range filePaths {
-		// Validate source file exists
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			return fmt.Errorf(i18n.G("file not found: %s"), filePath)
-		}
-		// Save original path before possible .org -> .html conversion
-		originalPath := filePath
-
-		// If source is an Org file, convert to HTML using Emacs first
-		var wasOrg bool
-		if strings.HasSuffix(filePath, ".org") {
-			wasOrg = true
-			htmlPath, err := orgToHTMLFile(filePath)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s\n",
-				color.CyanString("\xe2\x86\x92"), filepath.Base(filePath), filepath.Base(htmlPath))
-			filePath = htmlPath
-		}
-
-		// Read source HTML
-		htmlContent, err := os.ReadFile(filePath)
+		pageName, err := c.processFile(cmd, filePath, siteConfig)
 		if err != nil {
-			return fmt.Errorf("reading %q: %w", filePath, err)
-		}
-
-		// Derive page name from filename (strip extension)
-		pageName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
-		if pageName == "" {
-			return errors.New(i18n.G("invalid page name derived from filename"))
-		}
-
-		// Validate page name: only allow safe characters
-		if !isValidPageName(pageName) {
-			return fmt.Errorf(i18n.G("invalid page name %q: use only letters, numbers, hyphens, and underscores"), pageName)
-		}
-
-		// Resolve the page date while every clue is still intact: the
-		// <p class="date"> paragraph is one of them and stripDateParagraphs
-		// removes it a few lines below.
-		pageDate := resolvePageDate(
-			orgDateOf(wasOrg, originalPath),
-			htmlContent,
-			readDateComment(filepath.Join(siteConfig.Dir, pageName, "index.html")),
-			sourceModTime(originalPath),
-		)
-
-		// Strip <p class="date">...</p> inserted by Emacs org export
-		htmlContent = stripDateParagraphs(htmlContent)
-		// Freeze the resolved date into the page as a machine-readable
-		// comment. Embedding replaces any existing comment, so repeated
-		// add/update cycles never stack duplicates. A zero date means every
-		// clue (including the source mtime) was unavailable; skip rather
-		// than stamp a nonsense 0001-01-01.
-		if !pageDate.IsZero() {
-			htmlContent = embedDateComment(htmlContent, pageDate)
-		}
-
-		// Inject <link> to the shared stylesheet
-		htmlContent = injectStyleLink(htmlContent, "/style.css?v="+site.CSSVersion)
-
-		// Inject site title heading as a clickable link to the homepage
-		htmlContent = injectSiteTitle(htmlContent, siteConfig.Title)
-		// Downgrade the article's <h1 class="title"> to <h2>
-		htmlContent = downgradeTitleHeading(htmlContent)
-
-		pageDir := filepath.Join(siteConfig.Dir, pageName)
-
-		// Create page directory
-		if err := os.MkdirAll(pageDir, 0755); err != nil {
-			return fmt.Errorf("creating page directory: %w", err)
-		}
-
-		// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
-		// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
-		htmlContent = mdtowx.RemoveCJCSpace(htmlContent)
-
-		// Syntax-highlight code blocks in the HTML
-		if highlighted, count, hlErr := highlight.HighlightPage(htmlContent); hlErr == nil && count > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s %d code block(s) highlighted\n",
-				color.CyanString("\xe2\x86\x92"), count)
-			htmlContent = highlighted
-		}
-
-		// Write index.html
-		indexPath := filepath.Join(pageDir, "index.html")
-		if err := os.WriteFile(indexPath, htmlContent, 0644); err != nil {
-			return fmt.Errorf("writing index.html: %w", err)
-		}
-
-		// Extract and copy image assets
-		sourceDir := filepath.Dir(filePath)
-		copied, err := copyPageImages(htmlContent, sourceDir, pageDir)
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "%s %v\n",
-				color.YellowString(i18n.G("Warning:")), err)
-		}
-		if copied > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s %d %s\n",
-				color.CyanString("\xe2\x86\x92"), copied, i18n.G("image(s) copied"))
+			return err
 		}
 
 		verb := i18n.G("Added")
@@ -263,7 +145,6 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(color.Output, "%s %s/%s\n", color.GreenString(verb+":"), siteName, color.GreenString(pageName))
 		processed++
 	}
-
 	if processed == 0 {
 		return errors.New(i18n.G("no files processed"))
 	}
@@ -275,23 +156,183 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 
 	// --rsync: deploy site via rsync after success
 	if c.flagRsync {
-		if siteConfig.Rsync == "" {
-			return fmt.Errorf(i18n.G("site %q has no rsync command configured"), siteName)
-		}
-		fmt.Fprintf(color.Output, "\n%s %s\n", i18n.G("Deploying via rsync for site:"), color.GreenString(siteName))
-		if err := doRsync(siteConfig.Dir, siteConfig.Rsync); err != nil {
+		if err := deploySite(siteName, siteConfig); err != nil {
 			return err
 		}
-		fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("\xe2\x9c\x93"), i18n.G("Rsync completed successfully."))
 	}
 
 	return nil
 }
 
+// deploySite runs the site's configured rsync command after a successful
+// add/update. Extracted from run so the deploy step reads as one call.
+func deploySite(siteName string, siteConfig config.Site) error {
+	if siteConfig.Rsync == "" {
+		return fmt.Errorf(i18n.G("site %q has no rsync command configured"), siteName)
+	}
+	fmt.Fprintf(color.Output, "\n%s %s\n", i18n.G("Deploying via rsync for site:"), color.GreenString(siteName))
+	if err := doRsync(siteConfig.Dir, siteConfig.Rsync); err != nil {
+		return err
+	}
+	fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("\xe2\x9c\x93"), i18n.G("Rsync completed successfully."))
+	return nil
+}
+
+// parseArgs parses the command line and returns the site name and the list of
+// source files. Extracted from run to keep the entry point a step sequence.
+func (c *cmdPageAdd) parseArgs(cmd *cobra.Command, args []string) (string, []string, error) {
+	usage := pageAddUsage
+	if c.update {
+		usage = pageUpdateUsage
+	}
+
+	parsed, err := c.global.Parse(usage, cmd, args)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(parsed) < 2 || parsed[0].Skipped {
+		return "", nil, errors.New(i18n.G("expected site name"))
+	}
+	if parsed[1].Skipped || len(parsed[1].StringList) == 0 {
+		return "", nil, errors.New(i18n.G("expected at least one file argument"))
+	}
+	return parsed[0].String, parsed[1].StringList, nil
+}
+
+// loadSiteConfig loads the configuration and returns the named site, failing
+// when the site is missing or has no directory configured.
+func loadSiteConfig(siteName string) (config.Site, error) {
+	cfg, _, err := config.Load()
+	if err != nil {
+		return config.Site{}, fmt.Errorf("%s: %w", i18n.G("loading config"), err)
+	}
+	siteConfig, ok := config.GetSite(cfg, siteName)
+	if !ok {
+		return config.Site{}, fmt.Errorf(i18n.G("site %q not found"), siteName)
+	}
+	if siteConfig.Dir == "" {
+		return config.Site{}, fmt.Errorf(i18n.G("site %q has no directory configured"), siteName)
+	}
+	return siteConfig, nil
+}
+
+// processFile runs the whole per-file pipeline for one source path: Org
+// conversion, read, page-name derivation and validation, date resolution, HTML
+// post-processing, index.html write and image copying. It returns the derived
+// page name. Extracted from run so each step stays individually readable.
+func (c *cmdPageAdd) processFile(cmd *cobra.Command, filePath string, siteConfig config.Site) (string, error) {
+	// Validate source file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return "", fmt.Errorf(i18n.G("file not found: %s"), filePath)
+	}
+	// Save original path before possible .org -> .html conversion
+	originalPath := filePath
+
+	// If source is an Org file, convert to HTML using Emacs first
+	var wasOrg bool
+	if strings.HasSuffix(filePath, ".org") {
+		wasOrg = true
+		htmlPath, err := orgToHTMLFile(filePath)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s\n",
+			color.CyanString("\xe2\x86\x92"), filepath.Base(filePath), filepath.Base(htmlPath))
+		filePath = htmlPath
+	}
+
+	// Read source HTML
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("reading %q: %w", filePath, err)
+	}
+
+	// Derive page name from filename (strip extension) and validate it
+	pageName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	if pageName == "" {
+		return "", errors.New(i18n.G("invalid page name derived from filename"))
+	}
+	if !isValidPageName(pageName) {
+		return "", fmt.Errorf(i18n.G("invalid page name %q: use only letters, numbers, hyphens, and underscores"), pageName)
+	}
+
+	pageDir := filepath.Join(siteConfig.Dir, pageName)
+
+	// Resolve and freeze the page date before any content rewrite.
+	content = applyPageDate(content, wasOrg, originalPath, siteConfig.Dir, pageName)
+
+	// Inject <link> to the shared stylesheet
+	content = injectStyleLink(content, "/style.css?v="+site.CSSVersion)
+
+	// Inject site title heading as a clickable link to the homepage
+	content = injectSiteTitle(content, siteConfig.Title)
+	// Downgrade the article's <h1 class="title"> to <h2>
+	content = downgradeTitleHeading(content)
+
+	// Create page directory
+	if err := os.MkdirAll(pageDir, 0755); err != nil {
+		return "", fmt.Errorf("creating page directory: %w", err)
+	}
+
+	// Remove spaces between non-ASCII (e.g., CJK) characters — common artifact from
+	// markdown/org paragraph wrapping or manual editing (e.g., "相 信" -> "相信").
+	content = mdtowx.RemoveCJCSpace(content)
+
+	// Syntax-highlight code blocks in the HTML
+	if highlighted, count, hlErr := highlight.HighlightPage(content); hlErr == nil && count > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "%s %d code block(s) highlighted\n",
+			color.CyanString("\xe2\x86\x92"), count)
+		content = highlighted
+	}
+
+	// Write index.html
+	indexPath := filepath.Join(pageDir, "index.html")
+	if err := os.WriteFile(indexPath, content, 0644); err != nil {
+		return "", fmt.Errorf("writing index.html: %w", err)
+	}
+
+	// Extract and copy image assets
+	sourceDir := filepath.Dir(filePath)
+	copied, err := copyPageImages(content, sourceDir, pageDir)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s %v\n",
+			color.YellowString(i18n.G("Warning:")), err)
+	}
+	if copied > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "%s %d %s\n",
+			color.CyanString("\xe2\x86\x92"), copied, i18n.G("image(s) copied"))
+	}
+
+	return pageName, nil
+}
+
+// applyPageDate resolves the page's stable date from every available clue and
+// freezes it into the content as a machine-readable comment. The clue order and
+// the stripping order are both load-bearing: the <p class="date"> paragraph is
+// one of the clues, so it must be parsed before stripDateParagraphs removes it.
+// Embedding replaces any existing comment, so repeated add/update cycles never
+// stack duplicates; a zero date (every clue, including the source mtime, was
+// unavailable) is skipped rather than stamped as 0001-01-01.
+func applyPageDate(content []byte, wasOrg bool, originalPath, siteDir, pageName string) []byte {
+	pageDate := resolvePageDate(
+		orgDateOf(wasOrg, originalPath),
+		content,
+		readDateComment(filepath.Join(siteDir, pageName, "index.html")),
+		sourceModTime(originalPath),
+	)
+
+	// Strip <p class="date">...</p> inserted by Emacs org export
+	content = stripDateParagraphs(content)
+	if !pageDate.IsZero() {
+		content = embedDateComment(content, pageDate)
+	}
+	return content
+}
+
 // copyPageImages finds all <img src="..."> references in the HTML and copies
 // local image files to the page directory, preserving subdirectory structure.
-func copyPageImages(html []byte, sourceDir, pageDir string) (int, error) {
-	htmlStr := string(html)
+func copyPageImages(content []byte, sourceDir, pageDir string) (int, error) {
+	htmlStr := string(content)
 	matches := imgSrcRe.FindAllStringSubmatch(htmlStr, -1)
 	if len(matches) == 0 {
 		return 0, nil
@@ -460,12 +501,24 @@ func regenerateSiteIndex(siteDir, siteName, siteTitle string) error {
 	return nil
 }
 
-// isValidPageName checks that a page name contains only safe characters.
+// isValidPageName checks that a page name is safe to join onto the site
+// directory. Besides the character whitelist it rejects two path-shaped
+// hazards that the whitelist alone would let through:
+//
+//   - names containing a path separator, which could escape the site root;
+//   - names made only of dots (".", "..", "..."), which filepath.Join would
+//     resolve to the site root itself (overwriting the site index.html) or to
+//     its parent directory.
 func isValidPageName(name string) bool {
-	if name == "" {
+	// Reject dot-only names ("." / ".." / "..."): trimming every dot leaves
+	// nothing behind. filepath.Join would resolve them to the site root (or
+	// its parent) instead of a page directory.
+	if name == "" || strings.Trim(name, ".") == "" {
 		return false
 	}
 	for _, r := range name {
+		// The whitelist excludes path separators ('/', '\\'), so a name can
+		// never escape the site directory.
 		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
 			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.') {
 			return false
@@ -479,8 +532,8 @@ func isValidPageName(name string) bool {
 // stripDateParagraphs removes <p class="date">...</p> elements from HTML
 // content. These are generated by Emacs org-export as part of the postamble
 // and don't suit our page layout.
-func stripDateParagraphs(html []byte) []byte {
-	return dateParagraphRe.ReplaceAll(html, nil)
+func stripDateParagraphs(content []byte) []byte {
+	return dateParagraphRe.ReplaceAll(content, nil)
 }
 
 // extractOrgDate reads the #+DATE: property from an Org file and returns
@@ -579,27 +632,28 @@ func parseOrgDate(content string) time.Time {
 //
 // Clues are tried in order; the first one yielding a date wins:
 //
-//  1. orgDate     — the Org source #+DATE: property (most authoritative);
-//  2. inputHTML   — a slingshot-date comment already in the input; its value
+//  1. orgDate       — the Org source #+DATE: property (most authoritative);
+//  2. inputContent  — a slingshot-date comment already in the input; its value
 //     is preserved instead of re-derived (hand-edited or re-added pages);
-//  3. outputHTML  — a slingshot-date comment in the page currently on disk,
-//     so updating a source that carries no date keeps the published date;
-//  4. inputHTML   — a <p class="date">…</p> paragraph from Emacs org export;
-//  5. srcModTime  — the source file's mtime, frozen into the page on first add.
+//  3. outputComment — the slingshot-date comment extracted from the page
+//     currently on disk, so updating a source that carries no date keeps the
+//     published date instead of drifting to the source mtime;
+//  4. inputContent  — a <p class="date">…</p> paragraph from Emacs org export;
+//  5. srcModTime    — the source file's mtime, frozen into the page on first add.
 //
 // The function is pure: every file read happens in the caller, which keeps the
 // precedence chain testable without touching the filesystem.
-func resolvePageDate(orgDate time.Time, inputHTML, outputHTML []byte, srcModTime time.Time) time.Time {
+func resolvePageDate(orgDate time.Time, inputContent, outputComment []byte, srcModTime time.Time) time.Time {
 	if !orgDate.IsZero() {
 		return orgDate
 	}
-	if t := parseDateComment(inputHTML); !t.IsZero() {
+	if t := parseDateComment(inputContent); !t.IsZero() {
 		return t
 	}
-	if t := parseDateComment(outputHTML); !t.IsZero() {
+	if t := parseDateComment(outputComment); !t.IsZero() {
 		return t
 	}
-	if t := parseDateParagraph(inputHTML); !t.IsZero() {
+	if t := parseDateParagraph(inputContent); !t.IsZero() {
 		return t
 	}
 	return srcModTime
@@ -679,16 +733,16 @@ func sourceModTime(path string) time.Time {
 // It is idempotent: any pre-existing slingshot-date comment is removed first,
 // so re-running the pipeline replaces the old value instead of stacking a
 // second comment on top (and a run over an already-correct page is a no-op).
-func embedDateComment(html []byte, date time.Time) []byte {
-	html = stripDateComments(html)
+func embedDateComment(content []byte, date time.Time) []byte {
+	content = stripDateComments(content)
 	comment := fmt.Sprintf("<!-- slingshot-date: %s -->\n", date.Format("2006-01-02"))
-	return append([]byte(comment), html...)
+	return append([]byte(comment), content...)
 }
 
 // stripDateComments removes every slingshot-date comment from HTML content,
 // together with one trailing newline so no blank line is left behind.
-func stripDateComments(html []byte) []byte {
-	return dateCommentLineRe.ReplaceAll(html, nil)
+func stripDateComments(content []byte) []byte {
+	return dateCommentLineRe.ReplaceAll(content, nil)
 }
 
 // orgToHTMLFile converts an Org file to HTML using Emacs batch mode.
@@ -751,71 +805,71 @@ func orgToHTMLFile(orgPath string) (string, error) {
 // injectStyleLink inserts a <link rel="stylesheet" href="..."> tag into the
 // <head> section of the HTML, right before </head>. If the link is already
 // present it is a no-op.
-func injectStyleLink(html []byte, href string) []byte {
+func injectStyleLink(content []byte, href string) []byte {
 	link := fmt.Sprintf(`<link rel="stylesheet" href="%s" />`, href)
-	headEnd := bytes.Index(html, []byte("</head>"))
+	headEnd := bytes.Index(content, []byte("</head>"))
 	if headEnd < 0 {
 		// No </head> — prepend before </html> as fallback
-		htmlEnd := bytes.Index(html, []byte("</html>"))
+		htmlEnd := bytes.Index(content, []byte("</html>"))
 		if htmlEnd < 0 {
-			return append(html, []byte(link+"\n")...)
+			return append(content, []byte(link+"\n")...)
 		}
-		return []byte(string(html[:htmlEnd]) + link + "\n" + string(html[htmlEnd:]))
+		return []byte(string(content[:htmlEnd]) + link + "\n" + string(content[htmlEnd:]))
 	}
 	// Check if the link is already present
-	if bytes.Contains(html[:headEnd], []byte(href)) {
-		return html
+	if bytes.Contains(content[:headEnd], []byte(href)) {
+		return content
 	}
-	return []byte(string(html[:headEnd]) + "  " + link + "\n" + string(html[headEnd:]))
+	return []byte(string(content[:headEnd]) + "  " + link + "\n" + string(content[headEnd:]))
 }
 
 // injectSiteTitle inserts <h1><a href="/">title</a> </h1> right after <body>
 // so every page has a clickable site-title link back to the homepage.
-func injectSiteTitle(html []byte, title string) []byte {
+func injectSiteTitle(content []byte, title string) []byte {
 	link := fmt.Sprintf("<h1><a href=\"/\">%s</a> </h1>\n", htmlEscape(title))
 
 	bodyTag := []byte("<body")
-	idx := bytes.Index(html, bodyTag)
+	idx := bytes.Index(content, bodyTag)
 	if idx < 0 {
-		return html
+		return content
 	}
 
 	// Find the closing > of the <body> tag
-	rest := html[idx:]
+	rest := content[idx:]
 	gtIdx := bytes.IndexByte(rest, '>')
 	if gtIdx < 0 {
-		return html
+		return content
 	}
 
 	insertPos := idx + gtIdx + 1
-	result := make([]byte, 0, len(html)+len(link)+1)
-	result = append(result, html[:insertPos]...)
+	result := make([]byte, 0, len(content)+len(link)+1)
+	result = append(result, content[:insertPos]...)
 	result = append(result, '\n')
 	result = append(result, link...)
-	result = append(result, html[insertPos:]...)
+	result = append(result, content[insertPos:]...)
 	return result
 }
 
 // downgradeTitleHeading changes <h1 class="title"> to <h2 class="title">
 // and the corresponding </h1> to </h2>. This is called after injectSiteTitle
 // so that the page has exactly one <h1> (the site title link).
-func downgradeTitleHeading(html []byte) []byte {
+func downgradeTitleHeading(content []byte) []byte {
 	startOld := []byte(`<h1 class="title">`)
 	startNew := []byte(`<h2 class="title">`)
 	closeOld := []byte(`</h1>`)
 	closeNew := []byte(`</h2>`)
 
 	// Find opening tag
-	idx := bytes.Index(html, startOld)
+	idx := bytes.Index(content, startOld)
 	if idx < 0 {
-		return html
+		return content
 	}
 
 	// Build result: replace opening tag
 	var buf bytes.Buffer
-	buf.Write(html[:idx])
+	buf.Write(content[:idx])
 	buf.Write(startNew)
-	rest := html[idx+len(startOld):]
+	rest := content[idx+len(startOld):]
 
 	// Find matching closing tag
 	closeIdx := bytes.Index(rest, closeOld)
