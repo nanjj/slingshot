@@ -1070,3 +1070,12 @@ msgstr "解析草稿 ID"
 
 msgid "showing draft"
 msgstr "查看草稿"
+
+msgid "creating directory for %q: %w"
+msgstr "为 %q 创建目录：%w"
+
+msgid "getting access token"
+msgstr "获取 access token"
+
+msgid "writing %q: %w"
+msgstr "写入 %q：%w"

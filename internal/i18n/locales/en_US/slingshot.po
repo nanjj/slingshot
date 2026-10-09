@@ -1063,3 +1063,12 @@ msgstr "resolving draft ID"
 
 msgid "showing draft"
 msgstr "showing draft"
+
+msgid "creating directory for %q: %w"
+msgstr "creating directory for %q: %w"
+
+msgid "getting access token"
+msgstr "getting access token"
+
+msgid "writing %q: %w"
+msgstr "writing %q: %w"
