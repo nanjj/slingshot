@@ -638,7 +638,9 @@ func parseOrgDate(content string) time.Time {
 //  3. outputComment — the slingshot-date comment extracted from the page
 //     currently on disk, so updating a source that carries no date keeps the
 //     published date instead of drifting to the source mtime;
-//  4. inputContent  — a <p class="date">…</p> paragraph from Emacs org export;
+//  4. inputContent  — a <p class="date">…</p> paragraph from Emacs org export
+//     (same inputContent as clue 2, different matcher: a comment vs a
+//     paragraph);
 //  5. srcModTime    — the source file's mtime, frozen into the page on first add.
 //
 // The function is pure: every file read happens in the caller, which keeps the
