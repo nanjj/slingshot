@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/spf13/cobra"
 )
 
 // bt is a single backtick. Test fixtures build fences from it so this file
@@ -378,5 +380,63 @@ func TestIsScriptPath(t *testing.T) {
 		if got := isScriptPath(tc.rel); got != tc.want {
 			t.Errorf("isScriptPath(%q) = %v, want %v", tc.rel, got, tc.want)
 		}
+	}
+}
+
+// TestIsSinglePathElement pins the guard that keeps a skill name from escaping
+// the install path (or from being wiped by installSkillFS's RemoveAll).
+func TestIsSinglePathElement(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want bool
+	}{
+		{"weixin", true},
+		{"site-page", true},
+		{"a.b", true},
+		{"", false},
+		{".", false},
+		{"..", false},
+		{"a/b", false},
+		{"../etc", false},
+		{`a\\b`, false},
+		{"/etc/passwd", false},
+	} {
+		if got := isSinglePathElement(tc.name); got != tc.want {
+			t.Errorf("isSinglePathElement(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestSkillInstallRejectsTraversalNames drives the run layer with hostile skill
+// names: each must be rejected before any filesystem work, leaving the install
+// path and its parent untouched.
+func TestSkillInstallRejectsTraversalNames(t *testing.T) {
+	for _, name := range []string{"..", ".", "a/b", "../etc"} {
+		t.Run(name, func(t *testing.T) {
+			installPath := t.TempDir()
+			// A sibling that a ".." wipe would have deleted.
+			parent := filepath.Dir(installPath)
+			canary := filepath.Join(parent, "canary")
+			if err := os.MkdirAll(canary, 0755); err != nil {
+				t.Fatalf("seeding canary: %v", err)
+			}
+
+			c := &cmdSkillInstall{global: &cmdGlobal{}, path: installPath}
+			cmd := &cobra.Command{}
+			var out, errBuf strings.Builder
+			cmd.SetOut(&out)
+			cmd.SetErr(&errBuf)
+
+			if err := c.run(cmd, []string{name}); err == nil {
+				t.Fatalf("run(%q) succeeded, want an error", name)
+			}
+
+			if _, err := os.Stat(canary); err != nil {
+				t.Errorf("canary outside install path was touched: %v", err)
+			}
+			if _, err := os.Stat(installPath); err != nil {
+				t.Errorf("install path itself was touched: %v", err)
+			}
+		})
 	}
 }

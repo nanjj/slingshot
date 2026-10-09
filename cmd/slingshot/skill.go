@@ -136,6 +136,15 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 	}
 	skillName := args[0]
 
+	// The name is used both as an embedded-FS path segment and as a
+	// destination directory name. Reject anything that is not a single path
+	// element before touching the filesystem: "..", "." and "a/b" would
+	// otherwise make installSkillFS RemoveAll a directory outside the skills
+	// install path (e.g. "<project>/.dscli" or the install path itself).
+	if !isSinglePathElement(skillName) {
+		return fmt.Errorf(i18n.G("invalid skill name %q: must be a single path element"), skillName)
+	}
+
 	// Verify the skill exists in embedded FS
 	skillDir := path.Join("embedded_skills", skillName)
 	info, err := fs.Stat(skillsFS, skillDir)
@@ -166,6 +175,24 @@ func (c *cmdSkillInstall) run(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Installed skill %s to %s (%d file(s))\n"),
 		color.GreenString(skillName), color.CyanString(destDir), len(files))
 	return nil
+}
+
+// isSinglePathElement reports whether name is safe to use as a single path
+// element: a non-empty name that is not "." or "..", contains no path
+// separator, and equals its own path.Base.
+//
+// The check is deliberately stricter than the filesystem requires. A name
+// such as ".." or "a/b" would either escape the install path or silently
+// resolve to a parent directory, and installSkillFS starts by RemoveAll-ing
+// the destination.
+func isSinglePathElement(name string) bool {
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	if name != path.Base(name) {
+		return false
+	}
+	return !strings.ContainsAny(name, `/:\`)
 }
 
 // installSkillFS copies the whole embedded skill tree rooted at srcDir (an
