@@ -451,3 +451,44 @@ func TestSkillInstallRejectsTraversalNames(t *testing.T) {
 		})
 	}
 }
+
+// TestInstallSkillFSUnknownSource is the error branch: walking a path that is
+// not in the FS fails and nothing is left behind at the destination.
+func TestInstallSkillFSUnknownSource(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "demo")
+	if _, err := installSkillFS(skillFixtureFS(), "does-not-exist", dest); err == nil {
+		t.Fatal("expected an error for a missing source directory")
+	}
+	// MkdirAll of the destination happens first, so the directory may exist,
+	// but it must be empty: no partial copy.
+	entries, err := os.ReadDir(dest)
+	if err == nil && len(entries) != 0 {
+		t.Errorf("partial installation left behind: %v", entries)
+	}
+}
+
+// TestInstallSkillFSReplacesDestinationFile pins what the wipe-first contract
+// does when a regular file already occupies the destination path: RemoveAll
+// deletes it and the directory is created in its place. This is not an error
+// branch (RemoveAll accepts files), so the behaviour is pinned rather than the
+// install being expected to fail.
+func TestInstallSkillFSReplacesDestinationFile(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "demo")
+	if err := os.WriteFile(dest, []byte("not a directory"), 0644); err != nil {
+		t.Fatalf("seeding destination file: %v", err)
+	}
+	files, err := installSkillFS(skillFixtureFS(), "skill", dest)
+	if err != nil {
+		t.Fatalf("installSkillFS: %v", err)
+	}
+	if len(files) != 3 {
+		t.Errorf("installed %d files, want 3", len(files))
+	}
+	info, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat destination: %v", err)
+	}
+	if !info.IsDir() {
+		t.Errorf("destination is not a directory after install: %v", info.Mode())
+	}
+}

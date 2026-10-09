@@ -159,3 +159,22 @@ func listDir(t *testing.T, dir string) []string {
 	}
 	return names
 }
+
+// TestOrgToHTMLFileMissingSource is the error branch: a source file that does
+// not exist fails during the copy step, and the temporary directory is removed
+// before returning (no leaked temp dirs).
+func TestOrgToHTMLFileMissingSource(t *testing.T) {
+	requireEmacs(t)
+
+	missing := filepath.Join(t.TempDir(), "nope.org")
+	_, cleanup, err := orgToHTMLFile(missing)
+	if err == nil {
+		t.Fatal("expected an error for a missing source file")
+	}
+	if cleanup != nil {
+		t.Error("cleanup must be nil on the failure path (already run)")
+	}
+	if !strings.Contains(err.Error(), "temporary directory") {
+		t.Errorf("error does not mention the copy failure: %v", err)
+	}
+}
