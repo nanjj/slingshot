@@ -406,7 +406,8 @@ func siteTypeLabel(typ string) string {
 }
 
 type cmdSiteRsync struct {
-	global *cmdGlobal
+	global          *cmdGlobal
+	flagNoHighlight bool // --no-highlight: skip the pre-deploy highlighting pass
 }
 
 func (c *cmdSiteRsync) command() *cobra.Command {
@@ -419,8 +420,15 @@ func (c *cmdSiteRsync) command() *cobra.Command {
 
 For zine-type sites, automatically runs 'zine build' before rsync
 and executes rsync from the 'public/' output directory.
-For page-type sites, rsync runs directly from the site directory.`),
+For page-type sites, rsync runs directly from the site directory.
+
+Before deploying, all HTML files are syntax-highlighted. That pass is
+idempotent: pages that are already highlighted are written through
+unchanged, so running it on every deploy is safe. Use --no-highlight to
+skip the pass entirely (e.g. for a site highlighted by another tool).`),
 	)
+	cmd.Flags().BoolVar(&c.flagNoHighlight, "no-highlight", false,
+		i18n.G("Skip syntax highlighting of HTML files before deploy"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
@@ -489,7 +497,7 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	// Syntax-highlight code blocks in all HTML files before deploying
-	count, _, hlErr := highlight.HighlightDir(rsyncDir)
+	count, hlErr := c.runHighlight(rsyncDir)
 	if hlErr == nil && count > 0 {
 		fmt.Fprintf(color.Output, "%s %d code block(s) highlighted\n", color.CyanString("\xe2\x86\x92"), count)
 	} else if hlErr != nil {
@@ -503,6 +511,19 @@ func (c *cmdSiteRsync) run(cmd *cobra.Command, args []string) (err error) {
 	fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), i18n.G("Rsync completed successfully."))
 	clog.Info(ctx, "site_rsync_result", "name", name)
 	return nil
+}
+
+// runHighlight syntax-highlights every HTML file under dir and returns the
+// number of code blocks rewritten. When --no-highlight is set it is a no-op
+// returning (0, nil), so the caller can print the count line unconditionally
+// without checking the flag again. The pass itself is idempotent, so running
+// it on an already-highlighted tree returns 0.
+func (c *cmdSiteRsync) runHighlight(dir string) (int, error) {
+	if c.flagNoHighlight {
+		return 0, nil
+	}
+	count, _, err := highlight.HighlightDir(dir)
+	return count, err
 }
 
 // --- Actions ---
