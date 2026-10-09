@@ -122,3 +122,51 @@ func TestCmdSiteRsyncRunHighlightAlreadyHighlightedTree(t *testing.T) {
 		t.Errorf("mtime changed: %v -> %v", old, fi.ModTime())
 	}
 }
+
+// TestCmdSiteRsyncNoHighlightLeavesHighlightedTreeUntouched is the exact
+// escape-hatch fixture: --no-highlight over a tree that already contains
+// highlight spans must be a true no-op (bytes and mtime untouched).
+func TestCmdSiteRsyncNoHighlightLeavesHighlightedTreeUntouched(t *testing.T) {
+	dir := t.TempDir()
+	highlighted := `<!DOCTYPE html>
+<html><head><title>T</title></head><body>
+<pre class="src-go"><code><span style="color:#d73a49">func</span> main() {}</code></pre>
+<pre class="src-go"><code>func raw() {}</code></pre>
+</body></html>
+`
+	path := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(path, []byte(highlighted), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatalf("backdating mtime: %v", err)
+	}
+
+	c := &cmdSiteRsync{flagNoHighlight: true}
+	count, err := c.runHighlight(dir)
+	if err != nil {
+		t.Fatalf("runHighlight: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0", count)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading result: %v", err)
+	}
+	if string(data) != highlighted {
+		t.Errorf("--no-highlight rewrote the tree:\n%s", data)
+	}
+	// The raw block must still be raw: no highlighting was applied.
+	if !strings.Contains(string(data), "<code>func raw() {}</code>") {
+		t.Errorf("--no-highlight unexpectedly highlighted a raw block:\n%s", data)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if !fi.ModTime().Equal(old) {
+		t.Errorf("mtime changed: %v -> %v", old, fi.ModTime())
+	}
+}
