@@ -1053,11 +1053,20 @@ msgstr "管理微信公众号草稿。\n\n\"add\" 命令将返回的 media_id �
 msgid "Print a draft's full content"
 msgstr "打印草稿的完整正文"
 
-msgid "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Progress and warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
-msgstr "打印草稿文章的完整正文。\n\n草稿的解析方式与 \"show\" 和 \"remove\" 一致：带 media_id 的 sidecar YAML 文件、\n\"list\" 中的 1-based 索引，或原始 media_id。\n\n正文内容是微信原始 HTML，原样写入 stdout，可直接重定向或管道，\n不会混入颜色码。进度和警告写入 stderr。\n\n当草稿包含多篇文章时，每篇文章前会有一行\n\"<!-- article N: <title> -->\" 注释；单篇文章则直接输出。\n\n用 --output 可将内容写入文件而不是 stdout。"
-
 msgid "Write content to a file instead of stdout"
 msgstr "将内容写入文件而非 stdout"
 
 msgid "Wrote %d bytes to %s\n"
 msgstr "已写入 %d 字节到 %s\n"
+
+msgid "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
+msgstr "打印草稿文章的完整正文。\n\n草稿的解析方式与 \"show\" 和 \"remove\" 一致：带 media_id 的 sidecar YAML 文件、\n\"list\" 中的 1-based 索引，或原始 media_id。\n\n正文内容是微信原始 HTML，原样写入 stdout，可直接重定向或管道，\n不会混入颜色码。警告写入 stderr。\n\n当草稿包含多篇文章时，每篇文章前会有一行\n\"<!-- article N: <title> -->\" 注释；单篇文章则直接输出。\n\n用 --output 可将内容写入文件而不是 stdout。"
+
+msgid "invalid skill name %q: must be a single path element"
+msgstr "无效的 skill 名称 %q：必须是单一路径元素"
+
+msgid "resolving draft ID"
+msgstr "解析草稿 ID"
+
+msgid "showing draft"
+msgstr "查看草稿"

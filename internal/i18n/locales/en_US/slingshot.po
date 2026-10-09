@@ -1046,11 +1046,20 @@ msgstr "Manage WeChat public account drafts.\n\nThe \"add\" command saves the re
 msgid "Print a draft's full content"
 msgstr "Print a draft's full content"
 
-msgid "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Progress and warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
-msgstr "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Progress and warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
-
 msgid "Write content to a file instead of stdout"
 msgstr "Write content to a file instead of stdout"
 
 msgid "Wrote %d bytes to %s\n"
 msgstr "Wrote %d bytes to %s\n"
+
+msgid "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
+msgstr "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
+
+msgid "invalid skill name %q: must be a single path element"
+msgstr "invalid skill name %q: must be a single path element"
+
+msgid "resolving draft ID"
+msgstr "resolving draft ID"
+
+msgid "showing draft"
+msgstr "showing draft"
