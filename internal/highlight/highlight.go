@@ -103,6 +103,12 @@ func Highlight(src []byte, lang string) []byte {
 // HighlightPage processes an HTML page, finding all <pre class="src-XXX"> blocks
 // and syntax-highlighting the code inside their <code> elements.
 //
+// The transformation is idempotent: f(f(x)) == f(x). A <code> element whose
+// raw content already contains a literal "<span" is treated as the output of
+// a previous highlighting pass and is written through verbatim, so running the
+// pass repeatedly over the same page never re-escapes markup into visible
+// source text (the 2026-10-09 site-rsync corruption).
+//
 // Returns the modified HTML and the number of blocks processed. On error,
 // returns the original HTML with a count of successfully processed blocks
 // (partial results are still returned).
@@ -165,6 +171,22 @@ func HighlightPage(html []byte) ([]byte, int, error) {
 
 		rawCode := codeContent[:codeEnd-7] // strip </code> (7 bytes)
 
+		// Idempotency guard. Org export escapes every "<" in source text as
+		// "&lt;", so a literal "<span" inside <code> cannot be source: it can
+		// only be markup written by an earlier highlighting pass (ours or
+		// another tool's). Re-highlighting it would treat those tags as code
+		// and escape them into visible text, mangling the block. Skip such
+		// blocks verbatim instead — a false positive only costs an
+		// unhighlighted block, never a corrupted one ("skip rather than
+		// rewrite").
+		//
+		// Limitation: the match is case-sensitive by design, so a foreign
+		// highlighter emitting "<SPAN>" is not detected.
+		if bytes.Contains(rawCode, []byte("<span")) {
+			result.Write(fullPre)
+			continue
+		}
+
 		// HTML-decode the code content for tree-sitter
 		decoded := htmlUnescape(rawCode)
 		highlighted := Highlight(decoded, lang)
@@ -185,6 +207,10 @@ func HighlightPage(html []byte) ([]byte, int, error) {
 // HighlightDir walks a directory recursively, finds all .html files, and
 // syntax-highlights code blocks in each one using HighlightPage.
 // Returns the total number of blocks processed across all files.
+//
+// Because HighlightPage is idempotent, walking the same tree repeatedly is
+// safe: already-highlighted blocks are skipped, and a second pass over an
+// unchanged tree reports zero blocks and rewrites nothing.
 // On individual file errors, processing continues (best-effort).
 func HighlightDir(dir string) (total int, totalFiles int, err error) {
 	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, e error) error {

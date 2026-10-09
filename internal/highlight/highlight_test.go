@@ -1,6 +1,7 @@
 package highlight
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -337,5 +338,145 @@ func TestFindClosingTag(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// --- idempotency ---
+
+// orgPage wraps <pre> blocks in a minimal org-export style HTML page.
+func orgPage(blocks ...string) []byte {
+	var sb strings.Builder
+	sb.WriteString("<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body>\n")
+	for _, b := range blocks {
+		sb.WriteString(b)
+		sb.WriteString("\n")
+	}
+	sb.WriteString("</body>\n</html>\n")
+	return []byte(sb.String())
+}
+
+// TestHighlightPageIdempotent pins the f(f(x)) == f(x) contract: a second pass
+// over a highlighted page must be a byte-level no-op and report zero processed
+// blocks. A regression here is the 2026-10-09 incident, where a second pass
+// re-highlighted <span> markup and escaped it into visible source text.
+func TestHighlightPageIdempotent(t *testing.T) {
+	page := orgPage(
+		"<pre class=\"src src-go\"><code>func main() {\n\tfmt.Println(\"hi\")\n}\n</code></pre>",
+		"<pre class=\"src src-python\"><code>def f(x):\n\treturn x\n</code></pre>",
+	)
+
+	run1, count1, err := HighlightPage(page)
+	if err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	if count1 != 2 {
+		t.Fatalf("run1 count = %d, want 2", count1)
+	}
+	if !bytes.Contains(run1, []byte(`style="color:`)) {
+		t.Fatalf("run1 produced no highlight spans:\n%s", run1)
+	}
+
+	run2, count2, err := HighlightPage(run1)
+	if err != nil {
+		t.Fatalf("run2: %v", err)
+	}
+	if count2 != 0 {
+		t.Errorf("run2 count = %d, want 0 (blocks already highlighted)", count2)
+	}
+	if !bytes.Equal(run1, run2) {
+		t.Errorf("HighlightPage is not idempotent:\nrun1:\n%s\nrun2:\n%s", run1, run2)
+	}
+}
+
+// TestHighlightPageSkipsAlreadyHighlightedBlock checks that a hand-written
+// block already carrying <span style="color:#..."> survives byte for byte.
+func TestHighlightPageSkipsAlreadyHighlightedBlock(t *testing.T) {
+	block := `<pre class="src-go"><code><span style="color:#d73a49">func</span> main() {}</code></pre>`
+	page := orgPage(block)
+
+	got, count, err := HighlightPage(page)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("count = %d, want 0", count)
+	}
+	if !bytes.Equal(got, page) {
+		t.Errorf("already-highlighted page modified:\n got: %s\nwant: %s", got, page)
+	}
+}
+
+// TestHighlightPageMixedBlocks checks that a raw block next to an already
+// highlighted one is processed, while the highlighted one stays untouched.
+func TestHighlightPageMixedBlocks(t *testing.T) {
+	done := `<pre class="src-go"><code><span style="color:#d73a49">func</span> main() {}</code></pre>`
+	raw := `<pre class="src-go"><code>func main() {}</code></pre>`
+	page := orgPage(done, raw)
+
+	got, count, err := HighlightPage(page)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1 (only the raw block)", count)
+	}
+	if !bytes.Contains(got, []byte(done)) {
+		t.Errorf("already-highlighted block changed:\n%s", got)
+	}
+	if n := bytes.Count(got, []byte(`<span style="color:#d73a49">func</span>`)); n != 2 {
+		t.Errorf("expected exactly 2 highlighted 'func' spans (one per block), got %d:\n%s", n, got)
+	}
+}
+
+// TestHighlightPageEscapedSpanStillHighlighted is the counter-case guard: an
+// escaped "&lt;span&gt;" in the source is not markup, so the block must still
+// be highlighted — and must stay stable across a second pass.
+func TestHighlightPageEscapedSpanStillHighlighted(t *testing.T) {
+	page := orgPage("<pre class=\"src-go\"><code>// writes &lt;span&gt; tags\nfunc main() {}</code></pre>")
+
+	run1, count1, err := HighlightPage(page)
+	if err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	if count1 != 1 {
+		t.Fatalf("run1 count = %d, want 1", count1)
+	}
+	if !bytes.Contains(run1, []byte(`<span style="color:`)) {
+		t.Fatalf("run1 produced no highlight spans:\n%s", run1)
+	}
+	if !bytes.Contains(run1, []byte("&lt;span&gt;")) {
+		t.Errorf("escaped source text did not survive as escaped text:\n%s", run1)
+	}
+
+	run2, count2, err := HighlightPage(run1)
+	if err != nil {
+		t.Fatalf("run2: %v", err)
+	}
+	if count2 != 0 {
+		t.Errorf("run2 count = %d, want 0", count2)
+	}
+	if !bytes.Equal(run1, run2) {
+		t.Errorf("output not stable after two passes:\nrun1:\n%s\nrun2:\n%s", run1, run2)
+	}
+	if bytes.Contains(run2, []byte("&amp;lt;span")) {
+		t.Errorf("double-escaped markup in output:\n%s", run2)
+	}
+}
+
+// TestHighlightPageMultipleBlocksCount checks the returned count reflects the
+// number of blocks actually rewritten, not the number of blocks seen.
+func TestHighlightPageMultipleBlocksCount(t *testing.T) {
+	page := orgPage(
+		`<pre class="src-go"><code>func a() {}</code></pre>`,
+		`<pre class="src-go"><code><span style="color:#d73a49">func</span> b() {}</code></pre>`,
+		`<pre class="src-python"><code>def c(): pass</code></pre>`,
+	)
+
+	_, count, err := HighlightPage(page)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("count = %d, want 2 (one already highlighted)", count)
 	}
 }
