@@ -111,20 +111,27 @@ slingshot page remove mysite my-article
 ### 部署
 
 ```bash
-slingshot site rsync mysite
+slingshot page update --rsync mysite my-article.org   # 推荐：重建页面并部署（只处理目标页）
+slingshot site rsync mysite                            # ⚠️ 全站重复高亮，修复前避免（见下）
 ```
 
 page 类型 rsync 流程：
 1. 自动优化站点 CSS（检查响应式 sentinel，未优化则升级）
-2. 从站点目录 `./` 执行 rsync
+2. 对全站所有 HTML 重复执行代码高亮（`highlight.HighlightDir`）
+3. 从站点目录 `./` 执行 rsync
+
+> ⚠️ **修复前避免裸 `slingshot site rsync`**（2026-10-09 实测）：第 2 步的重复高亮对「已高亮的
+> 代码块」不是幂等的——它把上一轮高亮写入的 `<span>` 标签当作源码再次高亮，二次转义成页面
+> 可见的文本，一次运行即可破坏全站所有带代码块的页面。修复前的替代：`slingshot page update
+> --rsync <site> <file>.org`（只处理目标页），或直接执行站点配置里的原生 rsync 命令（纯上传）。
 
 ### 更新已发布页面（SOP）
 
 > 本机实例：站点名 `nanjj.dscli.io`（目录 `~/.local/src/gitlab.com/dscli/nanjj.dscli.io`）。
 
 ```bash
-# 1. 从源文件重建页面（页面目录须已存在；首次添加用 page add）
-slingshot page update mysite my-article.org
+# 1. 重建页面并部署（--rsync 一步完成；不要用裸 site rsync——见「部署」节警告）
+slingshot page update --rsync mysite my-article.org
 
 # 2. git 复核 + 提交 + 推送
 cd ~/mysite
@@ -133,8 +140,7 @@ git add my-article/ index.html
 git commit -m "Update my-article page"
 git push                          # gitlab 仓库：HTTPS_PROXY=socks5h://localhost:8777
 
-# 3. 部署 + 线上核验
-slingshot site rsync mysite
+# 3. 线上核验（部署已在第 1 步完成）
 curl -s "https://<域名>/my-article/" | grep -c "<新文关键句>"    # ≥1 即上线
 ```
 

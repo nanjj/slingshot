@@ -163,21 +163,23 @@ slingshot meterial remove <media_id>
 
 **所以：顺序固定「先站点、后微信」；微信侧始终显式 `draft convert` 重建。**
 
+> ⚠️ 站点部署不要用裸 `slingshot site rsync`（2026-10-09 实测：重复高亮会把已高亮的代码块
+> 二次转义，一次损坏 26 页）；用 `page update --rsync`——详见 site-page skill「部署」节警告。
+
 ### 标准步骤
 
 ```bash
 # 0. 进入文章目录（例：tikzlings/jiheti01），确认源文件已改好
 
-# 1. 站点：重建页面（顺带把 <name>.html 覆盖为站点版，无妨——第 3 步会重建微信版）
-slingshot page update nanjj.dscli.io <name>.org
+# 1. 站点：重建页面并部署（--rsync 一步完成；顺带把 <name>.html 覆盖为站点版，无妨——第 3 步会重建微信版）
+slingshot page update --rsync nanjj.dscli.io <name>.org
 
-# 2. 站点：复核 + 提交 + 推送 + 部署（详见 site-page skill）
+# 2. 站点：复核 + 提交 + 推送（部署已在第 1 步完成）
 cd ~/.local/src/gitlab.com/dscli/nanjj.dscli.io
 git diff <name>/index.html        # 只应有正文变化 + 导出噪声（时间戳/锚点）
 git add <name>/ index.html
 git commit -m "Update <name> page"
 HTTPS_PROXY=socks5h://localhost:8777 git push    # gitlab 需 socks5 代理
-slingshot site rsync nanjj.dscli.io
 curl -s "https://nanjj.dscli.io/<name>/" | grep -c "<新文关键句>"    # ≥1 即上线
 
 # 3. 微信：回到文章目录，重建微信版 HTML（图片/封面全走 images.yaml 缓存，零重传）
@@ -269,6 +271,7 @@ slingshot meterial add cover.jpg
 - **微信 API 网络**：直连（勿设 `HTTPS_PROXY`）；出口 IP 须在公众号「IP 白名单」内（`curl -s https://ipinfo.io/ip` 查看）
 - **git 推送网络**：本机 gitlab 需 `HTTPS_PROXY=socks5h://localhost:8777`；gitcode 走 SSH 直连
 - **同名文件 `<name>.html` 双管线**：更新顺序「先站点、后微信」，详见「更新已发布文章（实战 SOP）」
+- **站点部署**：用 `page update --rsync nanjj.dscli.io <name>.org`；避免裸 `slingshot site rsync`（重复高亮会破坏代码块，2026-10-09 实测）
 
 ## SVG 图片处理
 
