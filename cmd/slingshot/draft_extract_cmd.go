@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/fatih/color"
@@ -38,7 +39,7 @@ file with a media_id, a 1-based index from "list", or a raw media_id.
 
 The article content is the raw WeChat HTML and is written to stdout
 verbatim, so it can be redirected or piped without colour codes getting
-in the way. Progress and warnings go to stderr.
+in the way. Warnings go to stderr.
 
 When a draft holds more than one article, each article is preceded by a
 "<!-- article N: <title> -->" comment line; a single article is printed
@@ -65,7 +66,7 @@ func (c *cmdDraftExtract) run(cmd *cobra.Command, args []string) error {
 
 	cfg, _, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return fmt.Errorf("%s: %w", i18n.G("loading config"), err)
 	}
 	token, err := getaccesstoken.GetToken(cfg)
 	if err != nil {
@@ -74,12 +75,12 @@ func (c *cmdDraftExtract) run(cmd *cobra.Command, args []string) error {
 
 	mediaID, err := resolveID(token, idStr)
 	if err != nil {
-		return fmt.Errorf("resolving draft ID: %w", err)
+		return fmt.Errorf("%s: %w", i18n.G("resolving draft ID"), err)
 	}
 
 	resp, err := draft.Show(token, mediaID)
 	if err != nil {
-		return fmt.Errorf("showing draft: %w", err)
+		return fmt.Errorf("%s: %w", i18n.G("showing draft"), err)
 	}
 
 	if len(resp.Articles) == 0 {
@@ -90,6 +91,11 @@ func (c *cmdDraftExtract) run(cmd *cobra.Command, args []string) error {
 	content := formatDraftContents(resp.Articles)
 
 	if c.output != "" {
+		if dir := filepath.Dir(c.output); dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return fmt.Errorf("creating directory for %q: %w", c.output, err)
+			}
+		}
 		if err := os.WriteFile(c.output, []byte(content), 0644); err != nil {
 			return fmt.Errorf("writing %q: %w", c.output, err)
 		}
@@ -113,19 +119,33 @@ func (c *cmdDraftExtract) run(cmd *cobra.Command, args []string) error {
 func formatDraftContents(articles []draft.ArticleInfo) string {
 	var sb strings.Builder
 	multi := len(articles) > 1
-	endsWithNewline := true
+	// prevEndsWithNewline tracks whether the previously written chunk ended
+	// with a newline, so the next header can start on its own line without
+	// emitting a blank line when it is not needed.
+	prevEndsWithNewline := true
 
 	for i, art := range articles {
 		if multi {
-			if i > 0 && !endsWithNewline {
+			if i > 0 && !prevEndsWithNewline {
 				sb.WriteByte('\n')
 			}
-			fmt.Fprintf(&sb, "<!-- article %d: %s -->\n", i+1, art.Title)
-			endsWithNewline = true
+			fmt.Fprintf(&sb, "<!-- article %d: %s -->\n", i+1, sanitizeCommentText(art.Title))
+			prevEndsWithNewline = true
 		}
 		sb.WriteString(art.Content)
-		endsWithNewline = strings.HasSuffix(art.Content, "\n")
+		prevEndsWithNewline = strings.HasSuffix(art.Content, "\n")
 	}
 
 	return sb.String()
+}
+
+// sanitizeCommentText makes an article title safe to embed in an HTML comment.
+// Titles come from the WeChat API and are normally single-line, but an
+// embedded newline would break the one-header-per-article layout and a literal
+// "-->" would close the comment early (the remainder would then be parsed as
+// content). CR/LF collapse to a space; "-->" is HTML-escaped to "--&gt;".
+func sanitizeCommentText(s string) string {
+	s = strings.ReplaceAll(s, "-->", "--&gt;")
+	s = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(s)
+	return s
 }

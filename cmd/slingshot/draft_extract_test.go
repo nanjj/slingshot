@@ -43,6 +43,17 @@ func TestFormatDraftContents(t *testing.T) {
 				"\n<!-- article 2: Two -->\n" + body2,
 		},
 		{
+			name: "title is sanitized for the comment",
+			articles: []draft.ArticleInfo{
+				{Title: "A\nB --> C", Content: body1},
+				{Title: "Two", Content: body2},
+			},
+			// Newlines collapse to spaces and "-->" is escaped so the
+			// comment cannot be closed early or spill onto two lines.
+			want: "<!-- article 1: A B --&gt; C -->\n" + body1 +
+				"\n<!-- article 2: Two -->\n" + body2,
+		},
+		{
 			name: "no extra newline when article already ends with one",
 			articles: []draft.ArticleInfo{
 				{Title: "One", Content: body2},
@@ -73,5 +84,24 @@ func TestFormatDraftContentsSingleArticleIsLossless(t *testing.T) {
 	}
 	if strings.HasSuffix(got, "\n") {
 		t.Errorf("single-article output gained a trailing newline: %q", got)
+	}
+}
+
+// TestSanitizeCommentText pins the title sanitiser used for article headers.
+func TestSanitizeCommentText(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{"plain", "plain"},
+		{"A\nB", "A B"},
+		{"A\r\nB", "A B"},
+		{"A\rB", "A B"},
+		{"a --> b", "a --&gt; b"},
+		{"A\nB --> C", "A B --&gt; C"},
+	} {
+		if got := sanitizeCommentText(tc.in); got != tc.want {
+			t.Errorf("sanitizeCommentText(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }
