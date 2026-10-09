@@ -103,15 +103,20 @@ func Highlight(src []byte, lang string) []byte {
 // HighlightPage processes an HTML page, finding all <pre class="src-XXX"> blocks
 // and syntax-highlighting the code inside their <code> elements.
 //
-// The transformation is idempotent: f(f(x)) == f(x). A <code> element whose
-// raw content already contains a literal "<span" is treated as the output of
-// a previous highlighting pass and is written through verbatim, so running the
-// pass repeatedly over the same page never re-escapes markup into visible
-// source text (the 2026-10-09 site-rsync corruption).
+// The transformation is idempotent: f(f(x)) == f(x), in the strong sense that a
+// second pass over its own output rewrites no byte and therefore does not touch
+// the file's mtime. Two guards enforce this: a <code> element whose raw content
+// already contains a literal "<span" (case-insensitive) is treated as the
+// output of a previous highlighting pass and written through verbatim, and a
+// block whose highlighting yields its input back (unknown language, empty
+// block, query matched nothing) is likewise written through and not counted.
+// Without the guards a repeated pass would re-escape markup into visible source
+// text (the 2026-10-09 site-rsync corruption), or churn mtimes on trees that
+// need no work.
 //
-// Returns the modified HTML and the number of blocks processed. On error,
-// returns the original HTML with a count of successfully processed blocks
-// (partial results are still returned).
+// Returns the modified HTML and the number of code blocks actually rewritten.
+// On error, returns the original HTML with a count of successfully processed
+// blocks (partial results are still returned).
 func HighlightPage(html []byte) ([]byte, int, error) {
 	if len(html) == 0 {
 		return html, 0, nil
@@ -171,18 +176,20 @@ func HighlightPage(html []byte) ([]byte, int, error) {
 
 		rawCode := codeContent[:codeEnd-7] // strip </code> (7 bytes)
 
-		// Idempotency guard. Org export escapes every "<" in source text as
-		// "&lt;", so a literal "<span" inside <code> cannot be source: it can
-		// only be markup written by an earlier highlighting pass (ours or
-		// another tool's). Re-highlighting it would treat those tags as code
-		// and escape them into visible text, mangling the block. Skip such
-		// blocks verbatim instead — a false positive only costs an
-		// unhighlighted block, never a corrupted one ("skip rather than
-		// rewrite").
+		// Idempotency guard #1: an already-highlighted block. Org export
+		// escapes every "<" in source text as "&lt;", so a literal "<span"
+		// inside <code> cannot be source: it can only be markup written by an
+		// earlier highlighting pass (ours or another tool's). Re-highlighting
+		// it would treat those tags as code and escape them into visible text,
+		// mangling the block. Skip such blocks verbatim — a false positive
+		// only costs an unhighlighted block, never a corrupted one ("skip
+		// rather than rewrite").
 		//
-		// Limitation: the match is case-sensitive by design, so a foreign
-		// highlighter emitting "<SPAN>" is not detected.
-		if bytes.Contains(rawCode, []byte("<span")) {
+		// The match is case-insensitive so a foreign highlighter emitting
+		// "<SPAN>" is caught too. The trade-off: a hand-written, un-escaped
+		// literal "<span" in source text (impossible from org export, possible
+		// in hand-authored HTML) is left unhighlighted.
+		if bytes.Contains(bytes.ToLower(rawCode), []byte("<span")) {
 			result.Write(fullPre)
 			continue
 		}
@@ -190,6 +197,17 @@ func HighlightPage(html []byte) ([]byte, int, error) {
 		// HTML-decode the code content for tree-sitter
 		decoded := htmlUnescape(rawCode)
 		highlighted := Highlight(decoded, lang)
+
+		// Idempotency guard #2: nothing to rewrite. When highlighting yields
+		// the input back (unknown language, empty block, a query that matched
+		// nothing), writing it out and counting it would touch the file's
+		// mtime on every pass while changing no byte. Write the original <pre>
+		// through instead and do not count it, so a second pass over an
+		// unchanged tree is a byte-for-byte no-op.
+		if bytes.Equal(highlighted, rawCode) {
+			result.Write(fullPre)
+			continue
+		}
 
 		// Build the highlighted <pre> block
 		highlightedPre := make([]byte, 0, len(fullPre)+len(highlighted))
@@ -209,8 +227,8 @@ func HighlightPage(html []byte) ([]byte, int, error) {
 // Returns the total number of blocks processed across all files.
 //
 // Because HighlightPage is idempotent, walking the same tree repeatedly is
-// safe: already-highlighted blocks are skipped, and a second pass over an
-// unchanged tree reports zero blocks and rewrites nothing.
+// safe: a second pass over an unchanged tree reports zero blocks and rewrites
+// no file, so neither the bytes nor the mtimes of the tree change.
 // On individual file errors, processing continues (best-effort).
 func HighlightDir(dir string) (total int, totalFiles int, err error) {
 	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, e error) error {

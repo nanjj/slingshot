@@ -2,8 +2,11 @@ package highlight
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHighlightGo(t *testing.T) {
@@ -479,4 +482,103 @@ func TestHighlightPageMultipleBlocksCount(t *testing.T) {
 	if count != 2 {
 		t.Errorf("count = %d, want 2 (one already highlighted)", count)
 	}
+}
+
+// TestHighlightPageUnknownLanguageIdempotent covers the second idempotency
+// guard: a block whose language cannot be resolved is escaped back to its own
+// input, so it must be written through unchanged and not counted. Counting it
+// would rewrite the file with identical bytes on every pass, churning mtimes.
+func TestHighlightPageUnknownLanguageIdempotent(t *testing.T) {
+	page := orgPage("<pre class=\"src-nosuchlang\"><code>some random text</code></pre>")
+
+	run1, count1, err := HighlightPage(page)
+	if err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	if count1 != 0 {
+		t.Errorf("run1 count = %d, want 0 (unknown language changes nothing)", count1)
+	}
+	if !bytes.Equal(run1, page) {
+		t.Errorf("unknown-language block was rewritten:\n got: %s\nwant: %s", run1, page)
+	}
+
+	run2, count2, err := HighlightPage(run1)
+	if err != nil {
+		t.Fatalf("run2: %v", err)
+	}
+	if count2 != 0 {
+		t.Errorf("run2 count = %d, want 0", count2)
+	}
+	if !bytes.Equal(run1, run2) {
+		t.Errorf("not idempotent for unknown language:\n%s\n%s", run1, run2)
+	}
+}
+
+// TestHighlightDirSecondPassNoOp pins the file-level guarantee: a second walk
+// over an already-highlighted tree changes no byte and does not touch the
+// file's mtime, so a deploy that runs the pass again cannot churn the tree.
+func TestHighlightDirSecondPassNoOp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "page.html")
+	// Mixed tree: one highlightable block, one already highlighted, one whose
+	// language is unknown (the case that used to be rewritten every pass).
+	content := `<!DOCTYPE html><html><body>
+<pre class="src-go"><code>func main() {}</code></pre>
+<pre class="src-go"><code><span style="color:#d73a49">func</span> done() {}</code></pre>
+<pre class="src-nosuchlang"><code>plain text</code></pre>
+</body></html>
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	first, files1, err := HighlightDir(dir)
+	if err != nil {
+		t.Fatalf("first HighlightDir: %v", err)
+	}
+	if first != 1 || files1 != 1 {
+		t.Fatalf("first pass = (%d blocks, %d files), want (1, 1)", first, files1)
+	}
+	firstBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading after first pass: %v", err)
+	}
+	firstStat, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after first pass: %v", err)
+	}
+
+	// Make the mtime distinguishable from any later write.
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatalf("backdating mtime: %v", err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after backdating: %v", err)
+	}
+
+	second, files2, err := HighlightDir(dir)
+	if err != nil {
+		t.Fatalf("second HighlightDir: %v", err)
+	}
+	if second != 0 || files2 != 0 {
+		t.Errorf("second pass = (%d blocks, %d files), want (0, 0)", second, files2)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after second pass: %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("second pass rewrote the file: mtime %v -> %v",
+			before.ModTime(), after.ModTime())
+	}
+	secondBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading after second pass: %v", err)
+	}
+	if !bytes.Equal(firstBytes, secondBytes) {
+		t.Errorf("second pass changed bytes:\n%s\n%s", firstBytes, secondBytes)
+	}
+	_ = firstStat
 }
