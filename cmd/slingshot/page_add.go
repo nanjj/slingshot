@@ -228,15 +228,19 @@ func (c *cmdPageAdd) processFile(cmd *cobra.Command, filePath string, siteConfig
 	// Save original path before possible .org -> .html conversion
 	originalPath := filePath
 
-	// If source is an Org file, convert to HTML using Emacs first
+	// If source is an Org file, convert to HTML using Emacs first. The export
+	// runs in a private temporary directory, so the source directory is never
+	// touched; cleanup removes that directory once this page is done (the
+	// deferred call also covers every error return below).
 	var wasOrg bool
 	if strings.HasSuffix(filePath, ".org") {
 		wasOrg = true
-		htmlPath, err := orgToHTMLFile(filePath)
+		htmlPath, cleanup, err := orgToHTMLFile(filePath)
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s\n",
+		defer cleanup()
+		fmt.Fprintf(cmd.OutOrStdout(), "%s %s -> %s (temporary export)\n",
 			color.CyanString("\xe2\x86\x92"), filepath.Base(filePath), filepath.Base(htmlPath))
 		filePath = htmlPath
 	}
@@ -291,8 +295,10 @@ func (c *cmdPageAdd) processFile(cmd *cobra.Command, filePath string, siteConfig
 		return "", fmt.Errorf("writing index.html: %w", err)
 	}
 
-	// Extract and copy image assets
-	sourceDir := filepath.Dir(filePath)
+	// Extract and copy image assets. Image paths are relative to the user's
+	// original source file, not to the temporary export directory that filePath
+	// may point at after an org conversion.
+	sourceDir := filepath.Dir(originalPath)
 	copied, err := copyPageImages(content, sourceDir, pageDir)
 	if err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s %v\n",
@@ -748,11 +754,37 @@ func stripDateComments(content []byte) []byte {
 }
 
 // orgToHTMLFile converts an Org file to HTML using Emacs batch mode.
-func orgToHTMLFile(orgPath string) (string, error) {
+//
+// The export is deliberately isolated: a private temporary directory is
+// created, only the .org file is copied into it, and Emacs is run there. The
+// source directory therefore never gains (or loses) a <name>.html file, which
+// is what used to make the page pipeline and the draft pipeline fight over the
+// same path. The returned cleanup function removes the temporary directory;
+// callers must invoke it once they are done with the HTML (including on error
+// paths).
+//
+// Known limitation: relative references resolved by Emacs itself — most
+// notably "#+INCLUDE: other.org" — break, because the included file is not
+// copied into the temporary directory. The current articles do not use them.
+func orgToHTMLFile(orgPath string) (string, func(), error) {
 	if _, err := exec.LookPath("emacs"); err != nil {
-		return "", fmt.Errorf(i18n.G("emacs not found: %w")+
+		return "", nil, fmt.Errorf(i18n.G("emacs not found: %w")+
 			"\n"+i18n.G("Org-to-HTML conversion requires GNU Emacs (>= 26.1) with Org mode. "+
 			"Install it or use an .html file instead."), err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "slingshot-org-export-")
+	if err != nil {
+		return "", nil, fmt.Errorf("creating temporary export directory: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
+
+	// Copy only the .org file: the export must not see (and therefore must not
+	// overwrite) a sibling <name>.html produced by another pipeline.
+	tmpOrg := filepath.Join(tmpDir, filepath.Base(orgPath))
+	if err := copyFile(orgPath, tmpOrg); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("copying %q to temporary directory: %w", orgPath, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -761,7 +793,7 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "emacs",
 		"--batch",
-		"--visit="+orgPath,
+		"--visit="+tmpOrg,
 		// Suppress boilerplate that Org export emits by default:
 		// - Postamble (<div id="postamble">) with date/author/validation links
 		// - XML declaration (<?xml version="1.0" encoding="utf-8"?>)
@@ -783,25 +815,27 @@ func orgToHTMLFile(orgPath string) (string, error) {
 	)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		cleanup()
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", errors.New(i18n.G("emacs org-to-html conversion timed out (30s)"))
+			return "", nil, errors.New(i18n.G("emacs org-to-html conversion timed out (30s)"))
 		}
 		errMsg := stderr.String()
 		if len(errMsg) > 1024 {
 			errMsg = errMsg[:1024] + "... (truncated)"
 		}
-		return "", fmt.Errorf(i18n.G("emacs org-to-html conversion failed: %w\nstderr: %s"), err, errMsg)
+		return "", nil, fmt.Errorf(i18n.G("emacs org-to-html conversion failed: %w\nstderr: %s"), err, errMsg)
 	}
 
-	// The HTML file is created alongside the org file with .html extension
-	base := strings.TrimSuffix(orgPath, filepath.Ext(orgPath))
+	// The HTML file is created next to the visited org file, i.e. in tmpDir.
+	base := strings.TrimSuffix(tmpOrg, filepath.Ext(tmpOrg))
 	htmlPath := base + ".html"
 
 	if _, err := os.Stat(htmlPath); os.IsNotExist(err) {
-		return "", fmt.Errorf(i18n.G("emacs did not produce expected HTML file: %s"), htmlPath)
+		cleanup()
+		return "", nil, fmt.Errorf(i18n.G("emacs did not produce expected HTML file: %s"), htmlPath)
 	}
 
-	return htmlPath, nil
+	return htmlPath, cleanup, nil
 }
 
 // injectStyleLink inserts a <link rel="stylesheet" href="..."> tag into the
