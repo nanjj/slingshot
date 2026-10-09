@@ -55,10 +55,6 @@ msgstr "上传完成，已写入 %s\n"
 msgid "Manage WeChat drafts"
 msgstr "管理微信公众号草稿"
 
-# draft command long description
-msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n	hILz   list              List all drafts\n	7ckj   add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n	qbD5   update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n"
-msgstr "管理微信公众号草稿。\n\n\"add\" 命令将返回的 media_id 保存到 sidecar YAML 文件（<file>.yaml）中，\n与 HTML 文件放在一起。后续的 \"update\" 命令只需传入 HTML 文件路径，\nmedia_id 会自动从 sidecar YAML 读取。如果没有 sidecar，\n则使用列表中的第一个草稿作为默认值。\n\n子命令：\n	hILz   list              列出所有草稿\n	7ckj   add    <file>     从 .org/.md/.html 创建新草稿（自动转换格式）\n	qbD5   update <file>     从 .org/.md/.html 更新草稿\n  remove <id>       删除草稿（ID、索引或含 sidecar YAML 的文件路径）\n  show   <id>       查看草稿详情（ID、索引或含 sidecar YAML 的文件路径）\n  convert <file>    将 Markdown 转换为微信 HTML 格式\n"
-
 msgid "List all drafts"
 msgstr "列出所有草稿"
 
@@ -384,14 +380,8 @@ msgstr "ID："
 msgid "Install a built-in skill to the local skills directory"
 msgstr "安装内置技能到本地技能目录"
 
-msgid "Install a built-in skill to the local skills directory.\n\nThe skill's SKILL.md is extracted from the binary and written to the\ndestination directory. By default the skill is installed under\n<project root>/.dscli/skills/<name>/, where <project root> is the nearest\nancestor of $PWD that contains a .git or .dscli directory (falling back\nto $PWD if none is found). Use --path to specify a custom directory.\n\nExamples:\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
-msgstr "安装内置技能到本地技能目录。\n\n技能的 SKILL.md 从二进制文件中提取并写入目标目录。\n默认安装到 <project root>/.dscli/skills/<name>/，\n其中 <project root> 是 $PWD 最近的包含 .git 或 .dscli 目录的父目录。\n使用 --path 指定自定义目录。\n\n示例：\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
-
 msgid "Installation path (default: <project root>/.dscli/skills)"
 msgstr "安装路径（默认: <project root>/.dscli/skills）"
-
-msgid "Installed skill %s to %s\n"
-msgstr "技能 %s 已安装到 %s\n"
 
 msgid "Introduction (optional, for video material)"
 msgstr "简介（可选，用于视频素材）"
@@ -710,9 +700,6 @@ msgstr "请求 Jaeger 失败: %w"
 
 msgid "site %q has no directory configured"
 msgstr "站点 %q 未配置目录"
-
-msgid "skill %q has no SKILL.md"
-msgstr "技能 %q 没有 SKILL.md"
 
 msgid "skill %q not found"
 msgstr "技能 %q 未找到"
@@ -1053,3 +1040,24 @@ msgstr "运行配置的 rsync 命令，将站点内容部署到远程。\n\n对 
 
 msgid "Skip syntax highlighting of HTML files before deploy"
 msgstr "部署前跳过 HTML 文件的语法高亮"
+
+msgid "Install a built-in skill to the local skills directory.\n\nThe skill's whole directory is extracted from the binary: SKILL.md and every\ncompanion file (references/, scripts/, ...) are written to the destination\ndirectory. Regular files are installed with mode 0644; files under scripts/\nare installed executable (0755). By default the skill is installed under\n<project root>/.dscli/skills/<name>/, where <project root> is the nearest\nancestor of $PWD that contains a .git or .dscli directory (falling back\nto $PWD if none is found). Use --path to specify a custom directory.\n\nExamples:\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
+msgstr "将内置 skill 安装到本地 skills 目录。\n\n整个 skill 目录都会从二进制中提取：SKILL.md 及所有配套文件\n（references/、scripts/ 等）都会写入目标目录。普通文件以 0644 权限安装；\nscripts/ 下的文件以可执行权限（0755）安装。默认安装到\n<项目根>/.dscli/skills/<name>/，其中 <项目根> 是从 $PWD 向上查找的、\n包含 .git 或 .dscli 目录的最近祖先（找不到时回退到 $PWD）。\n可用 --path 指定自定义目录。\n\n示例：\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
+
+msgid "Installed skill %s to %s (%d file(s))\n"
+msgstr "已安装 skill %s 到 %s（%d 个文件）\n"
+
+msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n  list              List all drafts\n  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)\n"
+msgstr "管理微信公众号草稿。\n\n\"add\" 命令将返回的 media_id 保存到 sidecar YAML 文件（<file>.yaml）中，\n与 HTML 文件放在一起。后续的 \"update\" 命令只需传入 HTML 文件路径，\nmedia_id 会自动从 sidecar YAML 读取。如果没有 sidecar，\n则使用列表中的第一个草稿作为默认值。\n\n子命令：\n  list              列出所有草稿\n  add    <file>     从 .org/.md/.html 创建新草稿（自动转换格式）\n  update <file>     从 .org/.md/.html 更新草稿（自动转换格式）\n  remove <id>       删除草稿（ID、索引或含 sidecar YAML 的文件路径）\n  show   <id>       查看草稿详情（ID、索引或含 sidecar YAML 的文件路径）\n  convert <file>    将 Markdown 转换为微信 HTML 格式\n  extract <id>      打印草稿完整正文（ID、索引或含 sidecar YAML 的文件路径）\n"
+
+msgid "Print a draft's full content"
+msgstr "打印草稿的完整正文"
+
+msgid "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Progress and warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
+msgstr "打印草稿文章的完整正文。\n\n草稿的解析方式与 \"show\" 和 \"remove\" 一致：带 media_id 的 sidecar YAML 文件、\n\"list\" 中的 1-based 索引，或原始 media_id。\n\n正文内容是微信原始 HTML，原样写入 stdout，可直接重定向或管道，\n不会混入颜色码。进度和警告写入 stderr。\n\n当草稿包含多篇文章时，每篇文章前会有一行\n\"<!-- article N: <title> -->\" 注释；单篇文章则直接输出。\n\n用 --output 可将内容写入文件而不是 stdout。"
+
+msgid "Write content to a file instead of stdout"
+msgstr "将内容写入文件而非 stdout"
+
+msgid "Wrote %d bytes to %s\n"
+msgstr "已写入 %d 字节到 %s\n"

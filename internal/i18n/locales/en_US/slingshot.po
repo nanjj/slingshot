@@ -28,10 +28,6 @@ msgstr "Warning: no images were uploaded, saving original HTML"
 msgid "Manage WeChat drafts"
 msgstr "Manage WeChat drafts"
 
-# draft command long description
-msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n	hILz   list              List all drafts\n	7ckj   add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n	qbD5   update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n"
-msgstr "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n	hILz   list              List all drafts\n	7ckj   add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n	qbD5   update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n"
-
 msgid "List all drafts"
 msgstr "List all drafts"
 
@@ -236,9 +232,6 @@ msgstr "No built-in skills found."
 msgid "expected a skill name argument"
 msgstr "expected a skill name argument"
 
-msgid "skill %q has no SKILL.md"
-msgstr "skill %q has no SKILL.md"
-
 msgid "skill %q not found"
 msgstr "skill %q not found"
 
@@ -359,14 +352,8 @@ msgstr "Get the service dependency graph from Jaeger.\n\nExamples:\n  slingshot 
 msgid "ID:"
 msgstr "ID:"
 
-msgid "Install a built-in skill to the local skills directory.\n\nThe skill's SKILL.md is extracted from the binary and written to the\ndestination directory. By default the skill is installed under\n<project root>/.dscli/skills/<name>/, where <project root> is the nearest\nancestor of $PWD that contains a .git or .dscli directory (falling back\nto $PWD if none is found). Use --path to specify a custom directory.\n\nExamples:\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
-msgstr "Install a built-in skill to the local skills directory.\n\nThe skill's SKILL.md is extracted from the binary and written to the\ndestination directory. By default the skill is installed under\n<project root>/.dscli/skills/<name>/, where <project root> is the nearest\nancestor of $PWD that contains a .git or .dscli directory (falling back\nto $PWD if none is found). Use --path to specify a custom directory.\n\nExamples:\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
-
 msgid "Installation path (default: <project root>/.dscli/skills)"
 msgstr "Installation path (default: <project root>/.dscli/skills)"
-
-msgid "Installed skill %s to %s\n"
-msgstr "Installed skill %s to %s\n"
 
 msgid "Introduction (optional, for video material)"
 msgstr "Introduction (optional, for video material)"
@@ -1046,3 +1033,24 @@ msgstr "Run the configured rsync command to deploy site content to remote.\n\nFo
 
 msgid "Skip syntax highlighting of HTML files before deploy"
 msgstr "Skip syntax highlighting of HTML files before deploy"
+
+msgid "Install a built-in skill to the local skills directory.\n\nThe skill's whole directory is extracted from the binary: SKILL.md and every\ncompanion file (references/, scripts/, ...) are written to the destination\ndirectory. Regular files are installed with mode 0644; files under scripts/\nare installed executable (0755). By default the skill is installed under\n<project root>/.dscli/skills/<name>/, where <project root> is the nearest\nancestor of $PWD that contains a .git or .dscli directory (falling back\nto $PWD if none is found). Use --path to specify a custom directory.\n\nExamples:\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
+msgstr "Install a built-in skill to the local skills directory.\n\nThe skill's whole directory is extracted from the binary: SKILL.md and every\ncompanion file (references/, scripts/, ...) are written to the destination\ndirectory. Regular files are installed with mode 0644; files under scripts/\nare installed executable (0755). By default the skill is installed under\n<project root>/.dscli/skills/<name>/, where <project root> is the nearest\nancestor of $PWD that contains a .git or .dscli directory (falling back\nto $PWD if none is found). Use --path to specify a custom directory.\n\nExamples:\n  slingshot skill install weixin\n  slingshot skill install weixin --path /home/user/.dscli/skills"
+
+msgid "Installed skill %s to %s (%d file(s))\n"
+msgstr "Installed skill %s to %s (%d file(s))\n"
+
+msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n  list              List all drafts\n  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)\n"
+msgstr "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n  list              List all drafts\n  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)\n"
+
+msgid "Print a draft's full content"
+msgstr "Print a draft's full content"
+
+msgid "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Progress and warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
+msgstr "Print the full content of a draft's article(s).\n\nThe draft is resolved the same way as \"show\" and \"remove\": a sidecar YAML\nfile with a media_id, a 1-based index from \"list\", or a raw media_id.\n\nThe article content is the raw WeChat HTML and is written to stdout\nverbatim, so it can be redirected or piped without colour codes getting\nin the way. Progress and warnings go to stderr.\n\nWhen a draft holds more than one article, each article is preceded by a\n\"<!-- article N: <title> -->\" comment line; a single article is printed\nas-is.\n\nUse --output to write the content to a file instead of stdout."
+
+msgid "Write content to a file instead of stdout"
+msgstr "Write content to a file instead of stdout"
+
+msgid "Wrote %d bytes to %s\n"
+msgstr "Wrote %d bytes to %s\n"
