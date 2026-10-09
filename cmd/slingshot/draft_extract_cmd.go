@@ -70,7 +70,7 @@ func (c *cmdDraftExtract) run(cmd *cobra.Command, args []string) error {
 	}
 	token, err := getaccesstoken.GetToken(cfg)
 	if err != nil {
-		return fmt.Errorf("getting access token: %w", err)
+		return fmt.Errorf("%s: %w", i18n.G("getting access token"), err)
 	}
 
 	mediaID, err := resolveID(token, idStr)
@@ -93,11 +93,11 @@ func (c *cmdDraftExtract) run(cmd *cobra.Command, args []string) error {
 	if c.output != "" {
 		if dir := filepath.Dir(c.output); dir != "" && dir != "." {
 			if err := os.MkdirAll(dir, 0755); err != nil {
-				return fmt.Errorf("creating directory for %q: %w", c.output, err)
+				return fmt.Errorf(i18n.G("creating directory for %q: %w"), c.output, err)
 			}
 		}
 		if err := os.WriteFile(c.output, []byte(content), 0644); err != nil {
-			return fmt.Errorf("writing %q: %w", c.output, err)
+			return fmt.Errorf(i18n.G("writing %q: %w"), c.output, err)
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Wrote %d bytes to %s\n"), len(content), c.output)
 		return nil
@@ -121,8 +121,10 @@ func formatDraftContents(articles []draft.ArticleInfo) string {
 	multi := len(articles) > 1
 	// prevEndsWithNewline tracks whether the previously written chunk ended
 	// with a newline, so the next header can start on its own line without
-	// emitting a blank line when it is not needed.
-	prevEndsWithNewline := true
+	// emitting a blank line when it is not needed. The zero value is fine:
+	// the first iteration writes a header (which always ends with a newline)
+	// before the flag is ever read.
+	var prevEndsWithNewline bool
 
 	for i, art := range articles {
 		if multi {

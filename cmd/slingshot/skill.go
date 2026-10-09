@@ -189,6 +189,10 @@ func isSinglePathElement(name string) bool {
 	if name == "" || name == "." || name == ".." {
 		return false
 	}
+	// Defense in depth: the separator check below already rejects "a/b", and
+	// path.Base also catches a trailing slash ("weixin/") whose base is the
+	// clean name. Keep it even though it looks redundant — removing it would
+	// silently re-open trailing-separator names.
 	if name != path.Base(name) {
 		return false
 	}
