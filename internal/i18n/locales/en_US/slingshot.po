@@ -1096,3 +1096,6 @@ msgstr "Search the web via the DeepSeek search API"
 
 msgid "no results"
 msgstr "no results"
+
+msgid "Fetch with the local lightpanda binary instead of the API"
+msgstr "Fetch with the local lightpanda binary instead of the API"

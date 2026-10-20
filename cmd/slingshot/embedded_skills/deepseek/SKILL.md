@@ -96,6 +96,22 @@ DeepSeek 返回三个长度差异巨大的文本字段，按需选择：
 slingshot deepseek search 'DeepSeek 模型 site:github.com OR site:huggingface.co lang:zh after:2025'
 ```
 
+## --local：本地抓取
+
+`fetch --local <url>` 用本机 lightpanda 抓取，免费、无需 API key。
+
+| | API（默认） | --local |
+|---|---|---|
+| 抓取位置 | DeepSeek 服务端 | 本机 lightpanda |
+| Key | 需要 | 不需要 |
+| 费用 | 按次计费 | 免费 |
+| GFW 影响 | 无 | 有 |
+| 依赖 | 无 | lightpanda 在 PATH |
+
+- 失败不回退到 API。需要 API 就去掉 `--local` 重跑。
+- API 返回 404/504 的站点，`--local` 常能抓到；反之亦然。
+- `--local` 偶发空输出（实测约 1/9），重跑一次即可。
+
 ## 注意
 
 - Fetch 受目标站点策略影响，可能 403 或 404

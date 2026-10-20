@@ -16,11 +16,27 @@ type cmdDeepseekFetch struct {
 }
 
 func (c *cmdDeepseekFetch) command() *cobra.Command {
+	var local bool
+
 	cmd := &cobra.Command{}
 	cmd.Use = "fetch <url>"
 	cmd.Short = i18n.G("Fetch a page as Markdown via the DeepSeek fetch API")
 	cmd.Args = cobra.ExactArgs(1)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		out := cmd.OutOrStdout()
+
+		if local {
+			text, err := deepseek.FetchLocal(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(out, text)
+			if text != "" && text[len(text)-1] != '\n' {
+				fmt.Fprintln(out)
+			}
+			return nil
+		}
+
 		cfg, _, err := config.Load()
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
@@ -37,7 +53,6 @@ func (c *cmdDeepseekFetch) command() *cobra.Command {
 			return err
 		}
 
-		out := cmd.OutOrStdout()
 		if resp.Title != "" {
 			fmt.Fprintf(out, "# %s\n\n", resp.Title)
 		}
@@ -47,6 +62,9 @@ func (c *cmdDeepseekFetch) command() *cobra.Command {
 		}
 		return nil
 	}
+
+	cmd.Flags().BoolVar(&local, "local", false,
+		i18n.G("Fetch with the local lightpanda binary instead of the API"))
 
 	return cmd
 }

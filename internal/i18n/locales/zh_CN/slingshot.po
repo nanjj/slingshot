@@ -1103,3 +1103,6 @@ msgstr "通过 DeepSeek search API 搜索网页"
 
 msgid "no results"
 msgstr "无结果"
+
+msgid "Fetch with the local lightpanda binary instead of the API"
+msgstr "使用本地 lightpanda 二进制抓取，而非调用 API"
