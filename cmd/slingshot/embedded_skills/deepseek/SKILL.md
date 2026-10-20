@@ -84,8 +84,8 @@ DeepSeek 返回三个长度差异巨大的文本字段，按需选择：
 | `site:` | `DeepSeek site:github.com` | 限制站点，多个用空格加 `OR` |
 | `-site:` | `DeepSeek -site:example.com` | 排除站点 |
 | `-` | `DeepSeek -广告` | 排除关键词 |
-| `-"..."` | `DeepSeek -"release notes"` | 排除短语 |
-| `"..."` | `DeepSeek "精确短语"` | 精确匹配 |
+| `-` + 引号 | `DeepSeek -"release notes"` | 排除短语 |
+| 引号 | `DeepSeek "精确短语"` | 精确匹配 |
 | `lang:` | `DeepSeek lang:zh,en` | 限制语言 |
 | `after:` | `DeepSeek after:2025` 或 `after:2025-01-01` | 发布日期下限 |
 | `before:` | `DeepSeek before:2026` 或 `before:2026-06-01` | 发布日期上限 |
@@ -96,55 +96,7 @@ DeepSeek 返回三个长度差异巨大的文本字段，按需选择：
 slingshot deepseek search 'DeepSeek 模型 site:github.com OR site:huggingface.co lang:zh after:2025'
 ```
 
-## 响应字段
+## 注意
 
-`search` 每条结果包含：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `rerank_score` | number | 0-3 分，≥1.5 为优质 |
-| `title` | string | 标题 |
-| `url` | string | 链接 |
-| `snippet` | string | 短摘要 |
-| `summary` | string | 长摘要 |
-| `content` | string | 正文（需 need_content） |
-| `site_name` | string/null | 站点名 |
-| `date` | string/null | UTC RFC 3339 |
-| `authority` | integer | 0-4，≥3 为极权威 |
-
-`fetch` 返回 `{title, content}`，`content` 为 Markdown。
-
-## API 映射
-
-| slingshot 子命令 | DeepSeek API |
-|------|------|
-| search | `POST https://api.deepseek.com/v1/tools/search` |
-| fetch | `POST https://api.deepseek.com/v1/tools/fetch` |
-
-鉴权：`Authorization: Bearer <key>` + `Content-Type: application/json`。
-
-## 计费与限速
-
-- **计费**：按请求次数，Search/Fetch 各 5 元 / 1000 次成功请求
-- **不计费**：请求失败、搜索无结果、超时
-- **限速**：Search 100 QPS，Fetch 25 QPS（按账号，与 API Key 数量无关）
-- **超限**：返回 HTTP 429，等后重试
-
-## 错误码
-
-| HTTP | 说明 | 处理 |
-|------|------|------|
-| 400 | 请求不合法 | 检查参数，不要重试 |
-| 401 | Key 缺失或无效 | 配置 key |
-| 402 | 余额不足 | 充值 |
-| 403 | Fetch 被安全策略拒绝 | 换 URL |
-| 404 | Fetch 无法提取正文 | 换 URL |
-| 408/429/5xx | 超时/限速/服务端错误 | 等后重试 |
-
-## 已知行为（2026-10-20 实测）
-
-- `count` 默认 10，范围 1-50
-- `need_content=false` 时 `content` 恒为空字符串
-- 未知字段被静默忽略
-- Fetch 结果受目标站点访问策略影响，可能 403 或 404
-- 搜索结果可为空数组（正常结束但无匹配），此时命令行报 "no results"
+- Fetch 受目标站点策略影响，可能 403 或 404
+- 搜索无匹配时命令行报 "no results"
