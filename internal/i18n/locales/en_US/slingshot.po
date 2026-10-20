@@ -1072,3 +1072,27 @@ msgstr "getting access token"
 
 msgid "writing %q: %w"
 msgstr "writing %q: %w"
+
+msgid "Fetch a page as Markdown via the DeepSeek fetch API"
+msgstr "Fetch a page as Markdown via the DeepSeek fetch API"
+
+msgid "Include the long summary in the output"
+msgstr "Include the long summary in the output"
+
+msgid "Include the page content in the output (implies need_content)"
+msgstr "Include the page content in the output (implies need_content)"
+
+msgid "Number of results (1-50, default 10)"
+msgstr "Number of results (1-50, default 10)"
+
+msgid "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nSubcommands:\n  search  <word>...       Search the web, print title, url and summary\n  fetch   <url>           Fetch a page, print its Markdown body\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
+msgstr "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nSubcommands:\n  search  <word>...       Search the web, print title, url and summary\n  fetch   <url>           Fetch a page, print its Markdown body\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
+
+msgid "Search the web and fetch pages via the DeepSeek tools API"
+msgstr "Search the web and fetch pages via the DeepSeek tools API"
+
+msgid "Search the web via the DeepSeek search API"
+msgstr "Search the web via the DeepSeek search API"
+
+msgid "no results"
+msgstr "no results"

@@ -1079,3 +1079,27 @@ msgstr "获取 access token"
 
 msgid "writing %q: %w"
 msgstr "写入 %q：%w"
+
+msgid "Fetch a page as Markdown via the DeepSeek fetch API"
+msgstr "通过 DeepSeek fetch API 抓取网页并转为 Markdown"
+
+msgid "Include the long summary in the output"
+msgstr "在输出中包含长摘要"
+
+msgid "Include the page content in the output (implies need_content)"
+msgstr "在输出中包含网页正文（隐含 need_content）"
+
+msgid "Number of results (1-50, default 10)"
+msgstr "结果条数（1-50，默认 10）"
+
+msgid "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nSubcommands:\n  search  <word>...       Search the web, print title, url and summary\n  fetch   <url>           Fetch a page, print its Markdown body\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
+msgstr "通过 DeepSeek tools API 搜索网页并以 Markdown 抓取页面。\n\n子命令：\n  search  <word>...       搜索网页，打印标题、URL 和摘要\n  fetch   <url>           抓取页面，打印其 Markdown 正文\n\n配置：\n  slingshot config set deepseek.key <key>   # 或 export DEEPSEEK_API_KEY"
+
+msgid "Search the web and fetch pages via the DeepSeek tools API"
+msgstr "通过 DeepSeek tools API 搜索网页并抓取页面"
+
+msgid "Search the web via the DeepSeek search API"
+msgstr "通过 DeepSeek search API 搜索网页"
+
+msgid "no results"
+msgstr "无结果"

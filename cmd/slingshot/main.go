@@ -131,6 +131,7 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 		(&cmdCode{global: global}).command(),
 		(&cmdTikz{global: global}).command(),
 		(&cmdAmap{global: global}).command(),
+		(&cmdDeepseek{global: global}).command(),
 	)
 
 	// 处理 version 标志
