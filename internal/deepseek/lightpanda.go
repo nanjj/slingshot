@@ -47,7 +47,10 @@ func FetchLocal(ctx context.Context, url string) (string, error) {
 
 	text := stdout.String()
 	if strings.TrimSpace(text) == "" {
-		return "", errors.New("local fetch: lightpanda returned an empty document")
+		// lightpanda exits 0 with no output when the page never finishes
+		// loading (for example when the network is unreachable). Say so,
+		// otherwise the error looks like a parser bug.
+		return "", errors.New("local fetch: lightpanda returned an empty document; the page may be unreachable (check network or proxy, or retry without --local)")
 	}
 
 	return text, nil
