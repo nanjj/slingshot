@@ -4,26 +4,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
 	"github.com/nanjj/slingshot/internal/config"
 )
 
-// searchLocalTimeout bounds a single Google search via remote CDP. A
-// cold connection plus page load plus extraction fits well inside this.
-const searchLocalTimeout = 90 * time.Second
+const (
+	// searchLocalTimeout bounds the whole local search: CDP connect,
+	// navigation, DOM extraction, and URL resolution.
+	searchLocalTimeout = 120 * time.Second
 
-// searchLocalWait is how long to let the results page settle after
-// navigation before reading the DOM.
-const searchLocalWait = 3 * time.Second
+	// searchLocalWait is how long to let the results page settle after
+	// navigation before reading the DOM.
+	searchLocalWait = 3 * time.Second
+
+	// resolveURLTimeout bounds one redirect resolution. A 302 arrives at
+	// the HTTP layer; when it does not, the URL is left as-is.
+	resolveURLTimeout = 15 * time.Second
+)
 
 // SearchLocal runs a Google search through a remote lightpanda CDP
 // endpoint and maps the results onto SearchResponse.
@@ -75,9 +80,6 @@ func SearchLocal(ctx context.Context, cfg *config.Config, req SearchRequest) (*S
 
 				var snip = '';
 				if (block) {
-					// Known snippet containers first, then the block text with
-					// the title removed. textContent, not innerText: hidden
-					// knowledge-panel fragments still carry their text.
 					var s = block.querySelector('div.VwiC3b, span.aCOpRe, div[data-sncf]');
 					if (s) snip = s.textContent || '';
 					if (!snip) {
@@ -119,9 +121,80 @@ func SearchLocal(ctx context.Context, cfg *config.Config, req SearchRequest) (*S
 		})
 	}
 
-	resolveResultURLs(ctx, resp.Results)
+	resolveResultURLs(allocCtx, resp.Results)
 
 	return resp, nil
+}
+
+// resolveResultURLs rewrites Google redirect URLs to their real targets,
+// in place and concurrently. Failures leave the redirect URL untouched;
+// the redirect still opens the right page.
+func resolveResultURLs(allocCtx context.Context, results []SearchResult) {
+	var wg sync.WaitGroup
+	for i := range results {
+		if !isGoogleRedirect(results[i].URL) {
+			continue
+		}
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if real := resolveViaCDP(allocCtx, results[i].URL); real != "" {
+				results[i].URL = real
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// isGoogleRedirect reports whether url is a google.com/url redirect.
+func isGoogleRedirect(u string) bool {
+	return strings.Contains(u, "google.com/url?") || strings.Contains(u, "/url?")
+}
+
+// resolveViaCDP opens a fresh tab, navigates to the redirect URL, and
+// returns the Location header of the first 302 response. The page itself
+// never finishes loading: the redirect happens before any HTML arrives,
+// which is why this is fast.
+func resolveViaCDP(allocCtx context.Context, redirectURL string) string {
+	tabCtx, tabCancel := chromedp.NewContext(allocCtx)
+	defer tabCancel()
+
+	tctx, tcancel := context.WithTimeout(tabCtx, resolveURLTimeout)
+	defer tcancel()
+
+	err := chromedp.Run(tctx, network.Enable())
+	if err != nil {
+		return ""
+	}
+
+	locCh := make(chan string, 1)
+	listener := func(ev interface{}) {
+		if req, ok := ev.(*network.EventRequestWillBeSent); ok {
+			if req.RedirectResponse != nil {
+				if loc, ok := req.RedirectResponse.Headers["location"].(string); ok && loc != "" {
+					select {
+					case locCh <- loc:
+					default:
+					}
+				}
+			}
+		}
+	}
+	chromedp.ListenTarget(tctx, listener)
+
+	go func() {
+		_ = chromedp.Run(tctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			_, _, _, _, err := page.Navigate(redirectURL).Do(ctx)
+			return err
+		}))
+	}()
+
+	select {
+	case loc := <-locCh:
+		return loc
+	case <-time.After(resolveURLTimeout):
+		return ""
+	}
 }
 
 // resolveCDPEndpoint builds the remote CDP websocket URL from config.
@@ -160,69 +233,4 @@ func resolveCDPEndpoint(cfg *config.Config) (string, error) {
 	endpoint += sep + "proxy=" + proxy
 
 	return endpoint, nil
-}
-
-// googleURLRedirect matches the real URL inside Google's /url 302 page.
-var googleURLRedirect = regexp.MustCompile(`(?i)<a\s+href="([^"]+)"`)
-
-// resolveResultURLs rewrites Google redirect URLs to their real targets,
-// in place and concurrently. Failures leave the redirect URL untouched;
-// the redirect still opens the right page.
-func resolveResultURLs(ctx context.Context, results []SearchResult) {
-	var wg sync.WaitGroup
-	for i := range results {
-		if !strings.HasPrefix(results[i].URL, "https://www.google.com/url?") {
-			continue
-		}
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			if real := resolveGoogleURL(ctx, results[i].URL); real != "" {
-				results[i].URL = real
-			}
-		}(i)
-	}
-	wg.Wait()
-}
-
-// resolveGoogleURL fetches a Google redirect page and returns the URL it
-// points at. Google answers with a 200 HTML page containing a 302 target,
-// so the Location header is not available; the body must be parsed.
-func resolveGoogleURL(ctx context.Context, redirectURL string) string {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, redirectURL, nil)
-	if err != nil {
-		return ""
-	}
-
-	// Do not follow redirects: Google answers with a 302 whose HTML body
-	// names the target. Following it lands on the destination page, whose
-	// first link is not the one we are after.
-	client := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusFound {
-		if loc := resp.Header.Get("Location"); loc != "" {
-			return loc
-		}
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if err != nil {
-		return ""
-	}
-
-	m := googleURLRedirect.FindSubmatch(body)
-	if len(m) < 2 {
-		return ""
-	}
-	return string(m[1])
 }
