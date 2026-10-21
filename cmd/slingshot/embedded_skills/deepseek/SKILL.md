@@ -96,21 +96,25 @@ DeepSeek 返回三个长度差异巨大的文本字段，按需选择：
 slingshot deepseek search 'DeepSeek 模型 site:github.com OR site:huggingface.co lang:zh after:2025'
 ```
 
-## --local：本地抓取
+## --local：本地模式
 
 `fetch --local <url>` 用本机 lightpanda 抓取，免费、无需 API key。
+`search --local <query>` 走远程 lightpanda CDP 搜索 Google，同样免 key。
 
 | | API（默认） | --local |
 |---|---|---|
-| 抓取位置 | DeepSeek 服务端 | 本机 lightpanda |
+| fetch 执行位置 | DeepSeek 服务端 | 本机 lightpanda |
+| search 执行位置 | DeepSeek 服务端 | 远程 CDP（uswest） |
 | Key | 需要 | 不需要 |
 | 费用 | 按次计费 | 免费 |
-| GFW 影响 | 无 | 有 |
-| 依赖 | 无 | lightpanda 在 PATH |
+| 依赖 | 无 | fetch 需本机 lightpanda |
 
 - 失败不回退到 API。需要 API 就去掉 `--local` 重跑。
-- API 返回 404/504 的站点，`--local` 常能抓到；反之亦然。
-- `--local` 偶发空输出（实测约 1/9），重跑一次即可。
+- API 返回 404/504 的站点，`--local fetch` 常能抓到；反之亦然。
+- `--local fetch` 偶发空输出（实测约 1/9），重跑一次即可。
+- `--local search` 偶发 Google consent 页（限流），重跑一次即可。
+- `--local search` 的配置在 `lightpanda.remote.{url,token,proxy}`，
+  不需要本地代理。
 
 ## 注意
 
