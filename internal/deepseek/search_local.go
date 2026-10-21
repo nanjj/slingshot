@@ -102,7 +102,7 @@ func SearchLocal(ctx context.Context, cfg *config.Config, req SearchRequest) (*S
 	}
 
 	if len(raw) == 0 {
-		return nil, errors.New("search local: no results found; the search page may be a consent or captcha page")
+		return nil, errors.New("search local: no results found; Google may have served a consent or captcha page, retry in a few seconds")
 	}
 
 	limit := req.Count
