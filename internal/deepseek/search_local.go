@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -115,6 +119,8 @@ func SearchLocal(ctx context.Context, cfg *config.Config, req SearchRequest) (*S
 		})
 	}
 
+	resolveResultURLs(ctx, resp.Results)
+
 	return resp, nil
 }
 
@@ -154,4 +160,69 @@ func resolveCDPEndpoint(cfg *config.Config) (string, error) {
 	endpoint += sep + "proxy=" + proxy
 
 	return endpoint, nil
+}
+
+// googleURLRedirect matches the real URL inside Google's /url 302 page.
+var googleURLRedirect = regexp.MustCompile(`(?i)<a\s+href="([^"]+)"`)
+
+// resolveResultURLs rewrites Google redirect URLs to their real targets,
+// in place and concurrently. Failures leave the redirect URL untouched;
+// the redirect still opens the right page.
+func resolveResultURLs(ctx context.Context, results []SearchResult) {
+	var wg sync.WaitGroup
+	for i := range results {
+		if !strings.HasPrefix(results[i].URL, "https://www.google.com/url?") {
+			continue
+		}
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if real := resolveGoogleURL(ctx, results[i].URL); real != "" {
+				results[i].URL = real
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// resolveGoogleURL fetches a Google redirect page and returns the URL it
+// points at. Google answers with a 200 HTML page containing a 302 target,
+// so the Location header is not available; the body must be parsed.
+func resolveGoogleURL(ctx context.Context, redirectURL string) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, redirectURL, nil)
+	if err != nil {
+		return ""
+	}
+
+	// Do not follow redirects: Google answers with a 302 whose HTML body
+	// names the target. Following it lands on the destination page, whose
+	// first link is not the one we are after.
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusFound {
+		if loc := resp.Header.Get("Location"); loc != "" {
+			return loc
+		}
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return ""
+	}
+
+	m := googleURLRedirect.FindSubmatch(body)
+	if len(m) < 2 {
+		return ""
+	}
+	return string(m[1])
 }
