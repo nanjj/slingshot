@@ -63,8 +63,8 @@ func (c *cmdDeepseekFetch) command() *cobra.Command {
 		return nil
 	}
 
-	cmd.Flags().BoolVar(&local, "local", false,
-		i18n.G("Fetch with the local lightpanda binary instead of the API"))
+	cmd.Flags().BoolVar(&local, "local", true,
+		i18n.G("Fetch with the local lightpanda binary (default). Use --local=false for the API"))
 
 	return cmd
 }

@@ -1099,3 +1099,6 @@ msgstr "no results"
 
 msgid "Fetch with the local lightpanda binary instead of the API"
 msgstr "Fetch with the local lightpanda binary instead of the API"
+
+msgid "Fetch with the local lightpanda binary (default). Use --local=false for the API"
+msgstr "Fetch with the local lightpanda binary (default). Use --local=false for the API"

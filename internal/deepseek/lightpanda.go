@@ -19,7 +19,7 @@ func FetchLocal(ctx context.Context, url string) (string, error) {
 
 	bin, err := exec.LookPath("lightpanda")
 	if err != nil {
-		return "", errors.New("local fetch: lightpanda not found in PATH; install lightpanda or drop --local")
+		return "", errors.New("local fetch: lightpanda not found in PATH; install it (Arch: yay -S lightpanda-bin) or use --local=false for the API")
 	}
 
 	// networkidle is the only wait strategy that produced non-empty
