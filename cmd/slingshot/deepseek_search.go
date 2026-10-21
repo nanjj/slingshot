@@ -23,6 +23,7 @@ func (c *cmdDeepseekSearch) command() *cobra.Command {
 		count       int
 		needContent bool
 		showSummary bool
+		local       bool
 	)
 
 	cmd := &cobra.Command{}
@@ -35,18 +36,24 @@ func (c *cmdDeepseekSearch) command() *cobra.Command {
 			return fmt.Errorf("loading config: %w", err)
 		}
 
-		key, err := deepseek.ResolveKey(cfg)
-		if err != nil {
-			return err
-		}
-
 		query := strings.Join(args, " ")
-		client := deepseek.NewClient(key)
-		resp, err := client.Search(cmd.Context(), deepseek.SearchRequest{
+		req := deepseek.SearchRequest{
 			Query:       query,
 			Count:       count,
 			NeedContent: needContent,
-		})
+		}
+
+		var resp *deepseek.SearchResponse
+		if local {
+			resp, err = deepseek.SearchLocal(cmd.Context(), cfg, req)
+		} else {
+			var key string
+			key, err = deepseek.ResolveKey(cfg)
+			if err != nil {
+				return err
+			}
+			resp, err = deepseek.NewClient(key).Search(cmd.Context(), req)
+		}
 		if err != nil {
 			return err
 		}
@@ -79,5 +86,7 @@ func (c *cmdDeepseekSearch) command() *cobra.Command {
 		i18n.G("Include the long summary in the output"))
 	cmd.Flags().BoolVar(&needContent, "content", false,
 		i18n.G("Include the page content in the output (implies need_content)"))
+	cmd.Flags().BoolVar(&local, "local", false,
+		i18n.G("Search Google through the remote lightpanda CDP instead of the API"))
 	return cmd
 }

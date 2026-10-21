@@ -1109,3 +1109,6 @@ msgstr "使用本地 lightpanda 二进制抓取，而非调用 API"
 
 msgid "Fetch with the local lightpanda binary (default). Use --local=false for the API"
 msgstr "使用本地 lightpanda 抓取（默认）。用 --local=false 走 API"
+
+msgid "Search Google through the remote lightpanda CDP instead of the API"
+msgstr "通过远程 lightpanda CDP 搜索 Google，而非调用 API"
