@@ -57,15 +57,36 @@ func SearchLocal(ctx context.Context, cfg *config.Config, req SearchRequest) (*S
 		chromedp.Evaluate(`
 			Array.from(document.querySelectorAll('h3')).map(h => {
 				var a = h.closest('a');
-				var block = h.closest('div.g, div[data-hveid]');
+				var title = h.textContent || '';
+
+				// Google's result-block class names change without notice, so
+				// walk up until an ancestor carries enough text to be the
+				// result body. Cap the walk so a stray h3 cannot pull in the
+				// whole page.
+				var block = h.parentElement;
+				for (var i = 0; i < 6 && block; i++) {
+					if ((block.textContent || '').length > 120) break;
+					block = block.parentElement;
+				}
+
 				var snip = '';
 				if (block) {
+					// Known snippet containers first, then the block text with
+					// the title removed. textContent, not innerText: hidden
+					// knowledge-panel fragments still carry their text.
 					var s = block.querySelector('div.VwiC3b, span.aCOpRe, div[data-sncf]');
-					if (s) snip = s.innerText;
-					if (!snip) snip = (block.innerText || '').slice(0, 200);
+					if (s) snip = s.textContent || '';
+					if (!snip) {
+						var text = block.textContent || '';
+						if (title && text.indexOf(title) === 0) {
+							text = text.slice(title.length);
+						}
+						snip = text.slice(0, 200);
+					}
 				}
+
 				return {
-					title: h.innerText,
+					title: title,
 					url: a ? a.href : '',
 					snippet: snip.replace(/\s+/g, ' ').trim()
 				};
