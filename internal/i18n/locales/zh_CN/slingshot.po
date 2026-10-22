@@ -1112,3 +1112,6 @@ msgstr "使用本地 lightpanda 抓取（默认）。用 --local=false 走 API"
 
 msgid "Search Google through the remote lightpanda CDP instead of the API"
 msgstr "通过远程 lightpanda CDP 搜索 Google，而非调用 API"
+
+msgid "This command was called with --explain; its arguments are valid, but no further processing is done"
+msgstr "此命令使用了 --explain；参数有效，但不会执行任何后续处理"

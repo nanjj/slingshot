@@ -24,27 +24,58 @@ type cmdGlobal struct {
 }
 
 // Parse 包装 usage.Parse, 注入全局配置 (如 ExplainOnly)。
-// 当 --explain 生效时, 除位置参数外还打印被显式设置的 flag。
+// 当 --explain 生效时, 位置参数由 usage 包打印, 随后由 printFlags
+// 打印每个 flag 的状态, 最后打印一句确认语。
 func (c *cmdGlobal) Parse(usage u.Usage, cmd *cobra.Command, args []string) ([]*u.Parsed, error) {
 	parsed, err := usage.Parse(args, u.Config{ExplainOnly: c.flagExplain})
 	if err == u.ErrExplainOnly {
 		c.printFlags(cmd)
+		fmt.Println()
+		fmt.Println(i18n.G("This command was called with --explain; its arguments are valid, but no further processing is done"))
 	}
 	return parsed, err
 }
 
-// printFlags 打印 --explain 时被显式设置的 flag 及其值。
-// 按名字排序, 保证输出稳定; --explain 和 --help 自身不列出。
+// globalFlags 是只由 root 命令负责的全局标志, 不在子命令的
+// --explain 输出中重复列出。它们的作用与具体子命令无关, 已由
+// 顶层 --help 说明。
+var globalFlags = map[string]bool{
+	"explain": true,
+	"help":    true,
+	"quiet":   true,
+	"version": true,
+}
+
+// printFlags 打印 --explain 时每个 flag 的状态:
+//
+//   - 显式设置: --name=value
+//   - 未设置但有非零默认值: --name=default (default)
+//   - 未设置且默认为零值: --name: (skipped: no value given)
+//
+// 按名字排序, 保证输出稳定; 全局标志不列出。
+// Flags() 和 InheritedFlags() 可能重叠, 用 map 去重。
 func (c *cmdGlobal) printFlags(cmd *cobra.Command) {
 	var lines []string
+	seen := map[string]bool{}
+
 	visit := func(f *pflag.Flag) {
-		if f.Name == "explain" || f.Name == "help" || !f.Changed {
+		if globalFlags[f.Name] || seen[f.Name] {
 			return
 		}
-		lines = append(lines, fmt.Sprintf("  --%s=%s", f.Name, f.Value.String()))
+		seen[f.Name] = true
+
+		switch {
+		case f.Changed:
+			lines = append(lines, fmt.Sprintf("  --%s=%s", f.Name, f.Value.String()))
+		case f.DefValue != "" && f.DefValue != "false" && f.DefValue != "0":
+			lines = append(lines, fmt.Sprintf("  --%s=%s (default)", f.Name, f.DefValue))
+		default:
+			lines = append(lines, fmt.Sprintf("  --%s: %s", f.Name, i18n.G("(skipped: no value given)")))
+		}
 	}
 	cmd.Flags().VisitAll(visit)
 	cmd.InheritedFlags().VisitAll(visit)
+
 	if len(lines) == 0 {
 		return
 	}

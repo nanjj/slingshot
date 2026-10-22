@@ -21,18 +21,17 @@ func (u Usage) diagnose(w io.Writer, parsed []*Parsed) {
 	}
 
 	fmt.Fprintf(w, "%s %s\n", i18n.G("Usage:"), strings.Join(rendered, " "))
+
+	// 每个 atom 是同级关系, 不是嵌套。用序号区分, 不递增缩进,
+	// 否则第二个参数看起来像第一个的子项。
 	for i, p := range parsed {
-		var prefix strings.Builder
-		prefix.WriteString("  ")
-		for range i {
-			prefix.WriteString("  ")
-		}
+		label := fmt.Sprintf("  [%d] └─ ", i+1)
 		if p.Skipped {
-			fmt.Fprintf(w, "%s└─ %s\n", prefix.String(), i18n.G("(skipped: no value given)"))
+			fmt.Fprintf(w, "%s%s\n", label, i18n.G("(skipped: no value given)"))
 		} else if p.err != nil {
-			fmt.Fprintf(w, "%s└─ %s: %s\n", prefix.String(), i18n.G("(skipped)"), p.err)
+			fmt.Fprintf(w, "%s%s: %s\n", label, i18n.G("(skipped)"), p.err)
 		} else {
-			fmt.Fprintf(w, "%s└─ '%s'\n", prefix.String(), p.String)
+			fmt.Fprintf(w, "%s'%s'\n", label, p.String)
 		}
 	}
 }

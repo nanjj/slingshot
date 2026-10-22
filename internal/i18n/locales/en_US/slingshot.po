@@ -1105,3 +1105,6 @@ msgstr "Fetch with the local lightpanda binary (default). Use --local=false for 
 
 msgid "Search Google through the remote lightpanda CDP instead of the API"
 msgstr "Search Google through the remote lightpanda CDP instead of the API"
+
+msgid "This command was called with --explain; its arguments are valid, but no further processing is done"
+msgstr "This command was called with --explain; its arguments are valid, but no further processing is done"
