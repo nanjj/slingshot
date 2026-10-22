@@ -9,7 +9,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var jaegerTopologyUsage = u.Usage{
+	u.Placeholder("traceID"),
+}
 
 // cmdJaegerTraceTopology 实现 "slingshot jaeger trace topology <traceID>"。
 type cmdJaegerTraceTopology struct {
@@ -26,9 +31,14 @@ func (c *cmdJaegerTraceTopology) command() *cobra.Command {
 	cmd.Long = i18n.G(`Analyse a trace's spans to extract the service dependency graph:
 which services communicated with which, their operations, span counts,
 error counts, and average durations.`)
-	cmd.Args = cobra.ExactArgs(1)
+	cmd.Args = cobra.ArbitraryArgs
 	cmd.Flags().BoolVar(&c.jsonOutput, "json", false, i18n.G("Output as JSON"))
-	cmd.RunE = c.run
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(jaegerTopologyUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

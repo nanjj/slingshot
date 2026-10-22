@@ -8,8 +8,11 @@ import (
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/i18n"
 	"github.com/nanjj/slingshot/internal/material"
+	u "github.com/nanjj/slingshot/internal/usage"
 	"github.com/spf13/cobra"
 )
+
+var meterialListUsage = u.Usage{}
 
 // --- cmdMeterialList ---
 
@@ -43,8 +46,13 @@ Examples:
 		i18n.G("Offset for pagination"))
 	cmd.Flags().IntVarP(&c.count, "count", "c", 20,
 		i18n.G("Number of items to list (max 20)"))
-	cmd.RunE = c.run
-	cmd.Args = cobra.NoArgs
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(meterialListUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
+	cmd.Args = cobra.ArbitraryArgs
 	return cmd
 }
 

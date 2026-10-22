@@ -8,7 +8,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nStatsUsage = u.Usage{}
 
 // cmdI18nStats implements "slingshot i18n stats".
 type cmdI18nStats struct {
@@ -24,7 +27,12 @@ func (c *cmdI18nStats) command() *cobra.Command {
 
 Displays total entries, translated count, untranslated count,
 missing entries (vs en_US), and coverage percentage.`)
-	cmd.RunE = c.run
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nStatsUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

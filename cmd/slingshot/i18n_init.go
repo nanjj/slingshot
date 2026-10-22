@@ -9,7 +9,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nInitUsage = u.Usage{}
 
 // cmdI18nInit implements "slingshot i18n init".
 // It scaffolds the i18n package for a new project.
@@ -39,7 +42,12 @@ then use i18n.G("message") in your code and run 'slingshot i18n sync'.`)
 
 	cmd.Flags().StringVar(&c.name, "name", "",
 		".po filename (without .po extension, default: derived from go.mod module name)")
-	cmd.RunE = c.run
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nInitUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

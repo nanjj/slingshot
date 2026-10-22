@@ -4,7 +4,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var jaegerServicesUsage = u.Usage{}
 
 // cmdJaegerServices 实现 "slingshot jaeger services"。
 type cmdJaegerServices struct {
@@ -17,8 +20,13 @@ func (c *cmdJaegerServices) command() *cobra.Command {
 	cmd.Use = "services"
 	cmd.Short = i18n.G("List all registered services")
 	cmd.Long = i18n.G("List all services registered with Jaeger.")
-	cmd.Args = cobra.NoArgs
-	cmd.RunE = c.run
+	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(jaegerServicesUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

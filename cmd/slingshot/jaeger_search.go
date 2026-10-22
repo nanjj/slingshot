@@ -8,7 +8,12 @@ import (
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var jaegerSearchUsage = u.Usage{
+	u.Placeholder("service"),
+}
 
 // cmdJaegerSearch 实现 "slingshot jaeger search <service>"。
 type cmdJaegerSearch struct {
@@ -32,8 +37,13 @@ Examples:
 		i18n.G("Max trace count"))
 	cli.AddStringFlag(cmd.Flags(), &c.tags, "tags|t", "",
 		i18n.G("Filter tags as JSON, e.g. '{\"error\":\"true\"}'"))
-	cmd.Args = cobra.ExactArgs(1)
-	cmd.RunE = c.run
+	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(jaegerSearchUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

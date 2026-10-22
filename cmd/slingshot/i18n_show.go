@@ -10,7 +10,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nShowUsage = u.Usage{
+	u.Placeholder("locale"),
+	u.Placeholder("id"),
+}
 
 // cmdI18nShow implements "slingshot i18n show".
 // Shows full details of an untranslated entry by its numbered ID,
@@ -32,8 +38,13 @@ ID numbering is stable — entries are sorted alphabetically.
 Example:
   slingshot i18n show zh_CN 3`)
 
-	cmd.RunE = c.run
-	cmd.Args = cobra.ExactArgs(2)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nShowUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
+	cmd.Args = cobra.ArbitraryArgs
 	cmd.ValidArgs = []string{"locale", "id"}
 	return cmd
 }

@@ -8,7 +8,10 @@ import (
 
 	cli "github.com/nanjj/slingshot/internal/cmd"
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var jaegerDepsUsage = u.Usage{}
 
 // cmdJaegerDeps 实现 "slingshot jaeger deps"。
 type cmdJaegerDeps struct {
@@ -28,8 +31,13 @@ Examples:
   slingshot jaeger deps --lookback 24h`)
 	cli.AddStringFlag(cmd.Flags(), &c.lookback, "lookback|l", "1h",
 		i18n.G("Lookback duration (e.g. 1h, 24h, 3600s)"))
-	cmd.Args = cobra.NoArgs
-	cmd.RunE = c.run
+	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(jaegerDepsUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

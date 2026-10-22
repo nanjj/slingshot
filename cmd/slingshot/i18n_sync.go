@@ -9,7 +9,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nSyncUsage = u.Usage{}
 
 // cmdI18nSync implements "slingshot i18n sync".
 type cmdI18nSync struct {
@@ -34,7 +37,12 @@ With --delete, removes orphaned entries (msgids that exist in .po files
 but no longer appear in source code).`)
 	cmd.Flags().BoolVar(&c.delete, "delete", false,
 		"Delete orphaned entries (in .po but not in source code)")
-	cmd.RunE = c.run
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nSyncUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	return cmd
 }
 

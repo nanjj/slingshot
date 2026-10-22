@@ -4,7 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var jaegerTraceUsage = u.Usage{
+	u.Placeholder("traceID"),
+}
 
 // cmdJaegerTrace 实现 "slingshot jaeger trace <traceID>"。
 type cmdJaegerTrace struct {
@@ -21,8 +26,13 @@ func (c *cmdJaegerTrace) command() *cobra.Command {
 Subcommands provide progressive-disclosure views:
   topology      Show the service-dependency graph extracted from the trace
   critical-path Identify the span chain most responsible for latency`)
-	cmd.Args = cobra.ExactArgs(1)
-	cmd.RunE = c.run
+	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(jaegerTraceUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	cmd.AddCommand(
 		c.cmdTopology().command(),
 		c.cmdCriticalPath().command(),

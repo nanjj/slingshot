@@ -9,7 +9,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nTranslateUsage = u.Usage{
+	u.Placeholder("locale"),
+}
 
 // cmdI18nTranslate implements "slingshot i18n translate".
 // Sets the translation for a single msgid in a locale's .po file.
@@ -69,8 +74,13 @@ Workflow:
 		"Translation text (.po-escaped form); empty string clears the translation")
 	cmd.Flags().IntVar(&c.id, "id", 0,
 		"Untranslated entry number from \"i18n check\" output (alternative to --msgid)")
-	cmd.RunE = c.run
-	cmd.Args = cobra.ExactArgs(1)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nTranslateUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
+	cmd.Args = cobra.ArbitraryArgs
 	return cmd
 }
 

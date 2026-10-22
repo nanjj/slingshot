@@ -9,7 +9,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nAddUsage = u.Usage{
+	u.Placeholder("locale"),
+}
 
 // cmdI18nAdd implements "slingshot i18n add".
 type cmdI18nAdd struct {
@@ -29,8 +34,13 @@ all with empty msgstr (untranslated).
 Example:
   slingshot i18n add ja        # Create ja locale from en_US
   slingshot i18n add zh_TW -d path/to/locales`)
-	cmd.RunE = c.run
-	cmd.Args = cobra.ExactArgs(1)
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nAddUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
+	cmd.Args = cobra.ArbitraryArgs
 	return cmd
 }
 

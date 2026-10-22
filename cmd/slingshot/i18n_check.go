@@ -10,7 +10,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+var i18nCheckUsage = u.Usage{
+	u.Placeholder("locale").List(0),
+}
 
 // cmdI18nCheck implements "slingshot i18n check".
 type cmdI18nCheck struct {
@@ -38,7 +43,12 @@ Exit code:
   With --exit-code:    1 if any locale has missing or orphaned entries`)
 	cmd.Flags().BoolVar(&c.exitCode, "exit-code", false,
 		"Exit with non-zero status if any issues are found")
-	cmd.RunE = c.run
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if _, err := c.global.Parse(i18nCheckUsage, cmd, args); err != nil {
+			return err
+		}
+		return c.run(cmd, args)
+	}
 	cmd.Args = cobra.ArbitraryArgs
 	return cmd
 }
