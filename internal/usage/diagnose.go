@@ -11,10 +11,6 @@ import (
 // diagnose 输出参数解析的可视化诊断。
 // 当 --explain 时输出到 stdout, 错误时输出到 stderr。
 func (u Usage) diagnose(w io.Writer, parsed []*Parsed) {
-	if len(parsed) == 0 {
-		return
-	}
-
 	rendered := make([]string, len(u))
 	for i, atom := range u {
 		rendered[i] = atom.Render()

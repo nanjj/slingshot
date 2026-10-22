@@ -23,8 +23,8 @@ import (
 
 // tikz 子命令语法: tikz <in-file> <out-file>
 var tikzUsage = u.Usage{
-	u.File, // <in-file>
-	u.File, // <out-file>
+	u.Placeholder("in-file"),
+	u.Placeholder("out-file"),
 }
 
 // cmdTikz 实现 "slingshot tikz" 子命令: 把 TikZ 片段渲染成图片。
@@ -35,7 +35,7 @@ type cmdTikz struct {
 
 func (c *cmdTikz) command() *cobra.Command {
 	cmd := &cobra.Command{}
-	cmd.Use = "tikz " + u.File.Render() + " " + u.File.Render()
+	cmd.Use = "tikz <in-file> <out-file>"
 	cmd.Short = i18n.G("Render a TikZ snippet to png/jpg/svg/pdf")
 	cmd.Long = cli.FormatSection(
 		color.CyanString("Description:"),

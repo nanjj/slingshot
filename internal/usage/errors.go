@@ -20,7 +20,13 @@ func (e *notEnoughArgumentsError) Error() string {
 	if v, ok := e.atom.(verbatim); ok && v.element == "" {
 		return i18n.G("unexpected end of argument; did you forget a suffix?")
 	}
-	return fmt.Sprintf(i18n.G("not enough arguments; expected a value for %s"), quote(renderRaw(e.atom)))
+	// placeholder 的 renderRaw 已带尖括号, 不加引号; 其余 Atom
+	// (verbatim、flag、compound 等) 需要引号以便在句中区分。
+	rendered := renderRaw(e.atom)
+	if _, ok := e.atom.(placeholder); !ok {
+		rendered = quote(rendered)
+	}
+	return fmt.Sprintf(i18n.G("not enough arguments; expected a value for %s"), rendered)
 }
 
 type tooManyArgumentsError struct{ args []string }
