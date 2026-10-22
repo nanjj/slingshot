@@ -8,7 +8,13 @@ import (
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/deepseek"
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+// deepseekFetchUsage 是 fetch 的位置参数语法: 单个 URL。
+var deepseekFetchUsage = u.Usage{
+	u.Placeholder("url"),
+}
 
 // cmdDeepseekFetch 是 deepseek fetch 子命令。
 type cmdDeepseekFetch struct {
@@ -21,12 +27,18 @@ func (c *cmdDeepseekFetch) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "fetch <url>"
 	cmd.Short = i18n.G("Fetch a page as Markdown via the DeepSeek fetch API")
-	cmd.Args = cobra.ExactArgs(1)
+	cmd.Args = cobra.ArbitraryArgs
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		parsed, err := c.global.Parse(deepseekFetchUsage, cmd, args)
+		if err != nil {
+			return err
+		}
+
+		url := parsed[0].String
 		out := cmd.OutOrStdout()
 
 		if local {
-			text, err := deepseek.FetchLocal(cmd.Context(), args[0])
+			text, err := deepseek.FetchLocal(cmd.Context(), url)
 			if err != nil {
 				return err
 			}
@@ -48,7 +60,7 @@ func (c *cmdDeepseekFetch) command() *cobra.Command {
 		}
 
 		client := deepseek.NewClient(key)
-		resp, err := client.Fetch(cmd.Context(), args[0])
+		resp, err := client.Fetch(cmd.Context(), url)
 		if err != nil {
 			return err
 		}

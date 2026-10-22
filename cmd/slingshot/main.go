@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/nanjj/clog"
 	"github.com/nanjj/slingshot/internal/i18n"
@@ -22,8 +24,35 @@ type cmdGlobal struct {
 }
 
 // Parse 包装 usage.Parse, 注入全局配置 (如 ExplainOnly)。
+// 当 --explain 生效时, 除位置参数外还打印被显式设置的 flag。
 func (c *cmdGlobal) Parse(usage u.Usage, cmd *cobra.Command, args []string) ([]*u.Parsed, error) {
-	return usage.Parse(args, u.Config{ExplainOnly: c.flagExplain})
+	parsed, err := usage.Parse(args, u.Config{ExplainOnly: c.flagExplain})
+	if err == u.ErrExplainOnly {
+		c.printFlags(cmd)
+	}
+	return parsed, err
+}
+
+// printFlags 打印 --explain 时被显式设置的 flag 及其值。
+// 按名字排序, 保证输出稳定; --explain 和 --help 自身不列出。
+func (c *cmdGlobal) printFlags(cmd *cobra.Command) {
+	var lines []string
+	visit := func(f *pflag.Flag) {
+		if f.Name == "explain" || f.Name == "help" || !f.Changed {
+			return
+		}
+		lines = append(lines, fmt.Sprintf("  --%s=%s", f.Name, f.Value.String()))
+	}
+	cmd.Flags().VisitAll(visit)
+	cmd.InheritedFlags().VisitAll(visit)
+	if len(lines) == 0 {
+		return
+	}
+	sort.Strings(lines)
+	fmt.Println("Flags:")
+	for _, l := range lines {
+		fmt.Println(l)
+	}
 }
 
 func main() {

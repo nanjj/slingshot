@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -11,7 +10,13 @@ import (
 	"github.com/nanjj/slingshot/internal/config"
 	"github.com/nanjj/slingshot/internal/deepseek"
 	"github.com/nanjj/slingshot/internal/i18n"
+	u "github.com/nanjj/slingshot/internal/usage"
 )
+
+// deepseekSearchUsage 是 search 的位置参数语法: 一个或多个搜索词。
+var deepseekSearchUsage = u.Usage{
+	u.Placeholder("word").List(1),
+}
 
 // cmdDeepseekSearch 是 deepseek search 子命令。
 type cmdDeepseekSearch struct {
@@ -29,14 +34,19 @@ func (c *cmdDeepseekSearch) command() *cobra.Command {
 	cmd := &cobra.Command{}
 	cmd.Use = "search <word>..."
 	cmd.Short = i18n.G("Search the web via the DeepSeek search API")
-	cmd.Args = cobra.MinimumNArgs(1)
+	cmd.Args = cobra.ArbitraryArgs
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		parsed, err := c.global.Parse(deepseekSearchUsage, cmd, args)
+		if err != nil {
+			return err
+		}
+
+		query := parsed[0].String
+
 		cfg, _, err := config.Load()
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}
-
-		query := strings.Join(args, " ")
 		req := deepseek.SearchRequest{
 			Query:       query,
 			Count:       count,
