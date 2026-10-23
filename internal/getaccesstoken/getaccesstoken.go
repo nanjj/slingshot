@@ -10,8 +10,10 @@ package getaccesstoken
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nanjj/slingshot/internal/config"
@@ -128,6 +130,42 @@ func cachedToken(cfg *config.Config) (string, bool) {
 	return "", false
 }
 
+// tokenError formats a WeChat API error. For 40164 (IP not in the
+// whitelist) it appends actionable hints, because the raw errmsg alone
+// gives no clue what to do next. Other error codes keep the plain
+// format that callers and tests already rely on.
+func tokenError(code int, msg string) error {
+	base := fmt.Errorf("WeChat API error (code %d): %s", code, msg)
+	if code != 40164 {
+		return base
+	}
+	ip := whitelistIPFromMsg(msg)
+	var b strings.Builder
+	b.WriteString(base.Error())
+	b.WriteString("\n  IP not in the WeChat IP whitelist")
+	if ip != "" {
+		b.WriteString("; the request came from " + ip)
+	}
+	b.WriteString("\n  Add it at: WeChat MP console -> Settings and Development -> Basic Configuration -> IP whitelist")
+	b.WriteString("\n  A newly saved entry can take 5-10 minutes to take effect; separate multiple IPs with newlines.")
+	return errors.New(b.String())
+}
+
+// whitelistIPFromMsg extracts the address from a 40164 errmsg such as
+// "invalid ip 183.241.214.50 ipv6 ::ffff:183.241.214.50, not in whitelist".
+func whitelistIPFromMsg(msg string) string {
+	const marker = "invalid ip "
+	i := strings.Index(msg, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := msg[i+len(marker):]
+	if j := strings.IndexAny(rest, " \t,"); j >= 0 {
+		return rest[:j]
+	}
+	return rest
+}
+
 // requestToken calls the WeChat API to get a new access token.
 func requestToken(appid, secret string) (string, int, error) {
 	url := fmt.Sprintf("%s?grant_type=client_credential&appid=%s&secret=%s",
@@ -145,7 +183,7 @@ func requestToken(appid, secret string) (string, int, error) {
 	}
 
 	if tr.ErrCode != 0 {
-		return "", 0, fmt.Errorf("WeChat API error (code %d): %s", tr.ErrCode, tr.ErrMsg)
+		return "", 0, tokenError(tr.ErrCode, tr.ErrMsg)
 	}
 	if tr.AccessToken == "" {
 		return "", 0, fmt.Errorf("empty access token in response")

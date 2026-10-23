@@ -222,3 +222,48 @@ func TestGetTokenWithConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestTokenError(t *testing.T) {
+	t.Run("40013 unchanged", func(t *testing.T) {
+		err := tokenError(40013, "invalid appid")
+		if err.Error() != `WeChat API error (code 40013): invalid appid` {
+			t.Errorf("unexpected: %v", err)
+		}
+	})
+
+	t.Run("40164 includes ip and hint", func(t *testing.T) {
+		msg := "invalid ip 183.241.214.50 ipv6 ::ffff:183.241.214.50, not in whitelist"
+		err := tokenError(40164, msg)
+		got := err.Error()
+		for _, want := range []string{
+			"code 40164",
+			"183.241.214.50",
+			"IP whitelist",
+			"5-10 minutes",
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("missing %q in:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("40164 without parseable ip", func(t *testing.T) {
+		err := tokenError(40164, "something else")
+		if !strings.Contains(err.Error(), "IP whitelist") {
+			t.Errorf("hint missing: %v", err)
+		}
+	})
+}
+
+func TestWhitelistIPFromMsg(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"invalid ip 1.2.3.4 ipv6 ::ffff:1.2.3.4, not in whitelist", "1.2.3.4"},
+		{"invalid ip 1.2.3.4, not in whitelist", "1.2.3.4"},
+		{"no ip here", ""},
+	}
+	for _, c := range cases {
+		if got := whitelistIPFromMsg(c.in); got != c.want {
+			t.Errorf("whitelistIPFromMsg(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
