@@ -3,7 +3,7 @@
 # Targets:
 #   build         go build
 #   test          go test
-#   install       go install
+#   install       go test, then go install (aborts on test failure)
 #   release       cross-compile for linux/macos/windows amd64 & arm64 + gzip + sha256
 #   release-gh    release + create/upload GitHub release (requires gh CLI)
 #   clean         remove build artifacts
@@ -31,7 +31,7 @@ test:
 	go test -v -count=1 ./...
 
 .PHONY: install
-install:
+install: test
 	go install -v $(CMD_PATH)
 
 # --- Release: cross-compile ---
