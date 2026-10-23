@@ -19,11 +19,6 @@ var pageAddUsage = u.Usage{
 	u.File.List(1),
 }
 
-var pageUpdateUsage = u.Usage{
-	u.Name,
-	u.File.List(1),
-}
-
 var pageRemoveUsage = u.Usage{
 	u.Name,
 	u.Placeholder("page"),
@@ -47,8 +42,7 @@ index.html and its assets (images, etc.).
 
 Subcommands:
   list    <site>            List all pages in a site
-  add     <site> <file>...  Add new pages from HTML/Org files
-  update  <site> <file>...  Update existing pages from HTML/Org files
+  add     <site> <file>...  Add or update pages from HTML/Org files
   remove  <site> <page>     Remove a page
 `),
 	)
@@ -59,7 +53,6 @@ Subcommands:
 	cmd.AddCommand(
 		c.cmdList().command(),
 		c.cmdAdd().command(),
-		c.cmdUpdate().command(),
 		c.cmdRemove().command(),
 	)
 
@@ -79,17 +72,7 @@ func (c *cmdPage) cmdList() *cmdPageSub {
 }
 
 func (c *cmdPage) cmdAdd() *cmdPageAdd {
-	return &cmdPageAdd{
-		global: c.global,
-		update: false,
-	}
-}
-
-func (c *cmdPage) cmdUpdate() *cmdPageAdd {
-	return &cmdPageAdd{
-		global: c.global,
-		update: true,
-	}
+	return &cmdPageAdd{global: c.global}
 }
 
 func (c *cmdPage) cmdRemove() *cmdPageSub {

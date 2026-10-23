@@ -64,51 +64,36 @@ var pDateFormats = []string{
 
 // --- cmdPageAdd ---
 
-// cmdPageAdd implements both "slingshot page add <site> <file>"
-// and "slingshot page update <site> <file>".
+// cmdPageAdd implements "slingshot page add <site> <file>".
+// "update" is a deprecated alias: writing a page that already exists
+// replaces it, so the two commands were never different.
 type cmdPageAdd struct {
 	global    *cmdGlobal
-	update    bool // false = add, true = update
 	flagRsync bool // --rsync: deploy site via rsync after success
 }
 
 func (c *cmdPageAdd) command() *cobra.Command {
 	cmd := &cobra.Command{}
-	if c.update {
-		cmd.Use = "update " + u.Name.Render() + " " + u.File.List(1).Render()
-		cmd.Short = i18n.G("Update existing pages from HTML files")
-		cmd.Long = cli.FormatSection(
-			color.CyanString("Description:"),
-			i18n.G(`Update existing pages in a deployment site with new content.
+	cmd.Use = "add " + u.Name.Render() + " " + u.File.List(1).Render()
+	cmd.Aliases = []string{"update"}
+	cmd.Short = i18n.G("Add or update pages from HTML files")
+	cmd.Long = cli.FormatSection(
+		color.CyanString("Description:"),
+		i18n.G(`Add or update pages in a deployment site from HTML files.
 
 Each page name is derived from its HTML filename (without extension).
-The page directory named <page-name> must already exist in the site directory.
+A subdirectory named <page-name> is created under the site's directory
+if it does not exist yet; otherwise the existing page is overwritten.
 
 Images referenced in the HTML (<img src="...">) are copied from their
 source locations into the page directory.
 
 The site's index.html is regenerated once after all pages are processed.
 
-Use --rsync to automatically deploy the site after the update.`),
-		)
-	} else {
-		cmd.Use = "add " + u.Name.Render() + " " + u.File.List(1).Render()
-		cmd.Short = i18n.G("Add new pages from HTML files")
-		cmd.Long = cli.FormatSection(
-			color.CyanString("Description:"),
-			i18n.G(`Add new pages to a deployment site from HTML files.
+Use --rsync to automatically deploy the site after writing the pages.
 
-Each page name is derived from its HTML filename (without extension).
-A new subdirectory named <page-name> is created under the site's directory.
-
-Images referenced in the HTML (<img src="...">) are copied from their
-source locations into the page directory.
-
-The site's index.html is regenerated once after all pages are processed.
-
-Use --rsync to automatically deploy the site after adding the pages.`),
-		)
-	}
+"update" is accepted as an alias of "add" for compatibility.`),
+	)
 	cmd.Flags().BoolVar(&c.flagRsync, "rsync", false, i18n.G("Deploy site via rsync after adding/updating pages"))
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
@@ -138,10 +123,7 @@ func (c *cmdPageAdd) run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		verb := i18n.G("Added")
-		if c.update {
-			verb = i18n.G("Updated")
-		}
+		verb := i18n.G("Added or updated")
 		fmt.Fprintf(color.Output, "%s %s/%s\n", color.GreenString(verb+":"), siteName, color.GreenString(pageName))
 		processed++
 	}
@@ -181,12 +163,7 @@ func deploySite(siteName string, siteConfig config.Site) error {
 // parseArgs parses the command line and returns the site name and the list of
 // source files. Extracted from run to keep the entry point a step sequence.
 func (c *cmdPageAdd) parseArgs(cmd *cobra.Command, args []string) (string, []string, error) {
-	usage := pageAddUsage
-	if c.update {
-		usage = pageUpdateUsage
-	}
-
-	parsed, err := c.global.Parse(usage, cmd, args)
+	parsed, err := c.global.Parse(pageAddUsage, cmd, args)
 	if err != nil {
 		return "", nil, err
 	}

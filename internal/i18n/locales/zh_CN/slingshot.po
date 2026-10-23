@@ -275,14 +275,14 @@ msgstr "（无标题）"
 msgid "--title is required for video material"
 msgstr "视频素材需要 --title 参数"
 
-msgid "Add new pages from HTML files"
-msgstr "从 HTML 文件添加新页面"
+msgid "Add or update pages from HTML files"
+msgstr "从 HTML 文件添加或更新页面"
 
-msgid "Add new pages to a deployment site from HTML files.\n\nEach page name is derived from its HTML filename (without extension).\nA new subdirectory named <page-name> is created under the site's directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after adding the pages."
-msgstr "从 HTML 文件向部署站点添加新页面。\n\n每个页面名称从其 HTML 文件名衍生（不含扩展名）。\n在站点目录下创建名为 <page-name> 的子目录。\n\nHTML 中引用的图片（<img src=\"...\">）会从源位置复制到页面目录。\n\n所有页面处理完毕后，站点的 index.html 会重新生成。\n\n使用 --rsync 可在添加页面后自动部署站点。"
+msgid "Add or update pages in a deployment site from HTML files.\n\nEach page name is derived from its HTML filename (without extension).\nA subdirectory named <page-name> is created under the site's directory\nif it does not exist yet; otherwise the existing page is overwritten.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after writing the pages.\n\n\"update\" is accepted as an alias of \"add\" for compatibility."
+msgstr "从 HTML 文件向部署站点添加或更新页面。\n\n每个页面名称从其 HTML 文件名衍生（不含扩展名）。\n在站点目录下创建名为 <page-name> 的子目录，若已存在则覆盖。\n\nHTML 中引用的图片（<img src=\"...\">）会从源位置复制到页面目录。\n\n所有页面处理完毕后，站点的 index.html 会重新生成。\n\n使用 --rsync 可在写入页面后自动部署站点。\n\n\"update\" 作为 \"add\" 的别名被接受，以保持兼容。"
 
-msgid "Added"
-msgstr "已添加"
+msgid "Added or updated"
+msgstr "已添加或已更新"
 
 msgid "Article"
 msgstr "文章"
@@ -443,8 +443,8 @@ msgstr "管理站点页面"
 msgid "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\nSubcommands:\n  list                  List all config keys and values\n  show                  Show full configuration\n  get    <key>          Get a config value\n  set    <key> <value>  Set a config value\n  unset <key>           Unset (delete) a config key\n"
 msgstr "管理 slingshot 配置文件（~/.config/slingshot/config.yml）。\n\n子命令：\n  list                 列出所有配置键和值\n  show                 显示完整配置\n  get    <key>         获取配置值\n  set    <key> <value> 设置配置值\n  unset <key>          删除配置键\n"
 
-msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add new pages from HTML/Org files\n  update  <site> <file>...  Update existing pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
-msgstr "管理静态站点页面。\n\n每个页面是站点目录下的一个子目录，包含 index.html\n及其资源文件（图片等）。\n\n子命令：\n  list    <site>            列出站点中的所有页面\n  add     <site> <file>...  从 HTML/Org 文件添加新页面\n  update  <site> <file>...  从 HTML/Org 文件更新已有页面\n  remove  <site> <page>     删除页面\n"
+msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add or update pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
+msgstr "管理静态站点页面。\n\n每个页面是站点目录下的一个子目录，包含 index.html\n及其资源文件（图片等）。\n\n子命令：\n  list    <site>            列出站点中的所有页面\n  add     <site> <file>...  从 HTML/Org 文件添加或更新页面\n  remove  <site> <page>     删除页面\n"
 
 msgid "Material removed: %s\n"
 msgstr "素材已删除：%s\n"
@@ -577,12 +577,6 @@ msgstr "从 HTML 文件更新已有页面"
 
 msgid "Update existing pages in a deployment site with new content.\n\nEach page name is derived from its HTML filename (without extension).\nThe page directory named <page-name> must already exist in the site directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after the update."
 msgstr "用新内容更新部署站点中的已有页面。\n\n每个页面名称从其 HTML 文件名衍生（不含扩展名）。\n名为 <page-name> 的页面目录必须已在站点目录中存在。\n\nHTML 中引用的图片（<img src=\"...\">）会从源位置复制到页面目录。\n\n所有页面处理完毕后，站点的 index.html 会重新生成。\n\n使用 --rsync 可在更新后自动部署站点。"
-
-msgid "Updated"
-msgstr "已更新"
-
-msgid "Updated:"
-msgstr "已更新："
 
 msgid "Upgrade the site's style.css to the latest responsive version.\n\nChecks for the responsive sentinel marker in the existing CSS. If the CSS\nis already optimized, no changes are made unless --force is specified.\n\nThis command can be run at any time — before rsync, after adding pages,\nor as a standalone optimization step."
 msgstr "将站点的 style.css 升级到最新的响应式版本。\n\n检查现有 CSS 中的响应式哨兵标记。如果 CSS 已优化，除非指定 --force，\n否则不做更改。\n\n此命令可随时运行——rsync 之前、添加页面之后、或作为独立的优化步骤。"
@@ -1115,3 +1109,12 @@ msgstr "通过远程 lightpanda CDP 搜索 Google，而非调用 API"
 
 msgid "This command was called with --explain; its arguments are valid, but no further processing is done"
 msgstr "此命令使用了 --explain；参数有效，但不会执行任何后续处理"
+
+msgid "Updated"
+msgstr "已更新"
+
+msgid "Updated:"
+msgstr "已更新："
+
+msgid "Using cached thumbnail media_id: %s\n"
+msgstr "使用缓存的封面 media_id：%s\n"

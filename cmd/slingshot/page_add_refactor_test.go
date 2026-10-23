@@ -128,12 +128,11 @@ func TestProcessFileDateStableAcrossUpdate(t *testing.T) {
 		t.Fatalf("first add did not freeze the source mtime:\n%s", first)
 	}
 
-	// Touch the source: an update must keep the published date, not drift.
+	// Touch the source: rewriting must keep the published date, not drift.
 	later := mustDate(t, "2006-01-02", "2026-10-09")
 	if err := os.Chtimes(srcPath, later, later); err != nil {
 		t.Fatalf("touching source mtime: %v", err)
 	}
-	c.update = true
 	if _, err := c.processFile(cmd, srcPath, siteConfig); err != nil {
 		t.Fatalf("second processFile: %v", err)
 	}

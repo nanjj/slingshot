@@ -244,14 +244,14 @@ msgstr "--title is required for video material"
 msgid "Add a new deployment site with key-value configuration pairs.\n\nThe first positional argument is the site name. Subsequent arguments are\nkey-value pairs for site configuration.\n\nRequired keys:\n  dir   Local site directory\n\nOptional keys:\n  rsync Rsync deployment command\n  type  Site type: page (default) or zine (auto-build before rsync, public/ output)\n\nExample:\n  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path' type zine"
 msgstr "Add a new deployment site with key-value configuration pairs.\n\nThe first positional argument is the site name. Subsequent arguments are\nkey-value pairs for site configuration.\n\nRequired keys:\n  dir   Local site directory\n\nOptional keys:\n  rsync Rsync deployment command\n  type  Site type: page (default) or zine (auto-build before rsync, public/ output)\n\nExample:\n  slingshot site add mysite dir ~/mysite rsync 'rsync -avz --delete ./ user@host:/path' type zine"
 
-msgid "Add new pages from HTML files"
-msgstr "Add new pages from HTML files"
+msgid "Add or update pages from HTML files"
+msgstr "Add or update pages from HTML files"
 
-msgid "Add new pages to a deployment site from HTML files.\n\nEach page name is derived from its HTML filename (without extension).\nA new subdirectory named <page-name> is created under the site's directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after adding the pages."
-msgstr "Add new pages to a deployment site from HTML files.\n\nEach page name is derived from its HTML filename (without extension).\nA new subdirectory named <page-name> is created under the site's directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after adding the pages."
+msgid "Add or update pages in a deployment site from HTML files.\n\nEach page name is derived from its HTML filename (without extension).\nA subdirectory named <page-name> is created under the site's directory\nif it does not exist yet; otherwise the existing page is overwritten.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after writing the pages.\n\n\"update\" is accepted as an alias of \"add\" for compatibility."
+msgstr "Add or update pages in a deployment site from HTML files.\n\nEach page name is derived from its HTML filename (without extension).\nA subdirectory named <page-name> is created under the site's directory\nif it does not exist yet; otherwise the existing page is overwritten.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after writing the pages.\n\n\"update\" is accepted as an alias of \"add\" for compatibility."
 
-msgid "Added"
-msgstr "Added"
+msgid "Added or updated"
+msgstr "Added or updated"
 
 msgid "Article"
 msgstr "Article"
@@ -409,8 +409,8 @@ msgstr "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\
 msgid "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\nSubcommands:\n  list                  List all configured sites\n  add    <name> ...     Add a new site with key=value pairs\n  update <name> <k> <v> Update a site's configuration key\n  remove <name>         Remove a site\n  optimize <name>       Optimize site CSS for responsive display\n  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)\n"
 msgstr "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\nSubcommands:\n  list                  List all configured sites\n  add    <name> ...     Add a new site with key=value pairs\n  update <name> <k> <v> Update a site's configuration key\n  remove <name>         Remove a site\n  optimize <name>       Optimize site CSS for responsive display\n  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)\n"
 
-msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add new pages from HTML/Org files\n  update  <site> <file>...  Update existing pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
-msgstr "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add new pages from HTML/Org files\n  update  <site> <file>...  Update existing pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
+msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add or update pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
+msgstr "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add or update pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
 
 msgid "Material removed: %s\n"
 msgstr "Material removed: %s\n"
@@ -543,12 +543,6 @@ msgstr "Update existing pages from HTML files"
 
 msgid "Update existing pages in a deployment site with new content.\n\nEach page name is derived from its HTML filename (without extension).\nThe page directory named <page-name> must already exist in the site directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after the update."
 msgstr "Update existing pages in a deployment site with new content.\n\nEach page name is derived from its HTML filename (without extension).\nThe page directory named <page-name> must already exist in the site directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after the update."
-
-msgid "Updated"
-msgstr "Updated"
-
-msgid "Updated:"
-msgstr "Updated:"
 
 msgid "Upgrade the site's style.css to the latest responsive version.\n\nChecks for the responsive sentinel marker in the existing CSS. If the CSS\nis already optimized, no changes are made unless --force is specified.\n\nThis command can be run at any time — before rsync, after adding pages,\nor as a standalone optimization step."
 msgstr "Upgrade the site's style.css to the latest responsive version.\n\nChecks for the responsive sentinel marker in the existing CSS. If the CSS\nis already optimized, no changes are made unless --force is specified.\n\nThis command can be run at any time — before rsync, after adding pages,\nor as a standalone optimization step."
@@ -1108,3 +1102,12 @@ msgstr "Search Google through the remote lightpanda CDP instead of the API"
 
 msgid "This command was called with --explain; its arguments are valid, but no further processing is done"
 msgstr "This command was called with --explain; its arguments are valid, but no further processing is done"
+
+msgid "Updated"
+msgstr "Updated"
+
+msgid "Updated:"
+msgstr "Updated:"
+
+msgid "Using cached thumbnail media_id: %s\n"
+msgstr "Using cached thumbnail media_id: %s\n"
