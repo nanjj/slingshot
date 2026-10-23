@@ -221,9 +221,14 @@ func (c *cmdDraftAdd) run(cmd *cobra.Command, args []string) (err error) {
 
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft created: %s\n"), color.GreenString(resp.MediaID))
 
-	// Save media_id to sidecar YAML for future updates
+	// Save media_id and thumb_media_id to sidecar YAML for future updates.
+	// draft/update rejects a request whose thumb_media_id is empty, and the
+	// sidecar is the only place the value survives between add and update.
 	meta, _ := readSidecarYAML(file)
 	meta.MediaID = resp.MediaID
+	if thumbMediaID != "" {
+		meta.ThumbMediaID = thumbMediaID
+	}
 	if err := writeSidecarYAML(file, meta); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
 	}

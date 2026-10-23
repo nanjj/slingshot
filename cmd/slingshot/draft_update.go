@@ -133,10 +133,20 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
 	// Extract and sanitize author
 	author := mdtowx.SanitizeAuthor(extractAuthor(htmlStr))
 
-	// Determine cover media_id (optional for update)
+	// Determine cover media_id. Drafts created before draft_add started
+	// recording thumb_media_id in the sidecar have no value there, but the
+	// upload cache still remembers it by filename. Falling back to the cache
+	// keeps draft/update from sending an empty thumb_media_id, which WeChat
+	// rejects with 40007.
 	thumbMediaID := c.thumb
 	if thumbMediaID == "" {
 		thumbMediaID = extractThumbMediaID(htmlStr, file)
+	}
+	if thumbMediaID == "" {
+		if mid, ok := uploadcache.LoadCache(filepath.Dir(file)).AnyMediaID(); ok {
+			thumbMediaID = mid
+			fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Using cached thumbnail media_id: %s\n"), thumbMediaID)
+		}
 	}
 
 	// Auto-upload thumbnail if the value looks like a local image file path
@@ -241,10 +251,15 @@ func (c *cmdDraftUpdate) run(cmd *cobra.Command, args []string) (err error) {
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), i18n.G("Draft updated: %s\n"), color.GreenString(mediaID))
 
-	// Save/update media_id in sidecar YAML for future 1-arg usage
+	// Save/update media_id and thumb_media_id in sidecar YAML for future
+	// 1-arg usage. draft/update rejects an empty thumb_media_id, so the value
+	// must survive from one update to the next.
 	meta, _ = readSidecarYAML(file)
 
 	meta.MediaID = mediaID
+	if thumbMediaID != "" {
+		meta.ThumbMediaID = thumbMediaID
+	}
 	if err := writeSidecarYAML(file, meta); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), i18n.G("Warning: failed to save media_id to sidecar YAML: %v\n"), err)
 	}

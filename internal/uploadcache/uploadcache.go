@@ -168,6 +168,26 @@ func (c *Cache) GetByFilename(filename string) (Entry, bool) {
 	return Entry{}, false
 }
 
+// AnyMediaID returns a non-empty media_id from any cached entry, preferring
+// the local cache over the global one. It exists for callers that need a
+// cover image but were not given one explicitly: an article that already
+// uploaded a thumbnail through this cache has a usable media_id here.
+func (c *Cache) AnyMediaID() (string, bool) {
+	for _, entry := range c.data {
+		if entry.MediaID != "" && entry.MediaID != "0" {
+			return entry.MediaID, true
+		}
+	}
+	if c.fallback != nil {
+		for _, entry := range c.fallback.data {
+			if entry.MediaID != "" && entry.MediaID != "0" {
+				return entry.MediaID, true
+			}
+		}
+	}
+	return "", false
+}
+
 // HasFilename reports whether any cache entry (local or global) has the given filename.
 func (c *Cache) HasFilename(filename string) bool {
 	_, ok := c.GetByFilename(filename)
