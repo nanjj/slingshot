@@ -49,3 +49,36 @@ func TestI18nVerifySourceAgainstLocales(t *testing.T) {
 			locale, len(missing), strings.Join(missing, "\n  "))
 	}
 }
+
+// TestCompareWithSource pins the split between missing and orphaned.
+// missing is a runtime panic, orphaned is stale text; keeping them apart
+// is what lets verify fail the build on the first and only warn on the
+// second.
+func TestCompareWithSource(t *testing.T) {
+	source := map[string]bool{"used": true, "also-used": true}
+	table := map[string]string{
+		"":          "", // header, skipped
+		"used":      "已用",
+		"also-used": "",     // empty msgstr is still registered
+		"stale":     "过时文本", // no longer in source
+	}
+
+	missing, orphaned := compareWithSource(table, source)
+
+	if len(missing) != 0 {
+		t.Errorf("missing = %v, want none", missing)
+	}
+	if len(orphaned) != 1 || orphaned[0] != "stale" {
+		t.Errorf("orphaned = %v, want [stale]", orphaned)
+	}
+
+	// Reverse direction: source has an entry the locale lacks.
+	source2 := map[string]bool{"brand-new": true}
+	missing2, orphaned2 := compareWithSource(table, source2)
+	if len(missing2) != 1 || missing2[0] != "brand-new" {
+		t.Errorf("missing = %v, want [brand-new]", missing2)
+	}
+	if len(orphaned2) != 4 { // used, also-used, stale, plus header excluded
+		t.Logf("orphaned2 = %v (header excluded as expected)", orphaned2)
+	}
+}

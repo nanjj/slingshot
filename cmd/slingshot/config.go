@@ -44,12 +44,6 @@ func (c *cmdConfig) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Manage slingshot configuration file (~/.config/slingshot/config.yml).
 
-Subcommands:
-  list                  List all config keys and values
-  show                  Show full configuration
-  get    <key>          Get a config value
-  set    <key> <value>  Set a config value
-  unset <key>           Unset (delete) a config key
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

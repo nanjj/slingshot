@@ -49,19 +49,7 @@ Coordinates are GCJ-02 and written as "经度,纬度" (e.g. 111.772234,40.853779
 Configuration:
   slingshot config set amap.key <key>   # or export AMAP_KEY
 
-Subcommands:
-  search    <keywords> [city]                 POI keyword search (city-limited)
-  around    <keywords> <location> [radius]    Nearby search (default 3000m)
-  detail    <id>                              POI detail by Amap ID
-  geo       <address>                         Geocode address to coordinates
-  regeo     <location>                        Reverse geocode coordinates
-  driving   <origin> <destination>            Driving route (auto geocode)
-  walking   <origin> <destination>            Walking route (auto geocode)
-  bicycling <origin> <destination>            Bicycling route (auto geocode)
-  transit   <origin> <destination> <city> <cityd>
-                                              Transit route (city names required)
-  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)
-  ip        [ip]                              IP location`),
+`),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()

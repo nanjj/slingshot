@@ -22,10 +22,6 @@ func (c *cmdDeepseek) command() *cobra.Command {
 		i18n.G(`Search the web and fetch pages as Markdown via the DeepSeek
 tools API.
 
-Subcommands:
-  search  <word>...       Search the web, print title, url and summary
-  fetch   <url>           Fetch a page, print its Markdown body
-
 Configuration:
   slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY`),
 	)

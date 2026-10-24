@@ -36,8 +36,7 @@ func (c *cmdCode) command() *cobra.Command {
 The code command provides code search, graph analysis, AST navigation,
 and project management through the Model Context Protocol (MCP).
 
-Subcommands:
-  serve    Start MCP stdio server for code intelligence`,
+`,
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()

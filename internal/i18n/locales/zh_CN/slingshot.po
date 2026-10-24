@@ -249,10 +249,6 @@ msgstr "CSS 已升级为响应式版本。"
 msgid "zine build"
 msgstr "zine 构建"
 
-# Site command long description
-msgid "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\nSubcommands:\n  list                  List all configured sites\n  add    <name> ...     Add a new site with key=value pairs\n  update <name> <k> <v> Update a site's configuration key\n  remove <name>         Remove a site\n  optimize <name>       Optimize site CSS for responsive display\n  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)\n"
-msgstr "管理具有类型特定工作流的静态站点部署目标。\n\n每个站点有一个本地目录和可选配置键（dir、rsync 等）。\n站点类型：\n  page（默认）— 持续添加页面，直接从站点目录 rsync。\n  zine        — Zine 生成的站点，rsync 前自动构建，从 public/ 目录 rsync。\n\n子命令：\n  list                  列出所有已配置的站点\n  add    <name> ...     添加新站点，键=值对\n  update <name> <k> <v> 更新站点的配置键\n  remove <name>         删除站点\n  optimize <name>       优化站点 CSS 以适应响应式显示\n  rsync  <name>         通过 rsync 部署站点（自动构建 zine、优化 CSS）\n"
-
 # Description heading
 msgid "Description:"
 msgstr "说明:"
@@ -428,23 +424,11 @@ msgstr "回溯时长（例如 1h、24h、3600s）"
 msgid "Manage WeChat permanent materials"
 msgstr "管理微信永久素材"
 
-msgid "Manage WeChat public account permanent materials.\n\nSubcommands:\n  add    <file>     Upload a permanent material\n  list              List permanent materials\n  remove <id>       Remove a permanent material\n  show   <id>       Show a permanent material's details\n"
-msgstr "管理微信公众号永久素材。\n\n子命令：\n  add    <file>     上传永久素材\n  list              列出永久素材\n  remove <id>       删除永久素材\n  show   <id>       查看永久素材详情\n"
-
 msgid "Manage built-in skills"
 msgstr "管理内置技能"
 
-msgid "Manage built-in skills for AI agents.\n\nSubcommands:\n  list              List all built-in skills\n  install   <name>  Install a built-in skill"
-msgstr "管理 AI 智能体的内置技能。\n\n子命令：\n  list              列出所有内置技能\n  install   <name>  安装内置技能"
-
 msgid "Manage site pages"
 msgstr "管理站点页面"
-
-msgid "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\nSubcommands:\n  list                  List all config keys and values\n  show                  Show full configuration\n  get    <key>          Get a config value\n  set    <key> <value>  Set a config value\n  unset <key>           Unset (delete) a config key\n"
-msgstr "管理 slingshot 配置文件（~/.config/slingshot/config.yml）。\n\n子命令：\n  list                 列出所有配置键和值\n  show                 显示完整配置\n  get    <key>         获取配置值\n  set    <key> <value> 设置配置值\n  unset <key>          删除配置键\n"
-
-msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add or update pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
-msgstr "管理静态站点页面。\n\n每个页面是站点目录下的一个子目录，包含 index.html\n及其资源文件（图片等）。\n\n子命令：\n  list    <site>            列出站点中的所有页面\n  add     <site> <file>...  从 HTML/Org 文件添加或更新页面\n  remove  <site> <page>     删除页面\n"
 
 msgid "Material removed: %s\n"
 msgstr "素材已删除：%s\n"
@@ -571,12 +555,6 @@ msgstr "更新已有的微信公众号草稿内容。支持 .org、.md 和 .html
 
 msgid "Update an existing draft from .org/.md/.html file"
 msgstr "从 .org/.md/.html 文件更新已有草稿"
-
-msgid "Update existing pages from HTML files"
-msgstr "从 HTML 文件更新已有页面"
-
-msgid "Update existing pages in a deployment site with new content.\n\nEach page name is derived from its HTML filename (without extension).\nThe page directory named <page-name> must already exist in the site directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after the update."
-msgstr "用新内容更新部署站点中的已有页面。\n\n每个页面名称从其 HTML 文件名衍生（不含扩展名）。\n名为 <page-name> 的页面目录必须已在站点目录中存在。\n\nHTML 中引用的图片（<img src=\"...\">）会从源位置复制到页面目录。\n\n所有页面处理完毕后，站点的 index.html 会重新生成。\n\n使用 --rsync 可在更新后自动部署站点。"
 
 msgid "Upgrade the site's style.css to the latest responsive version.\n\nChecks for the responsive sentinel marker in the existing CSS. If the CSS\nis already optimized, no changes are made unless --force is specified.\n\nThis command can be run at any time — before rsync, after adding pages,\nor as a standalone optimization step."
 msgstr "将站点的 style.css 升级到最新的响应式版本。\n\n检查现有 CSS 中的响应式哨兵标记。如果 CSS 已优化，除非指定 --force，\n否则不做更改。\n\n此命令可随时运行——rsync 之前、添加页面之后、或作为独立的优化步骤。"
@@ -716,9 +694,6 @@ msgstr "追踪中没有 span"
 msgid "Output as JSON"
 msgstr "以 JSON 格式输出"
 
-msgid "Query Jaeger tracing data via the Jaeger Query HTTP API.\n\nReplaces the unreliable Jaeger MCP Server with direct HTTP calls —\nno truncation, no timeouts, no extra daemon.\n\nSubcommands:\n  services              List all registered services\n  operations  <service> List operations for a service\n  search      <service> Search traces for a service\n  trace       <traceID> Get full trace details\n  trace       topology      <traceID> Show trace service dependency graph\n  trace       critical-path <traceID> Show trace critical (slowest) path\n  deps                  Get service dependency graph\n\nEnvironment:\n  JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)"
-msgstr "通过 Jaeger Query HTTP API 查询追踪数据。\n\n替代不可靠的 Jaeger MCP Server，直接使用 HTTP 调用 —\n无截断、无超时、无需额外守护进程。\n\n子命令：\n  services              列出所有已注册服务\n  operations  <service> 列出服务的操作\n  search      <service> 搜索服务的追踪记录\n  trace       <traceID> 获取完整追踪详情\n  trace       topology      <traceID> 展示追踪的服务依赖拓扑\n  trace       critical-path <traceID> 展示追踪关键路径（最慢链）\n  deps                  获取服务依赖关系图\n\n环境变量：\n  JAEGER_HOST  Jaeger Query URL（默认: http://localhost:16686）"
-
 msgid "Retrieve the full trace details including all spans, process info, tags, and logs.\n\nSubcommands provide progressive-disclosure views:\n  topology      Show the service-dependency graph extracted from the trace\n  critical-path Identify the span chain most responsible for latency"
 msgstr "检索完整追踪详情，包括所有 span、进程信息、标签和日志。\n\n子命令提供渐进式披露视图：\n  topology      展示从追踪中提取的服务依赖关系图\n  critical-path 识别最影响延迟的 span 链"
 
@@ -793,9 +768,6 @@ msgstr "语言环境"
 
 msgid "Manage translation (.po) files"
 msgstr "管理翻译（.po）文件"
-
-msgid "Manage translation (.po) files for the slingshot i18n system.\n\nSubcommands:\n  check     Check locale consistency (missing/untranlated/orphaned entries)\n  stats     Show translation statistics per locale\n  sync      Synchronize .po files with i18n.G() calls in Go source code\n  show      Show full details of an untranslated entry by ID\n  translate Set translation for a single msgid (precise, one-at-a-time)\n  add       Initialize a new locale from en_US template\n  init      Scaffold the i18n package for a new project"
-msgstr "管理 slingshot i18n 系统的翻译（.po）文件。\n\n子命令：\n  check     检查语言环境一致性（缺失/未翻译/孤立条目）\n  stats     显示各语言环境的翻译统计\n  sync      将 .po 文件与 Go 源码中的 i18n.G() 调用同步\n  show      按 ID 显示未翻译条目的完整详情\n  translate 为单个 msgid 设置翻译（精确，一对一）\n  add       从 en_US 模板初始化新语言环境\n  init      为新项目搭建 i18n 包"
 
 msgid "Missing"
 msgstr "缺失"
@@ -971,9 +943,6 @@ msgstr "规划两个地址之间的步行路线（两端自动地理编码）。
 msgid "Query Amap (高德地图) POI, geocoding and routing"
 msgstr "查询高德地图 POI、地理编码与路线"
 
-msgid "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\nSubcommands:\n  search    <keywords> [city]                 POI keyword search (city-limited)\n  around    <keywords> <location> [radius]    Nearby search (default 3000m)\n  detail    <id>                              POI detail by Amap ID\n  geo       <address>                         Geocode address to coordinates\n  regeo     <location>                        Reverse geocode coordinates\n  driving   <origin> <destination>            Driving route (auto geocode)\n  walking   <origin> <destination>            Walking route (auto geocode)\n  bicycling <origin> <destination>            Bicycling route (auto geocode)\n  transit   <origin> <destination> <city> <cityd>\n                                              Transit route (city names required)\n  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)\n  ip        [ip]                              IP location"
-msgstr "查询高德地图 MCP 服务：POI 搜索、地理编码、路线规划、距离测量与 IP 定位。\n\n坐标使用 GCJ-02，格式为 \"经度,纬度\"（如 111.772234,40.853779）。\n\n配置：\n  slingshot config set amap.key <key>   # 或设置环境变量 AMAP_KEY\n\n子命令：\n  search    <关键词> [城市]                  POI 关键字搜索（限定城市）\n  around    <关键词> <经度,纬度> [半径]        周边搜索（默认 3000 米）\n  detail    <id>                              按高德 POI ID 查看详情\n  geo       <地址>                            地址地理编码\n  regeo     <经度,纬度>                        逆地理编码\n  driving   <起点> <终点>                      驾车路线（自动地理编码）\n  walking   <起点> <终点>                      步行路线（自动地理编码）\n  bicycling <起点> <终点>                      骑行路线（自动地理编码）\n  transit   <起点> <终点> <起城> <终城>\n                                              公交路线（需提供城市名）\n  distance  <origins> <destination> [type]    距离测量（1 驾车 / 0 直线 / 3 步行）\n  ip        [ip]                              IP 定位"
-
 msgid "Reverse geocode coordinates"
 msgstr "坐标逆地理编码"
 
@@ -1041,9 +1010,6 @@ msgstr "将内置 skill 安装到本地 skills 目录。\n\n整个 skill 目录�
 msgid "Installed skill %s to %s (%d file(s))\n"
 msgstr "已安装 skill %s 到 %s（%d 个文件）\n"
 
-msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n  list              List all drafts\n  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)\n"
-msgstr "管理微信公众号草稿。\n\n\"add\" 命令将返回的 media_id 保存到 sidecar YAML 文件（<file>.yaml）中，\n与 HTML 文件放在一起。后续的 \"update\" 命令只需传入 HTML 文件路径，\nmedia_id 会自动从 sidecar YAML 读取。如果没有 sidecar，\n则使用列表中的第一个草稿作为默认值。\n\n子命令：\n  list              列出所有草稿\n  add    <file>     从 .org/.md/.html 创建新草稿（自动转换格式）\n  update <file>     从 .org/.md/.html 更新草稿（自动转换格式）\n  remove <id>       删除草稿（ID、索引或含 sidecar YAML 的文件路径）\n  show   <id>       查看草稿详情（ID、索引或含 sidecar YAML 的文件路径）\n  convert <file>    将 Markdown 转换为微信 HTML 格式\n  extract <id>      打印草稿完整正文（ID、索引或含 sidecar YAML 的文件路径）\n"
-
 msgid "Print a draft's full content"
 msgstr "打印草稿的完整正文"
 
@@ -1086,9 +1052,6 @@ msgstr "在输出中包含网页正文（隐含 need_content）"
 msgid "Number of results (1-50, default 10)"
 msgstr "结果条数（1-50，默认 10）"
 
-msgid "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nSubcommands:\n  search  <word>...       Search the web, print title, url and summary\n  fetch   <url>           Fetch a page, print its Markdown body\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
-msgstr "通过 DeepSeek tools API 搜索网页并以 Markdown 抓取页面。\n\n子命令：\n  search  <word>...       搜索网页，打印标题、URL 和摘要\n  fetch   <url>           抓取页面，打印其 Markdown 正文\n\n配置：\n  slingshot config set deepseek.key <key>   # 或 export DEEPSEEK_API_KEY"
-
 msgid "Search the web and fetch pages via the DeepSeek tools API"
 msgstr "通过 DeepSeek tools API 搜索网页并抓取页面"
 
@@ -1097,9 +1060,6 @@ msgstr "通过 DeepSeek search API 搜索网页"
 
 msgid "no results"
 msgstr "无结果"
-
-msgid "Fetch with the local lightpanda binary instead of the API"
-msgstr "使用本地 lightpanda 二进制抓取，而非调用 API"
 
 msgid "Fetch with the local lightpanda binary (default). Use --local=false for the API"
 msgstr "使用本地 lightpanda 抓取（默认）。用 --local=false 走 API"
@@ -1125,11 +1085,50 @@ msgstr "源码中未发现 i18n.G() 调用。"
 msgid "Verify every i18n.G() call has an entry in every locale"
 msgstr "验证每个 i18n.G() 调用在每个语言环境中都有条目"
 
-msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
-msgstr "验证源码中使用的每个 msgid 是否都出现在每个语言环境的 .po 文件中。\n\n\"i18n check\" 比较语言环境之间的一致性。\"i18n verify\" 比较每个语言环境与源码树，这才是 i18n.G() 在运行时真正面对的东西。这里缺失的条目，就是等着第一个运行该命令的用户踩到的 panic，所以这项检查属于构建门禁。\n\n不带参数时验证所有语言环境。带语言环境参数时只检查指定的语言环境。任何语言环境缺失 msgid 时以非零状态退出。"
-
 msgid "i18n verify: %d missing entries; run: slingshot i18n sync"
 msgstr "i18n verify：缺失 %d 个条目；请运行：slingshot i18n sync"
 
 msgid "missing"
 msgstr "缺失"
+
+msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\n"
+msgstr "管理微信公众号草稿。\n\n\"add\" 命令将返回的 media_id 保存到与 HTML 文件放在一起的 sidecar YAML 文件（<file>.yaml）中。后续的 \"update\" 命令只需传入 HTML 文件路径，media_id 会自动从 sidecar YAML 读取。如果没有 sidecar，则使用列表中的第一个草稿作为默认值。\n\n"
+
+msgid "Manage WeChat public account permanent materials.\n\n"
+msgstr "管理微信公众号永久素材。\n\n"
+
+msgid "Manage built-in skills for AI agents.\n\n"
+msgstr "管理 AI 智能体的内置技能。\n\n"
+
+msgid "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\n"
+msgstr "管理 slingshot 配置文件（~/.config/slingshot/config.yml）。\n\n"
+
+msgid "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\n"
+msgstr "管理静态站点部署目标，按类型使用不同的工作流。\n\n每个站点有一个本地目录和可选的配置键（dir、rsync 等）。\n站点类型：\n  page（默认） — 持续添加页面，直接从站点目录 rsync。\n  zine            — Zine 生成的站点，rsync 前自动构建，从 public/ 目录 rsync。\n\n"
+
+msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\n"
+msgstr "管理静态站点页面。\n\n每个页面是站点目录下的一个子目录，包含 index.html\n及其资源文件（图片等）。\n\n"
+
+msgid "Manage translation (.po) files for the slingshot i18n system.\n\n"
+msgstr "管理 slingshot i18n 系统的翻译（.po）文件。\n\n"
+
+msgid "Query Jaeger tracing data via the Jaeger Query HTTP API.\n\nReplaces the unreliable Jaeger MCP Server with direct HTTP calls —\nno truncation, no timeouts, no extra daemon.\n\nEnvironment:\n  JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)"
+msgstr "通过 Jaeger Query HTTP API 查询 Jaeger 追踪数据。\n\n用直接 HTTP 调用替代不可靠的 Jaeger MCP Server——\n无截断、无超时、无额外守护进程。\n\n环境变量：\n  JAEGER_HOST  Jaeger Query URL（默认：http://localhost:16686）"
+
+msgid "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\n"
+msgstr "查询高德地图 MCP 服务器：POI 搜索、地理编码、\n路径规划、距离测量和 IP 定位。\n\n坐标为 GCJ-02 坐标系，写作\"经度,纬度\"（例如 111.772234,40.853779）。\n\n配置：\n  slingshot config set amap.key <key>   # 或 export AMAP_KEY\n\n"
+
+msgid "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
+msgstr "通过 DeepSeek tools API 搜索网页并将页面获取为 Markdown。\n\n配置：\n  slingshot config set deepseek.key <key>   # 或 export DEEPSEEK_API_KEY"
+
+msgid "Fail on orphaned entries too: msgids no longer used in source"
+msgstr "孤立条目也视为失败：源码中已不再使用的 msgid"
+
+msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+msgstr "验证源码中使用的每个 msgid 是否都出现在每个语言环境的 .po 文件中。\n\n\"i18n check\" 比较语言环境之间的一致性。\"i18n verify\" 比较每个语言环境与源码树，\n这才是 i18n.G() 在运行时真正面对的东西。这里缺失的条目，\n就是等着第一个运行该命令的用户踩到的 panic，所以这项检查属于构建门禁。\n\n孤立条目（在 .po 中但源码已不再使用）会被报告，但不导致检查失败，\n因为动态构造的 msgid 在 AST 扫描器看来可能像孤立条目。\n使用 --strict-orphans 可将其也视为失败。\n\n不带参数时验证所有语言环境。带语言环境参数时只检查指定的语言环境。\n任何语言环境缺失 msgid 时以非零状态退出。"
+
+msgid "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
+msgstr "i18n verify：%d 个孤立条目；请运行：slingshot i18n sync --delete"
+
+msgid "orphaned"
+msgstr "孤立"

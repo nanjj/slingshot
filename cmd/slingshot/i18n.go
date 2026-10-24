@@ -29,14 +29,7 @@ func (c *cmdI18n) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Manage translation (.po) files for the slingshot i18n system.
 
-Subcommands:
-  check     Check locale consistency (missing/untranlated/orphaned entries)
-  stats     Show translation statistics per locale
-  sync      Synchronize .po files with i18n.G() calls in Go source code
-  show      Show full details of an untranslated entry by ID
-  translate Set translation for a single msgid (precise, one-at-a-time)
-  add       Initialize a new locale from en_US template
-  init      Scaffold the i18n package for a new project`),
+`),
 	)
 
 	cmd.PersistentFlags().StringVarP(&c.dir, "dir", "d", "",

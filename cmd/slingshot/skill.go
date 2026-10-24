@@ -35,9 +35,7 @@ func (c *cmdSkill) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Manage built-in skills for AI agents.
 
-Subcommands:
-  list              List all built-in skills
-  install   <name>  Install a built-in skill`),
+`),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()

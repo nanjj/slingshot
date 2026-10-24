@@ -54,14 +54,6 @@ can then use just the HTML file path — the media_id is read from the
 sidecar YAML automatically. If no sidecar exists, the first draft in
 the list is used as a default.
 
-Subcommands:
-  list              List all drafts
-  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)
-  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)
-  remove <id>       Remove a draft (id, index, or file with sidecar YAML)
-  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)
-  convert <file>    Convert Markdown to WeChat HTML format
-  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

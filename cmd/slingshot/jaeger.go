@@ -32,15 +32,6 @@ func (c *cmdJaeger) command() *cobra.Command {
 Replaces the unreliable Jaeger MCP Server with direct HTTP calls —
 no truncation, no timeouts, no extra daemon.
 
-Subcommands:
-  services              List all registered services
-  operations  <service> List operations for a service
-  search      <service> Search traces for a service
-  trace       <traceID> Get full trace details
-  trace       topology      <traceID> Show trace service dependency graph
-  trace       critical-path <traceID> Show trace critical (slowest) path
-  deps                  Get service dependency graph
-
 Environment:
   JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)`),
 	)

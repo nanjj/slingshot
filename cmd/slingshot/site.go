@@ -61,13 +61,6 @@ Site types:
   page (default)  — Ongoing page additions, rsync from site dir directly.
   zine            — Zine-generated site, auto-builds before rsync, rsync from public/.
 
-Subcommands:
-  list                  List all configured sites
-  add    <name> ...     Add a new site with key=value pairs
-  update <name> <k> <v> Update a site's configuration key
-  remove <name>         Remove a site
-  optimize <name>       Optimize site CSS for responsive display
-  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

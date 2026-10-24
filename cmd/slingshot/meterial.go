@@ -21,11 +21,6 @@ func (c *cmdMeterial) command() *cobra.Command {
 		color.CyanString("Description:"),
 		i18n.G(`Manage WeChat public account permanent materials.
 
-Subcommands:
-  add    <file>     Upload a permanent material
-  list              List permanent materials
-  remove <id>       Remove a permanent material
-  show   <id>       Show a permanent material's details
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {

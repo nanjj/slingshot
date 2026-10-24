@@ -394,23 +394,8 @@ msgstr "Lookback duration (e.g. 1h, 24h, 3600s)"
 msgid "Manage WeChat permanent materials"
 msgstr "Manage WeChat permanent materials"
 
-msgid "Manage WeChat public account permanent materials.\n\nSubcommands:\n  add    <file>     Upload a permanent material\n  list              List permanent materials\n  remove <id>       Remove a permanent material\n  show   <id>       Show a permanent material's details\n"
-msgstr "Manage WeChat public account permanent materials.\n\nSubcommands:\n  add    <file>     Upload a permanent material\n  list              List permanent materials\n  remove <id>       Remove a permanent material\n  show   <id>       Show a permanent material's details\n"
-
-msgid "Manage built-in skills for AI agents.\n\nSubcommands:\n  list              List all built-in skills\n  install   <name>  Install a built-in skill"
-msgstr "Manage built-in skills for AI agents.\n\nSubcommands:\n  list              List all built-in skills\n  install   <name>  Install a built-in skill"
-
 msgid "Manage site pages"
 msgstr "Manage site pages"
-
-msgid "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\nSubcommands:\n  list                  List all config keys and values\n  show                  Show full configuration\n  get    <key>          Get a config value\n  set    <key> <value>  Set a config value\n  unset <key>           Unset (delete) a config key\n"
-msgstr "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\nSubcommands:\n  list                  List all config keys and values\n  show                  Show full configuration\n  get    <key>          Get a config value\n  set    <key> <value>  Set a config value\n  unset <key>           Unset (delete) a config key\n"
-
-msgid "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\nSubcommands:\n  list                  List all configured sites\n  add    <name> ...     Add a new site with key=value pairs\n  update <name> <k> <v> Update a site's configuration key\n  remove <name>         Remove a site\n  optimize <name>       Optimize site CSS for responsive display\n  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)\n"
-msgstr "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\nSubcommands:\n  list                  List all configured sites\n  add    <name> ...     Add a new site with key=value pairs\n  update <name> <k> <v> Update a site's configuration key\n  remove <name>         Remove a site\n  optimize <name>       Optimize site CSS for responsive display\n  rsync  <name>         Deploy site via rsync (auto-builds zine, optimizes CSS)\n"
-
-msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add or update pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
-msgstr "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\nSubcommands:\n  list    <site>            List all pages in a site\n  add     <site> <file>...  Add or update pages from HTML/Org files\n  remove  <site> <page>     Remove a page\n"
 
 msgid "Material removed: %s\n"
 msgstr "Material removed: %s\n"
@@ -537,12 +522,6 @@ msgstr "Update an existing WeChat draft with new content. Supports .org, .md,\na
 
 msgid "Update an existing draft from .org/.md/.html file"
 msgstr "Update an existing draft from .org/.md/.html file"
-
-msgid "Update existing pages from HTML files"
-msgstr "Update existing pages from HTML files"
-
-msgid "Update existing pages in a deployment site with new content.\n\nEach page name is derived from its HTML filename (without extension).\nThe page directory named <page-name> must already exist in the site directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after the update."
-msgstr "Update existing pages in a deployment site with new content.\n\nEach page name is derived from its HTML filename (without extension).\nThe page directory named <page-name> must already exist in the site directory.\n\nImages referenced in the HTML (<img src=\"...\">) are copied from their\nsource locations into the page directory.\n\nThe site's index.html is regenerated once after all pages are processed.\n\nUse --rsync to automatically deploy the site after the update."
 
 msgid "Upgrade the site's style.css to the latest responsive version.\n\nChecks for the responsive sentinel marker in the existing CSS. If the CSS\nis already optimized, no changes are made unless --force is specified.\n\nThis command can be run at any time — before rsync, after adding pages,\nor as a standalone optimization step."
 msgstr "Upgrade the site's style.css to the latest responsive version.\n\nChecks for the responsive sentinel marker in the existing CSS. If the CSS\nis already optimized, no changes are made unless --force is specified.\n\nThis command can be run at any time — before rsync, after adding pages,\nor as a standalone optimization step."
@@ -710,9 +689,6 @@ msgstr "No spans in trace"
 msgid "Output as JSON"
 msgstr "Output as JSON"
 
-msgid "Query Jaeger tracing data via the Jaeger Query HTTP API.\n\nReplaces the unreliable Jaeger MCP Server with direct HTTP calls —\nno truncation, no timeouts, no extra daemon.\n\nSubcommands:\n  services              List all registered services\n  operations  <service> List operations for a service\n  search      <service> Search traces for a service\n  trace       <traceID> Get full trace details\n  trace       topology      <traceID> Show trace service dependency graph\n  trace       critical-path <traceID> Show trace critical (slowest) path\n  deps                  Get service dependency graph\n\nEnvironment:\n  JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)"
-msgstr "Query Jaeger tracing data via the Jaeger Query HTTP API.\n\nReplaces the unreliable Jaeger MCP Server with direct HTTP calls —\nno truncation, no timeouts, no extra daemon.\n\nSubcommands:\n  services              List all registered services\n  operations  <service> List operations for a service\n  search      <service> Search traces for a service\n  trace       <traceID> Get full trace details\n  trace       topology      <traceID> Show trace service dependency graph\n  trace       critical-path <traceID> Show trace critical (slowest) path\n  deps                  Get service dependency graph\n\nEnvironment:\n  JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)"
-
 msgid "Retrieve the full trace details including all spans, process info, tags, and logs.\n\nSubcommands provide progressive-disclosure views:\n  topology      Show the service-dependency graph extracted from the trace\n  critical-path Identify the span chain most responsible for latency"
 msgstr "Retrieve the full trace details including all spans, process info, tags, and logs.\n\nSubcommands provide progressive-disclosure views:\n  topology      Show the service-dependency graph extracted from the trace\n  critical-path Identify the span chain most responsible for latency"
 
@@ -787,9 +763,6 @@ msgstr "Locale"
 
 msgid "Manage translation (.po) files"
 msgstr "Manage translation (.po) files"
-
-msgid "Manage translation (.po) files for the slingshot i18n system.\n\nSubcommands:\n  check     Check locale consistency (missing/untranlated/orphaned entries)\n  stats     Show translation statistics per locale\n  sync      Synchronize .po files with i18n.G() calls in Go source code\n  show      Show full details of an untranslated entry by ID\n  translate Set translation for a single msgid (precise, one-at-a-time)\n  add       Initialize a new locale from en_US template\n  init      Scaffold the i18n package for a new project"
-msgstr "Manage translation (.po) files for the slingshot i18n system.\n\nSubcommands:\n  check     Check locale consistency (missing/untranlated/orphaned entries)\n  stats     Show translation statistics per locale\n  sync      Synchronize .po files with i18n.G() calls in Go source code\n  show      Show full details of an untranslated entry by ID\n  translate Set translation for a single msgid (precise, one-at-a-time)\n  add       Initialize a new locale from en_US template\n  init      Scaffold the i18n package for a new project"
 
 msgid "Missing"
 msgstr "Missing"
@@ -965,9 +938,6 @@ msgstr "Plan a walking route between two addresses (both are geocoded automatica
 msgid "Query Amap (高德地图) POI, geocoding and routing"
 msgstr "Query Amap (高德地图) POI, geocoding and routing"
 
-msgid "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\nSubcommands:\n  search    <keywords> [city]                 POI keyword search (city-limited)\n  around    <keywords> <location> [radius]    Nearby search (default 3000m)\n  detail    <id>                              POI detail by Amap ID\n  geo       <address>                         Geocode address to coordinates\n  regeo     <location>                        Reverse geocode coordinates\n  driving   <origin> <destination>            Driving route (auto geocode)\n  walking   <origin> <destination>            Walking route (auto geocode)\n  bicycling <origin> <destination>            Bicycling route (auto geocode)\n  transit   <origin> <destination> <city> <cityd>\n                                              Transit route (city names required)\n  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)\n  ip        [ip]                              IP location"
-msgstr "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\nSubcommands:\n  search    <keywords> [city]                 POI keyword search (city-limited)\n  around    <keywords> <location> [radius]    Nearby search (default 3000m)\n  detail    <id>                              POI detail by Amap ID\n  geo       <address>                         Geocode address to coordinates\n  regeo     <location>                        Reverse geocode coordinates\n  driving   <origin> <destination>            Driving route (auto geocode)\n  walking   <origin> <destination>            Walking route (auto geocode)\n  bicycling <origin> <destination>            Bicycling route (auto geocode)\n  transit   <origin> <destination> <city> <cityd>\n                                              Transit route (city names required)\n  distance  <origins> <destination> [type]    Distance measurement (1 driving / 0 straight / 3 walking)\n  ip        [ip]                              IP location"
-
 msgid "Reverse geocode coordinates"
 msgstr "Reverse geocode coordinates"
 
@@ -1034,9 +1004,6 @@ msgstr "Install a built-in skill to the local skills directory.\n\nThe skill's w
 msgid "Installed skill %s to %s (%d file(s))\n"
 msgstr "Installed skill %s to %s (%d file(s))\n"
 
-msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n  list              List all drafts\n  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)\n"
-msgstr "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\nSubcommands:\n  list              List all drafts\n  add    <file>     Create a new draft from .org/.md/.html (auto-converts if needed)\n  update <file>     Update a draft from .org/.md/.html (auto-converts if needed)\n  remove <id>       Remove a draft (id, index, or file with sidecar YAML)\n  show   <id>       Show a draft's details (id, index, or file with sidecar YAML)\n  convert <file>    Convert Markdown to WeChat HTML format\n  extract <id>      Print a draft's full content (id, index, or file with sidecar YAML)\n"
-
 msgid "Print a draft's full content"
 msgstr "Print a draft's full content"
 
@@ -1079,9 +1046,6 @@ msgstr "Include the page content in the output (implies need_content)"
 msgid "Number of results (1-50, default 10)"
 msgstr "Number of results (1-50, default 10)"
 
-msgid "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nSubcommands:\n  search  <word>...       Search the web, print title, url and summary\n  fetch   <url>           Fetch a page, print its Markdown body\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
-msgstr "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nSubcommands:\n  search  <word>...       Search the web, print title, url and summary\n  fetch   <url>           Fetch a page, print its Markdown body\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
-
 msgid "Search the web and fetch pages via the DeepSeek tools API"
 msgstr "Search the web and fetch pages via the DeepSeek tools API"
 
@@ -1090,9 +1054,6 @@ msgstr "Search the web via the DeepSeek search API"
 
 msgid "no results"
 msgstr "no results"
-
-msgid "Fetch with the local lightpanda binary instead of the API"
-msgstr "Fetch with the local lightpanda binary instead of the API"
 
 msgid "Fetch with the local lightpanda binary (default). Use --local=false for the API"
 msgstr "Fetch with the local lightpanda binary (default). Use --local=false for the API"
@@ -1118,11 +1079,50 @@ msgstr "No i18n.G() calls found in source."
 msgid "Verify every i18n.G() call has an entry in every locale"
 msgstr "Verify every i18n.G() call has an entry in every locale"
 
-msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
-msgstr "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
-
 msgid "i18n verify: %d missing entries; run: slingshot i18n sync"
 msgstr "i18n verify: %d missing entries; run: slingshot i18n sync"
 
 msgid "missing"
 msgstr "missing"
+
+msgid "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\n"
+msgstr "Manage WeChat public account drafts.\n\nThe \"add\" command saves the returned media_id to a sidecar YAML file\n(<file>.yaml) alongside the HTML file. Subsequent \"update\" commands\ncan then use just the HTML file path — the media_id is read from the\nsidecar YAML automatically. If no sidecar exists, the first draft in\nthe list is used as a default.\n\n"
+
+msgid "Manage WeChat public account permanent materials.\n\n"
+msgstr "Manage WeChat public account permanent materials.\n\n"
+
+msgid "Manage built-in skills for AI agents.\n\n"
+msgstr "Manage built-in skills for AI agents.\n\n"
+
+msgid "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\n"
+msgstr "Manage slingshot configuration file (~/.config/slingshot/config.yml).\n\n"
+
+msgid "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\n"
+msgstr "Manage static site deployment targets with type-specific workflows.\n\nEach site has a local directory and optional configuration keys (dir, rsync, etc.).\nSite types:\n  page (default)  — Ongoing page additions, rsync from site dir directly.\n  zine            — Zine-generated site, auto-builds before rsync, rsync from public/.\n\n"
+
+msgid "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\n"
+msgstr "Manage static site pages.\n\nEach page is a subdirectory under the site's directory containing an\nindex.html and its assets (images, etc.).\n\n"
+
+msgid "Manage translation (.po) files for the slingshot i18n system.\n\n"
+msgstr "Manage translation (.po) files for the slingshot i18n system.\n\n"
+
+msgid "Query Jaeger tracing data via the Jaeger Query HTTP API.\n\nReplaces the unreliable Jaeger MCP Server with direct HTTP calls —\nno truncation, no timeouts, no extra daemon.\n\nEnvironment:\n  JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)"
+msgstr "Query Jaeger tracing data via the Jaeger Query HTTP API.\n\nReplaces the unreliable Jaeger MCP Server with direct HTTP calls —\nno truncation, no timeouts, no extra daemon.\n\nEnvironment:\n  JAEGER_HOST  Jaeger Query URL (default: http://localhost:16686)"
+
+msgid "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\n"
+msgstr "Query the Amap (高德地图) MCP server: POI search, geocoding,\nroute planning, distance measurement and IP location.\n\nCoordinates are GCJ-02 and written as \"经度,纬度\" (e.g. 111.772234,40.853779).\n\nConfiguration:\n  slingshot config set amap.key <key>   # or export AMAP_KEY\n\n"
+
+msgid "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
+msgstr "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\n\nConfiguration:\n  slingshot config set deepseek.key <key>   # or export DEEPSEEK_API_KEY"
+
+msgid "Fail on orphaned entries too: msgids no longer used in source"
+msgstr "Fail on orphaned entries too: msgids no longer used in source"
+
+msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+msgstr "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+
+msgid "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
+msgstr "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
+
+msgid "orphaned"
+msgstr "orphaned"

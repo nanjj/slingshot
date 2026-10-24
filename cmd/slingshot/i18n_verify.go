@@ -19,8 +19,9 @@ import (
 // what i18n.G would panic on at runtime, so this command is the place
 // to catch it — before the binary is built, not after it is shipped.
 type cmdI18nVerify struct {
-	global  *cmdGlobal
-	i18nCmd *cmdI18n
+	global        *cmdGlobal
+	i18nCmd       *cmdI18n
+	strictOrphans bool // --strict-orphans: fail on stale entries too
 }
 
 func (c *cmdI18nVerify) command() *cobra.Command {
@@ -35,8 +36,14 @@ each locale against the source tree, which is what i18n.G() actually
 calls at runtime. A missing entry here is a panic waiting for the first
 user who runs the command, so this check belongs in the build gate.
 
+Orphaned entries (in a .po but no longer used in source) are reported
+but do not fail the check, because a dynamically built msgid can look
+orphaned to the AST scanner. Use --strict-orphans to fail on them too.
+
 Without arguments, verifies every locale. With locale arguments, checks
 only those locales. Exits non-zero if any locale is missing a msgid.`)
+	cmd.Flags().BoolVar(&c.strictOrphans, "strict-orphans", false,
+		i18n.G("Fail on orphaned entries too: msgids no longer used in source"))
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return c.run(cmd, args)
 	}
@@ -70,36 +77,64 @@ func (c *cmdI18nVerify) run(cmd *cobra.Command, args []string) error {
 		sort.Strings(targets)
 	}
 
-	var totalMissing int
+	var totalMissing, totalOrphaned int
 	for _, loc := range targets {
 		table, ok := allLocales[loc]
 		if !ok {
 			fmt.Fprintf(os.Stderr, "Warning: locale %q not found\n", loc)
 			continue
 		}
-		var missing []string
-		for msgid := range sourceMsgids {
-			if _, ok := table[msgid]; !ok {
-				missing = append(missing, msgid)
-			}
-		}
-		sort.Strings(missing)
+		missing, orphaned := compareWithSource(table, sourceMsgids)
 		totalMissing += len(missing)
+		totalOrphaned += len(orphaned)
 
-		if len(missing) == 0 {
+		if len(missing) == 0 && len(orphaned) == 0 {
 			fmt.Fprintf(color.Output, "%s %s\n", color.GreenString("✓"), loc)
 			continue
 		}
-		fmt.Fprintf(color.Output, "%s %s: %s %d\n",
-			color.RedString("!"), loc,
-			color.RedString(i18n.G("missing")), len(missing))
-		for _, m := range missing {
-			fmt.Fprintf(color.Output, "    - %q\n", truncateMsgid(m, 72))
+		if len(missing) > 0 {
+			fmt.Fprintf(color.Output, "%s %s: %s %d\n",
+				color.RedString("!"), loc,
+				color.RedString(i18n.G("missing")), len(missing))
+			for _, m := range missing {
+				fmt.Fprintf(color.Output, "    - %q\n", truncateMsgid(m, 72))
+			}
+		}
+		if len(orphaned) > 0 {
+			fmt.Fprintf(color.Output, "%s %s: %s %d\n",
+				color.YellowString("?"), loc,
+				color.YellowString(i18n.G("orphaned")), len(orphaned))
+			for _, m := range orphaned {
+				fmt.Fprintf(color.Output, "    - %q\n", truncateMsgid(m, 72))
+			}
 		}
 	}
 
 	if totalMissing > 0 {
 		return fmt.Errorf(i18n.G("i18n verify: %d missing entries; run: slingshot i18n sync"), totalMissing)
 	}
+	if totalOrphaned > 0 && c.strictOrphans {
+		return fmt.Errorf(i18n.G("i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"), totalOrphaned)
+	}
 	return nil
+}
+
+// compareWithSource splits a locale table against the source msgid set.
+// missing: used in source, absent from the locale — a runtime panic.
+// orphaned: present in the locale, no longer used in source — stale text.
+// The header entry (empty msgid) is skipped.
+func compareWithSource(table map[string]string, sourceMsgids map[string]bool) (missing, orphaned []string) {
+	for msgid := range sourceMsgids {
+		if _, ok := table[msgid]; !ok {
+			missing = append(missing, msgid)
+		}
+	}
+	for msgid := range table {
+		if msgid != "" && !sourceMsgids[msgid] {
+			orphaned = append(orphaned, msgid)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(orphaned)
+	return missing, orphaned
 }

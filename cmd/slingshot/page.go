@@ -40,10 +40,6 @@ func (c *cmdPage) command() *cobra.Command {
 Each page is a subdirectory under the site's directory containing an
 index.html and its assets (images, etc.).
 
-Subcommands:
-  list    <site>            List all pages in a site
-  add     <site> <file>...  Add or update pages from HTML/Org files
-  remove  <site> <page>     Remove a page
 `),
 	)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
