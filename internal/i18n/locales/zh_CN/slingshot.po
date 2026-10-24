@@ -1118,3 +1118,18 @@ msgstr "已更新："
 
 msgid "Using cached thumbnail media_id: %s\n"
 msgstr "使用缓存的封面 media_id：%s\n"
+
+msgid "No i18n.G() calls found in source."
+msgstr "源码中未发现 i18n.G() 调用。"
+
+msgid "Verify every i18n.G() call has an entry in every locale"
+msgstr "验证每个 i18n.G() 调用在每个语言环境中都有条目"
+
+msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+msgstr "验证源码中使用的每个 msgid 是否都出现在每个语言环境的 .po 文件中。\n\n\"i18n check\" 比较语言环境之间的一致性。\"i18n verify\" 比较每个语言环境与源码树，这才是 i18n.G() 在运行时真正面对的东西。这里缺失的条目，就是等着第一个运行该命令的用户踩到的 panic，所以这项检查属于构建门禁。\n\n不带参数时验证所有语言环境。带语言环境参数时只检查指定的语言环境。任何语言环境缺失 msgid 时以非零状态退出。"
+
+msgid "i18n verify: %d missing entries; run: slingshot i18n sync"
+msgstr "i18n verify：缺失 %d 个条目；请运行：slingshot i18n sync"
+
+msgid "missing"
+msgstr "缺失"

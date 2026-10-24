@@ -47,6 +47,7 @@ Subcommands:
 
 	cmd.AddCommand(
 		c.cmdCheck().command(),
+		c.cmdVerify().command(),
 		c.cmdStats().command(),
 		c.cmdSync().command(),
 		c.cmdShow().command(),
@@ -87,6 +88,13 @@ func (c *cmdI18n) resolveRoot() string {
 
 func (c *cmdI18n) cmdCheck() *cmdI18nCheck {
 	return &cmdI18nCheck{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdVerify() *cmdI18nVerify {
+	return &cmdI18nVerify{
 		global:  c.global,
 		i18nCmd: c,
 	}

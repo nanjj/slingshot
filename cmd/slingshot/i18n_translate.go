@@ -177,7 +177,7 @@ func (c *cmdI18nTranslate) msgidByID(dir, locale string, id int) (string, error)
 	}
 	msgid := analysis.UntranslatedList[id-1]
 	fmt.Fprintf(color.Output, "  %s %s\n",
-		color.CyanString(i18n.G("Target entry #%d:")), escapePO(msgid))
+		color.CyanString(i18n.G("Target entry #%d:"), id), escapePO(msgid))
 	return msgid, nil
 }
 

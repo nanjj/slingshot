@@ -1111,3 +1111,18 @@ msgstr "Updated:"
 
 msgid "Using cached thumbnail media_id: %s\n"
 msgstr "Using cached thumbnail media_id: %s\n"
+
+msgid "No i18n.G() calls found in source."
+msgstr "No i18n.G() calls found in source."
+
+msgid "Verify every i18n.G() call has an entry in every locale"
+msgstr "Verify every i18n.G() call has an entry in every locale"
+
+msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+msgstr "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+
+msgid "i18n verify: %d missing entries; run: slingshot i18n sync"
+msgstr "i18n verify: %d missing entries; run: slingshot i18n sync"
+
+msgid "missing"
+msgstr "missing"
