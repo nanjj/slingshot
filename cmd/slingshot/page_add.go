@@ -78,7 +78,7 @@ func (c *cmdPageAdd) command() *cobra.Command {
 	cmd.Aliases = []string{"update"}
 	cmd.Short = i18n.G("Add or update pages from HTML files")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Add or update pages in a deployment site from HTML files.
 
 Each page name is derived from its HTML filename (without extension).

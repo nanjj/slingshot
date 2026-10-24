@@ -31,7 +31,7 @@ func (c *cmdMeterialAdd) command() *cobra.Command {
 	cmd.Use = "add " + u.File.Render()
 	cmd.Short = i18n.G("Upload a permanent material")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Upload a file as a permanent material to WeChat material management.
 
 The --type flag specifies the material type (default: image). For video

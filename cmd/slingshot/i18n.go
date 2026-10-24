@@ -26,14 +26,14 @@ func (c *cmdI18n) command() *cobra.Command {
 	cmd.Use = "i18n"
 	cmd.Short = i18n.G("Manage translation (.po) files")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Manage translation (.po) files for the slingshot i18n system.
 
 `),
 	)
 
 	cmd.PersistentFlags().StringVarP(&c.dir, "dir", "d", "",
-		"Locales directory path (default: internal/i18n/locales)")
+		i18n.G("Locales directory path (default: internal/i18n/locales)"))
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	}

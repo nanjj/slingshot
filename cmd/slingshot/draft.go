@@ -45,7 +45,7 @@ func (c *cmdDraft) command() *cobra.Command {
 	cmd.Use = "draft"
 	cmd.Short = i18n.G("Manage WeChat drafts")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Manage WeChat public account drafts.
 
 The "add" command saves the returned media_id to a sidecar YAML file

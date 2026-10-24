@@ -32,7 +32,7 @@ func (c *cmdSkill) command() *cobra.Command {
 	cmd.Use = "skill"
 	cmd.Short = i18n.G("Manage built-in skills")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Manage built-in skills for AI agents.
 
 `),
@@ -107,7 +107,7 @@ func (c *cmdSkillInstall) command() *cobra.Command {
 	cmd.Use = "install " + u.Name.Render()
 	cmd.Short = i18n.G("Install a built-in skill to the local skills directory")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Install a built-in skill to the local skills directory.
 
 The skill's whole directory is extracted from the binary: SKILL.md and every
@@ -330,7 +330,7 @@ func (s *cmdSkillSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		s.long,
 	)
 	cmd.RunE = s.run

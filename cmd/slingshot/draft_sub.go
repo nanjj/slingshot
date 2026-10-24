@@ -4,6 +4,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/nanjj/clog"
 	cli "github.com/nanjj/slingshot/internal/cmd"
+	"github.com/nanjj/slingshot/internal/i18n"
 	u "github.com/nanjj/slingshot/internal/usage"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +26,7 @@ func (s *cmdDraftSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		s.long,
 	)
 	cmd.RunE = s.run

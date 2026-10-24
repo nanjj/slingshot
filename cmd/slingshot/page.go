@@ -34,7 +34,7 @@ func (c *cmdPage) command() *cobra.Command {
 	cmd.Use = "page"
 	cmd.Short = i18n.G("Manage site pages")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Manage static site pages.
 
 Each page is a subdirectory under the site's directory containing an

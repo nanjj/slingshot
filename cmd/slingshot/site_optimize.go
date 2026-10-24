@@ -29,7 +29,7 @@ func (c *cmdSiteOptimize) command() *cobra.Command {
 	cmd.Use = "optimize " + u.Name.Render()
 	cmd.Short = i18n.G("Optimize site CSS for responsive display")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Upgrade the site's style.css to the latest responsive version.
 
 Checks for the responsive sentinel marker in the existing CSS. If the CSS

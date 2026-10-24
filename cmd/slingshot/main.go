@@ -80,7 +80,7 @@ func (c *cmdGlobal) printFlags(cmd *cobra.Command) {
 		return
 	}
 	sort.Strings(lines)
-	fmt.Println("Flags:")
+	fmt.Println(i18n.G("Flags:"))
 	for _, l := range lines {
 		fmt.Println(l)
 	}
@@ -145,29 +145,30 @@ func main() {
 	})
 	// 覆盖默认 usage 模板：去掉硬编码的 (eq .Name "help")，让 help 真正隐藏
 	// slingshot 不使用命令组(Group)，因此模板简化了组相关逻辑
-	rootCmd.SetUsageTemplate(`Usage:{{if .Runnable}}
+	rootCmd.SetUsageTemplate(
+		i18n.G("Usage:") + `{{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
 
-Aliases:
+` + i18n.G("Aliases:") + `
   {{.NameAndAliases}}{{end}}{{if .HasExample}}
 
-Examples:
+` + i18n.G("Examples:") + `
 {{.Example}}{{end}}{{if .HasAvailableSubCommands}}
 
-Available Commands:{{range .Commands}}{{if .IsAvailableCommand}}
+` + i18n.G("Available Commands:") + `{{range .Commands}}{{if .IsAvailableCommand}}
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
 
-Flags:
+` + i18n.G("Flags:") + `
 {{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
 
-Global Flags:
+` + i18n.G("Global Flags:") + `
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
 
-Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+` + i18n.G("Additional help topics:") + `{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
   {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
 
-Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+` + i18n.G(`Use "{{.CommandPath}} [command] --help" for more information about a command.`) + `{{end}}
 `)
 
 	global := &cmdGlobal{}

@@ -40,7 +40,7 @@ func (c *cmdAmap) command() *cobra.Command {
 	cmd.Use = "amap"
 	cmd.Short = i18n.G("Query Amap (高德地图) POI, geocoding and routing")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Query the Amap (高德地图) MCP server: POI search, geocoding,
 route planning, distance measurement and IP location.
 
@@ -428,7 +428,7 @@ func (s *cmdAmapSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		s.long,
 	)
 	cmd.RunE = s.run

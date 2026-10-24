@@ -41,7 +41,7 @@ func (c *cmdConfig) command() *cobra.Command {
 	cmd.Use = "config"
 	cmd.Short = i18n.G("Manage configuration")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Manage slingshot configuration file (~/.config/slingshot/config.yml).
 
 `),
@@ -221,7 +221,7 @@ func (s *cmdConfigSub) command() *cobra.Command {
 	cmd.Use = s.name
 	cmd.Short = s.short
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		s.long,
 	)
 	cmd.RunE = s.run

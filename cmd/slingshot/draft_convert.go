@@ -37,7 +37,7 @@ func (c *cmdDraftConvert) command() *cobra.Command {
 	cmd.Use = "convert " + u.File.Render()
 	cmd.Short = i18n.G("Convert Markdown or Org to WeChat public account HTML")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Convert a Markdown (.md) or Org (.org) file to HTML format suitable for WeChat public accounts.
 
 The conversion process:

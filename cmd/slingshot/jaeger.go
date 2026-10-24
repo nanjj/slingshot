@@ -26,7 +26,7 @@ func (c *cmdJaeger) command() *cobra.Command {
 	cmd.Use = "jaeger"
 	cmd.Short = i18n.G("Query Jaeger tracing data via HTTP API")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Query Jaeger tracing data via the Jaeger Query HTTP API.
 
 Replaces the unreliable Jaeger MCP Server with direct HTTP calls —

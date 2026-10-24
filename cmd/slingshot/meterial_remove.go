@@ -24,7 +24,7 @@ func (c *cmdMeterialRemove) command() *cobra.Command {
 	cmd.Use = "remove " + u.ID.Render()
 	cmd.Short = i18n.G("Remove a permanent material")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Remove (delete) a permanent material by its media ID.
 
 Example:

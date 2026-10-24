@@ -1126,3 +1126,27 @@ msgstr "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
 
 msgid "orphaned"
 msgstr "orphaned"
+
+msgid "Additional help topics:"
+msgstr "Additional help topics:"
+
+msgid "Aliases:"
+msgstr "Aliases:"
+
+msgid "Available Commands:"
+msgstr "Available Commands:"
+
+msgid "Examples:"
+msgstr "Examples:"
+
+msgid "Flags:"
+msgstr "Flags:"
+
+msgid "Global Flags:"
+msgstr "Global Flags:"
+
+msgid "Locales directory path (default: internal/i18n/locales)"
+msgstr "Locales directory path (default: internal/i18n/locales)"
+
+msgid "Use \"{{.CommandPath}} [command] --help\" for more information about a command."
+msgstr "Use \"{{.CommandPath}} [command] --help\" for more information about a command."

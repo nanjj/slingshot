@@ -29,7 +29,7 @@ func (c *cmdMeterialList) command() *cobra.Command {
 	cmd.Use = "list"
 	cmd.Short = i18n.G("List permanent materials")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`List permanent materials from WeChat material management.
 
 By default lists image materials. Use --type to list video, voice, or news materials.

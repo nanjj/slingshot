@@ -18,7 +18,7 @@ func (c *cmdDeepseek) command() *cobra.Command {
 	cmd.Use = "deepseek"
 	cmd.Short = i18n.G("Search the web and fetch pages via the DeepSeek tools API")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Search the web and fetch pages as Markdown via the DeepSeek
 tools API.
 

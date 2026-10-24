@@ -18,7 +18,7 @@ func (c *cmdMeterial) command() *cobra.Command {
 	cmd.Use = "meterial"
 	cmd.Short = i18n.G("Manage WeChat permanent materials")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Manage WeChat public account permanent materials.
 
 `),

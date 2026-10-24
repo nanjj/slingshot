@@ -27,7 +27,7 @@ func (c *cmdMeterialShow) command() *cobra.Command {
 	cmd.Use = "show " + u.ID.Render()
 	cmd.Short = i18n.G("Show a permanent material's details")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Show detailed information about a permanent material by media ID.
 
 For image and voice materials, the raw content can be saved to a file with --output.

@@ -35,7 +35,7 @@ func (c *cmdDraftUpdate) command() *cobra.Command {
 	cmd.Use = "update " + u.File.Render()
 	cmd.Short = i18n.G("Update an existing draft from .org/.md/.html file")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Update an existing WeChat draft with new content. Supports .org, .md,
 and .html files. If a .org or .md file is provided, it is auto-converted
 to HTML first (with image uploads and thumbnail resolution).

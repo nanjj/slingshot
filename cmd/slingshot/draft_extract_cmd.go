@@ -31,7 +31,7 @@ func (c *cmdDraftExtract) command() *cobra.Command {
 	cmd.Use = "extract " + u.ID.Render()
 	cmd.Short = i18n.G("Print a draft's full content")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Print the full content of a draft's article(s).
 
 The draft is resolved the same way as "show" and "remove": a sidecar YAML

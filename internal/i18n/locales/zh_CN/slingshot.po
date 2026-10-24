@@ -1132,3 +1132,27 @@ msgstr "i18n verify：%d 个孤立条目；请运行：slingshot i18n sync --del
 
 msgid "orphaned"
 msgstr "孤立"
+
+msgid "Additional help topics:"
+msgstr "其他帮助主题:"
+
+msgid "Aliases:"
+msgstr "别名:"
+
+msgid "Available Commands:"
+msgstr "可用命令:"
+
+msgid "Examples:"
+msgstr "示例:"
+
+msgid "Flags:"
+msgstr "标志:"
+
+msgid "Global Flags:"
+msgstr "全局标志:"
+
+msgid "Locales directory path (default: internal/i18n/locales)"
+msgstr "语言环境目录路径（默认：internal/i18n/locales）"
+
+msgid "Use \"{{.CommandPath}} [command] --help\" for more information about a command."
+msgstr "使用 \"{{.CommandPath}} [command] --help\" 查看某个命令的更多信息。"

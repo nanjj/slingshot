@@ -34,7 +34,7 @@ func (c *cmdDraftAdd) command() *cobra.Command {
 	cmd.Use = "add " + u.File.Render()
 	cmd.Short = i18n.G("Create a new draft from .org/.md/.html file")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Create a new WeChat draft from a file. Supports .org, .md, and .html.
 If a .org or .md file is provided, it is auto-converted to HTML first
 (with image uploads and thumbnail resolution).

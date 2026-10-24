@@ -17,6 +17,7 @@ import (
 	"github.com/nanjj/slingshot/internal/code/base"
 	"github.com/nanjj/slingshot/internal/code/lsp"
 	codemcp "github.com/nanjj/slingshot/internal/code/mcp"
+	"github.com/nanjj/slingshot/internal/i18n"
 )
 
 // cmdCode implements the "slingshot code" parent command.
@@ -30,7 +31,7 @@ func (c *cmdCode) command() *cobra.Command {
 	cmd.Use = "code"
 	cmd.Short = "Code intelligence tools with MCP stdio server"
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		`Start an MCP stdio server for code intelligence.
 
 The code command provides code search, graph analysis, AST navigation,
@@ -81,7 +82,7 @@ func (c *cmdCodeServe) command() *cobra.Command {
 	cmd.Use = "serve"
 	cmd.Short = "Start MCP stdio server for code intelligence"
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		`Start an MCP stdio server that exposes code intelligence tools
 over the Model Context Protocol (stdio transport).
 

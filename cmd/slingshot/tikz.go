@@ -38,7 +38,7 @@ func (c *cmdTikz) command() *cobra.Command {
 	cmd.Use = "tikz <in-file> <out-file>"
 	cmd.Short = i18n.G("Render a TikZ snippet to png/jpg/svg/pdf")
 	cmd.Long = cli.FormatSection(
-		color.CyanString("Description:"),
+		color.CyanString(i18n.G("Description:")),
 		i18n.G(`Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).
 
 The input file may contain a full tikzpicture environment or just the
