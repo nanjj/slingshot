@@ -941,6 +941,81 @@ func extractUserPackages(content string) ([]string, string) {
 	return pkgs, userPackageRe.ReplaceAllString(content, "")
 }
 
+// commentedPackageRe 匹配行首 %\usepackage{...} 注释行, 连同行尾换行。
+// 只认 %\ 紧邻的形式 (%\usepackage), 不认 % \usepackage (百分号后有空格),
+// 后者是普通注释, 不是可执行的包声明。
+var commentedPackageRe = regexp.MustCompile(`(?m)^[ \t]*%\\usepackage(?:\[[^]]*\])?\{([^}]*)\}[ \t]*\r?\n?`)
+
+// extractCommentedPackages 提取 tikzpicture 之外以 %\usepackage 开头的注释行,
+// 返回包名列表与去掉这些行后的内容。tikzpicture 内部的注释不处理:
+// 环境内的注释可能是代码的一部分, 挪走会改变语义。
+func extractCommentedPackages(content string) ([]string, string) {
+	begin := strings.Index(content, `\begin{tikzpicture}`)
+	head := content
+	tail := ""
+	if begin >= 0 {
+		head = content[:begin]
+		tail = content[begin:]
+	}
+
+	var pkgs []string
+	for _, m := range commentedPackageRe.FindAllStringSubmatch(head, -1) {
+		for name := range strings.SplitSeq(m[1], ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				pkgs = append(pkgs, name)
+			}
+		}
+	}
+	return pkgs, commentedPackageRe.ReplaceAllString(head, "") + tail
+}
+
+// userModePackageCache 记录已经确认安装的 tlmgr usermode 包, 避免每次渲染
+// 都调用 tlmgr。
+var userModePackageCache = map[string]bool{}
+
+// userModePackageName 把 LaTeX 包名映射到 tlmgr 包名。带点的名字
+// (physketch.general) 取第一段 (physketch); 不带点的原样返回。
+func userModePackageName(name string) string {
+	if i := strings.IndexByte(name, '.'); i > 0 {
+		return name[:i]
+	}
+	return name
+}
+
+// ensureUserModePackage 检查 tlmgr --usermode 是否安装了 name 对应的包,
+// 没有则安装。已经检查过的包直接返回, 不重复调用 tlmgr。
+func ensureUserModePackage(name string) error {
+	pkg := userModePackageName(name)
+	if pkg == "" || userModePackageCache[pkg] {
+		return nil
+	}
+	if _, err := exec.LookPath("tlmgr"); err != nil {
+		return fmt.Errorf("tlmgr not found (needed for %q): %w", pkg, err)
+	}
+	info := exec.Command("tlmgr", "--usermode", "info", pkg)
+	if err := info.Run(); err == nil {
+		userModePackageCache[pkg] = true
+		return nil
+	}
+	install := exec.Command("tlmgr", "--usermode", "install", pkg)
+	out, err := install.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tlmgr --usermode install %s failed: %w: %s", pkg, err, strings.TrimSpace(string(out)))
+	}
+	userModePackageCache[pkg] = true
+	return nil
+}
+
+// ensureUserModePackages 对 pkgs 逐个调用 ensureUserModePackage。
+func ensureUserModePackages(pkgs []string) error {
+	for _, p := range pkgs {
+		if err := ensureUserModePackage(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // mergeTikzPackages 合并显式包与自动探测包, 保持顺序并去重 (显式优先)。
 func mergeTikzPackages(explicit, detected []string) []string {
 	seen := make(map[string]bool)
@@ -2168,9 +2243,14 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		raw = usetikzlibraryIECRe.ReplaceAllString(raw, "")
 	}
 	explicitPkgs, raw := extractUserPackages(raw)
+	commentedPkgs, raw := extractCommentedPackages(raw)
+	explicitPkgs = append(explicitPkgs, commentedPkgs...)
 	// 显式 \usetikzlibrary 行同样提到导言区 (见 extractUserTikzLibraries)。
 	explicitLibs, raw := extractUserTikzLibraries(raw)
 	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw, profile.legacyIEC))
+	if err := ensureUserModePackages(explicitPkgs); err != nil {
+		return err
+	}
 	if profile.legacyTikzlings {
 		// legacy bundle (tikzlings v0.8) 没有 TikZ 库文件, pic 语法由
 		// tikzlingsPicShim 定义 <name>/.pic = {\<name>}; \<name> 宏随对应子宏包加载。
