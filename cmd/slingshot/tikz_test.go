@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -291,34 +290,9 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\begin{tikzpicture}\n\\tkzDefPoint(0,0){A}\n\\end{tikzpicture}",
 		},
 		{
-			name:  "veclen scope option normalized to xfp",
-			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\begin{scope}[xfp]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "veclen first among other options",
-			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen, x=1]\n\\end{scope}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\begin{scope}[xfp, x=1]\n\\end{scope}\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "veclen later option with space",
-			input: "\\begin{tikzpicture}\n\\begin{scope}[a, veclen]\n\\end{scope}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\begin{scope}[a, xfp]\n\\end{scope}\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "veclen with value and node",
-			input: "\\begin{tikzpicture}\n\\node[veclen=true]{x};\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\node[xfp=true]{x};\n\\end{tikzpicture}\n",
-		},
-		{
 			name:  "veclen pgfmath function call untouched",
 			input: "\\begin{tikzpicture}\n\\node at ($ (0,0) ! veclen(1,1) ! (1,0) $) {};\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\node at ($ (0,0) ! veclen(1,1) ! (1,0) $) {};\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "tkz-euclide doc example with scope veclen",
-			input: "\\begin{tikzpicture}[scale=1]\n\\tkzDefPoint(0,0){O}\n\\tkzDefPoint(2.5,0){N}\n\\begin{scope}[veclen]\n\\tkzMarkAngle[mkpos=.2, size=1.2](C,A,M)\n\\end{scope}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}[scale=1]\n\\tkzDefPoint(0,0){O}\n\\tkzDefPoint(2.5,0){N}\n\\begin{scope}[xfp]\n\\tkzMarkAngle[mkpos=.2, size=1.2](C,A,M)\n\\end{scope}\n\\end{tikzpicture}\n",
 		},
 		{
 			name:  "new style injected for tkz-euclide doc example",
@@ -349,11 +323,6 @@ func TestNormalizeTikz(t *testing.T) {
 			name:  "new not injected for longer key names",
 			input: "\\begin{tikzpicture}\n\\node[newwidth]{x};\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\node[newwidth]{x};\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "veclen translated and new injected independently",
-			input: "\\begin{tikzpicture}\n\\begin{scope}[veclen, new]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
-			want:  "\\tikzset{new/.style={color=orange,line width=.2pt}}\n\\begin{tikzpicture}\n\\begin{scope}[xfp, new]\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
 		},
 		{
 			name:  "percent line-join col-0 continuation fixed",
@@ -416,29 +385,9 @@ func TestNormalizeTikz(t *testing.T) {
 			want:  "\\begin{tikzpicture}\n\\begin{scope}\n\\draw (0,0);\n\\end{scope}\n\\end{tikzpicture}\n",
 		},
 		{
-			name:  "tkzInterLC next to first endpoint translated to near",
-			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=Ja](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "tkzInterLC next to second endpoint swaps line and uses near",
-			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=Q](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Q,Ja)(Q,Cb) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
-		},
-		{
 			name:  "tkzInterCC next to untouched (no near in 4.051b circlecircle)",
 			input: "\\begin{tikzpicture}\n\\tkzInterCC[next to=C](A,B)(C,D) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\tkzInterCC[next to=C](A,B)(C,D) \\tkzGetFirstPoint{X}\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "next to and common coexist, each kept semantically",
-			input: "\\begin{tikzpicture}\n\\tkzInterLC[next to=Ja](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a) \\tkzGetFirstPoint{Fa}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Ja,Q)(Q,Cb) \\tkzGetFirstPoint{F'a}\n\\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a) \\tkzGetFirstPoint{Fa}\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "next to with spaces around key and value",
-			input: "\\begin{tikzpicture}\n\\tkzInterLC [next to = Ja](Ja,Q)(Q,Cb)\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\tkzInterLC[near](Ja,Q)(Q,Cb)\n\\end{tikzpicture}\n",
 		},
 		{
 			name:  "next to not a line endpoint untouched",
@@ -449,11 +398,6 @@ func TestNormalizeTikz(t *testing.T) {
 			name:  "next to in node text untouched",
 			input: "\\begin{tikzpicture}\n\\node {next to the point};\n\\end{tikzpicture}\n",
 			want:  "\\begin{tikzpicture}\n\\node {next to the point};\n\\end{tikzpicture}\n",
-		},
-		{
-			name:  "def point on circle through reordered (apollonius doc example)",
-			input: "\\begin{tikzpicture}\n\\tkzDefCircle[apollonius,K=2](A,B) \\tkzGetPoints{K1}{k}\n\\tkzDefPointOnCircle[through= center K1 angle 30 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
-			want:  "\\begin{tikzpicture}\n\\tkzDefCircle[apollonius,K=2](A,B) \\tkzGetPoints{K1}{k}\n\\tkzDefPointOnCircle[through= angle 30 center K1 point k] \\tkzGetPoint{I}\n\\end{tikzpicture}\n",
 		},
 		{
 			name:  "def point on circle 4.051b order kept",
@@ -568,7 +512,7 @@ func TestNormalizeTikz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeTikz(tt.input, tectonicProfile()); got != tt.want {
+			if got := normalizeTikz(tt.input, latexmkProfile()); got != tt.want {
 				t.Errorf("normalizeTikz() = %q, want %q", got, tt.want)
 			}
 		})
@@ -656,385 +600,6 @@ func TestNormalizeTikzLatexmkProfile(t *testing.T) {
 				t.Errorf("normalizeTikz(latexmk) = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestFixNextToKeys(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "next to first endpoint becomes near",
-			input: `\tkzInterLC[next to=Ja](Ja,Q)(Q,Cb)`,
-			want:  `\tkzInterLC[near](Ja,Q)(Q,Cb)`,
-		},
-		{
-			name:  "next to second endpoint swaps line",
-			input: `\tkzInterLC[next to=Q](Ja,Q)(Q,Cb)`,
-			want:  `\tkzInterLC[near](Q,Ja)(Q,Cb)`,
-		},
-		{
-			name:  "spaces around key and equals",
-			input: `\tkzInterLC [next to = Ja](Ja,Q)(Q,Cb)`,
-			want:  `\tkzInterLC[near](Ja,Q)(Q,Cb)`,
-		},
-		{
-			name:  "primed point names",
-			input: `\tkzInterLC[next to=F'a](F'a,Jc)(Ja,F'a)`,
-			want:  `\tkzInterLC[near](F'a,Jc)(Ja,F'a)`,
-		},
-		{
-			name:  "inter CC untouched (no near in 4.051b circlecircle)",
-			input: `\tkzInterCC[next to=C](A,B)(C,D)`,
-			want:  `\tkzInterCC[next to=C](A,B)(C,D)`,
-		},
-		{
-			name:  "next to other point untouched",
-			input: `\tkzInterLC[next to=O](Ja,Q)(Q,Cb)`,
-			want:  `\tkzInterLC[next to=O](Ja,Q)(Q,Cb)`,
-		},
-		{
-			name:  "already near untouched",
-			input: `\tkzInterLC[near](A,B)(C,D)`,
-			want:  `\tkzInterLC[near](A,B)(C,D)`,
-		},
-		{
-			name:  "already common untouched",
-			input: `\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a)`,
-			want:  `\tkzInterLC[common=F'a](Sp,F'a)(Ja,F'a)`,
-		},
-		{
-			name:  "other options untouched",
-			input: `\tkzInterLC[R](A,B)(C,2)`,
-			want:  `\tkzInterLC[R](A,B)(C,2)`,
-		},
-		{
-			name:  "internal LCR variant not matched by prefix",
-			input: `\tkzInterLCR(A,B)(C,D){X}{Y}`,
-			want:  `\tkzInterLCR(A,B)(C,D){X}{Y}`,
-		},
-		{
-			name:  "no option bracket, next to stays",
-			input: `\tkzInterLC (A,B)(C,D) next to=Ja`,
-			want:  `\tkzInterLC (A,B)(C,D) next to=Ja`,
-		},
-		{
-			name:  "plain text next to untouched",
-			input: `\node {go next to the point};`,
-			want:  `\node {go next to the point};`,
-		},
-		{
-			name:  "inter LL untouched",
-			input: `\tkzInterLL(Za,Xc)(C,B) \tkzGetPoint{C'}`,
-			want:  `\tkzInterLL(Za,Xc)(C,B) \tkzGetPoint{C'}`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := fixNextToKeys(tt.input); got != tt.want {
-				t.Errorf("fixNextToKeys() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestFixDefPointOnCircleThrough(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "2x order reordered to 4.051b",
-			input: `\tkzDefPointOnCircle[through= center K1 angle 30 point k]`,
-			want:  `\tkzDefPointOnCircle[through= angle 30 center K1 point k]`,
-		},
-		{
-			name:  "different angle value",
-			input: `\tkzDefPointOnCircle[through= center K1 angle 280 point k]`,
-			want:  `\tkzDefPointOnCircle[through= angle 280 center K1 point k]`,
-		},
-		{
-			name:  "spaces around equals",
-			input: `\tkzDefPointOnCircle [through = center K1 angle 30 point k]`,
-			want:  `\tkzDefPointOnCircle [through= angle 30 center K1 point k]`,
-		},
-		{
-			name:  "primed point name",
-			input: `\tkzDefPointOnCircle[through= center O angle 90 point P']`,
-			want:  `\tkzDefPointOnCircle[through= angle 90 center O point P']`,
-		},
-		{
-			name:  "negative and decimal angles",
-			input: `\tkzDefPointOnCircle[through= center O angle -30.5 point A]`,
-			want:  `\tkzDefPointOnCircle[through= angle -30.5 center O point A]`,
-		},
-		{
-			name:  "other options before through kept",
-			input: `\tkzDefPointOnCircle[color=red, through= center O angle 30 point A]`,
-			want:  `\tkzDefPointOnCircle[color=red, through= angle 30 center O point A]`,
-		},
-		{
-			name:  "4.051b order untouched",
-			input: `\tkzDefPointOnCircle[through= angle 30 center K1 point k]`,
-			want:  `\tkzDefPointOnCircle[through= angle 30 center K1 point k]`,
-		},
-		{
-			name:  "R variant untouched",
-			input: `\tkzDefPointOnCircle[R= angle 30 center O radius 2]`,
-			want:  `\tkzDefPointOnCircle[R= angle 30 center O radius 2]`,
-		},
-		{
-			name:  "through in rad untouched (not in 4.051b)",
-			input: `\tkzDefPointOnCircle[through in rad= center O angle 30 point A]`,
-			want:  `\tkzDefPointOnCircle[through in rad= center O angle 30 point A]`,
-		},
-		{
-			name:  "bare through boolean untouched",
-			input: `\tkzDefPointOnCircle[through] \tkzGetPoint{I}`,
-			want:  `\tkzDefPointOnCircle[through] \tkzGetPoint{I}`,
-		},
-		{
-			name:  "def point on line untouched",
-			input: `\tkzDefPointOnLine[through= center O angle 30 point A](X,Y)`,
-			want:  `\tkzDefPointOnLine[through= center O angle 30 point A](X,Y)`,
-		},
-		{
-			name:  "text mentioning through untouched",
-			input: `\node {through= center O angle 30 point A};`,
-			want:  `\node {through= center O angle 30 point A};`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := fixDefPointOnCircleThrough(tt.input); got != tt.want {
-				t.Errorf("fixDefPointOnCircleThrough() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestFixDefCircleR(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "basic R circle def gets 5.x point-on-circle semantics",
-			input: `\tkzDefCircle[R](A,1) \tkzGetPoint{a}`,
-			want: `\tkzDefCircleR(A,1)
-\path (A)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
-\tkzRenamePoint(tkzSecondPointResult){tkzPointResult} \tkzGetPoint{a}`,
-		},
-		{
-			name:  "spaces around command, key and args",
-			input: `\tkzDefCircle [ R ](B, 3)\tkzGetPoint{b}`,
-			want: `\tkzDefCircleR(B,3)
-\path (B)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
-\tkzRenamePoint(tkzSecondPointResult){tkzPointResult}\tkzGetPoint{b}`,
-		},
-		{
-			name:  "decimal radius",
-			input: `\tkzDefCircle[R](O,2.5) \tkzGetPoint{p}`,
-			want: `\tkzDefCircleR(O,2.5)
-\path (O)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
-\tkzRenamePoint(tkzSecondPointResult){tkzPointResult} \tkzGetPoint{p}`,
-		},
-		{
-			name:  "through option untouched",
-			input: `\tkzDefCircle[through](A,B) \tkzGetPoint{a}`,
-			want:  `\tkzDefCircle[through](A,B) \tkzGetPoint{a}`,
-		},
-		{
-			name:  "radius option untouched (4.051b through alias)",
-			input: `\tkzDefCircle[radius](A,B) \tkzGetPoint{a}`,
-			want:  `\tkzDefCircle[radius](A,B) \tkzGetPoint{a}`,
-		},
-		{
-			name:  "R with other keys untouched (no silent misinterpretation)",
-			input: `\tkzDefCircle[R,K=2](A,B)`,
-			want:  `\tkzDefCircle[R,K=2](A,B)`,
-		},
-		{
-			name:  "inter CC R untouched (native in 4.051b)",
-			input: `\tkzInterCC[R](A,1)(K,3) \tkzGetPoints{a}{a'}`,
-			want:  `\tkzInterCC[R](A,1)(K,3) \tkzGetPoints{a}{a'}`,
-		},
-		{
-			name:  "inter LC R untouched (native in 4.051b)",
-			input: `\tkzInterLC[R](A,B)(B,3) \tkzGetPoints{b1}{E}`,
-			want:  `\tkzInterLC[R](A,B)(B,3) \tkzGetPoints{b1}{E}`,
-		},
-		{
-			name:  "draw circle R untouched (native in 4.051b)",
-			input: `\tkzDrawCircle[R](O,2)`,
-			want:  `\tkzDrawCircle[R](O,2)`,
-		},
-		{
-			name:  "plain text mentioning R untouched",
-			input: `% \tkzDefCircle[R](A,1) example in comment`,
-			want:  `% \tkzDefCircle[R](A,1) example in comment`,
-		},
-		{
-			name:  "inline comment usage untouched (translation would leak code)",
-			input: `\node{x}; % \tkzDefCircle[R](A,1)`,
-			want:  `\node{x}; % \tkzDefCircle[R](A,1)`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := fixDefCircleR(tt.input); got != tt.want {
-				t.Errorf("fixDefCircleR() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestFixDefLineTangent(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "tangent at becomes direct 4.051b call with center-first order",
-			input: `\tkzDefLine[tangent at=T](B) \tkzGetPoint{h}`,
-			want:  `\tkzTgtAt(B)(T) \tkzGetPoint{h}`,
-		},
-		{
-			name:  "prime point name",
-			input: `\tkzDefLine[tangent at=T'](B) \tkzGetPoint{h}`,
-			want:  `\tkzTgtAt(B)(T') \tkzGetPoint{h}`,
-		},
-		{
-			name:  "spaces around command, key and args",
-			input: `\tkzDefLine [ tangent at = T' ](B) \tkzGetPoint{h}`,
-			want:  `\tkzTgtAt(B)(T') \tkzGetPoint{h}`,
-		},
-		{
-			name:  "combined keys untouched (no silent misinterpretation)",
-			input: `\tkzDefLine[tangent at=T,new](B)`,
-			want:  `\tkzDefLine[tangent at=T,new](B)`,
-		},
-		{
-			name:  "mediator untouched (out of scope, keeps explicit error)",
-			input: `\tkzDefLine[mediator](A,B)`,
-			want:  `\tkzDefLine[mediator](A,B)`,
-		},
-		{
-			name:  "plain line def untouched",
-			input: `\tkzDefLine(A,B) \tkzGetPoint{O}`,
-			want:  `\tkzDefLine(A,B) \tkzGetPoint{O}`,
-		},
-		{
-			name:  "internal macro name untouched (word boundary)",
-			input: `\tkzDefLineLL(A,B)`,
-			want:  `\tkzDefLineLL(A,B)`,
-		},
-		{
-			name:  "comment-only usage untouched",
-			input: `% \tkzDefLine[tangent at=T](B) example`,
-			want:  `% \tkzDefLine[tangent at=T](B) example`,
-		},
-		{
-			name:  "inline comment usage untouched",
-			input: `\node{x}; % \tkzDefLine[tangent at=T](B)`,
-			want:  `\node{x}; % \tkzDefLine[tangent at=T](B)`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := fixDefLineTangent(tt.input); got != tt.want {
-				t.Errorf("fixDefLineTangent() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-func TestTkzApolloniusShim(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		wantShim bool
-	}{
-		{
-			name:     "DefCircle apollonius",
-			input:    `\tkzDefCircle[apollonius,K=2](A,B) \tkzGetPoints{K1}{k}`,
-			wantShim: true,
-		},
-		{
-			name:     "DrawCircle apollonius",
-			input:    `\tkzDrawCircle[apollonius,K=3](A,B)`,
-			wantShim: true,
-		},
-		{
-			name:     "DrawCircles apollonius",
-			input:    `\tkzDrawCircles[apollonius,K=2](A,B)`,
-			wantShim: true,
-		},
-		{
-			name:     "direct internal macro",
-			input:    `\tkzDefApolloniusCircle(A,B)`,
-			wantShim: true,
-		},
-		{
-			name:     "comment mention does not trigger",
-			input:    "% apollonius circle example\n\\tkzDefPoint(0,0){A}",
-			wantShim: false,
-		},
-		{
-			name:     "unrelated input",
-			input:    `\tkzDefCircle[circum](A,B,C)`,
-			wantShim: false,
-		},
-		{
-			name:     "apollonius in node text does not trigger",
-			input:    `\node {apollonius};`,
-			wantShim: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tkzApolloniusShimFor(tt.input)
-			if tt.wantShim && got == "" {
-				t.Fatal("tkzApolloniusShimFor() = empty, want shim")
-			}
-			if !tt.wantShim && got != "" {
-				t.Fatalf("tkzApolloniusShimFor() = %q, want empty", got)
-			}
-		})
-	}
-}
-
-// TestTkzApolloniusShimSemantics 验证注入定义镜像 5.x 的结果点语义:
-// First=圆心、Second=内分点、Third=外分点、Length=半径,
-// 且圆心仍在 tkzPointResult (DrawCircle[apollonius] 分支兼容)。
-func TestTkzApolloniusShimSemantics(t *testing.T) {
-	shim := tkzApolloniusShimFor(`\tkzDefCircle[apollonius,K=2](A,B)`)
-	checks := []struct {
-		name string
-		sub  string
-	}{
-		{"guarded", `\ifcsname tkzDefApolloniusCircle\endcsname`},
-		{"first is center", `\pgfnodealias{tkzFirstPointResult}{tkzPointResult}`},
-		{"second is inner point", `\pgfnodealias{tkzSecondPointResult}{tkzPointResult}`},
-		{"third is outer point", `\pgfnodealias{tkzThirdPointResult}{apo@ptb}`},
-		{"radius from center to inner", `\tkz@@CalcLengthcm(tkzFirstPointResult,apo@pta){tkzLengthResult}`},
-		{"inner via VecK k/(1+k)", `\tkz@VecK[\tkz@koeff/(1+\tkz@koeff)](#1,#2)`},
-		{"outer via VecK k/(k-1)", `\tkz@VecK[\tkz@koeff/(\tkz@koeff-1)](#1,#2)`},
-		{"center stays in tkzPointResult", `\tkzDefMidPoint(apo@pta,apo@ptb)`},
-	}
-	for _, c := range checks {
-		if !strings.Contains(shim, c.sub) {
-			t.Errorf("shim missing %s: %q not found", c.name, c.sub)
-		}
-	}
-	// First 的赋值必须在 Second 之后出现 (圆心来自 MidPoint 之后的
-	// tkzPointResult, 颠倒会取到 VecK 的中间结果)。
-	if strings.Index(shim, `\pgfnodealias{tkzFirstPointResult}`) < strings.Index(shim, `\pgfnodealias{tkzSecondPointResult}`) {
-		t.Error("tkzFirstPointResult must be assigned after tkzSecondPointResult (center from MidPoint)")
 	}
 }
 
@@ -1195,11 +760,6 @@ func TestDetectTikzPackages(t *testing.T) {
 			name:    "smartdiagram",
 			content: "\\smartdiagram[bubble diagram]{A, B}",
 			want:    []string{"smartdiagram"},
-		},
-		{
-			name:    "circuit ee IEC style",
-			content: "\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}",
-			want:    []string{"circuitikz"},
 		},
 		{
 			name:    "circuitikz compat star component",
@@ -1459,7 +1019,7 @@ func TestDetectTikzPackages(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detectTikzPackages(tt.content, true)
+			got := detectTikzPackages(tt.content)
 			if len(got) != len(tt.want) {
 				t.Fatalf("detectTikzPackages() = %v, want %v", got, tt.want)
 			}
@@ -1480,22 +1040,9 @@ func TestDetectTikzpeopleShapes(t *testing.T) {
 	}
 	for _, name := range tikzpeopleShapes {
 		content := "\\node[" + name + "] at (0,0) {};"
-		if got := detectTikzPackages(content, true); !slices.Contains(got, "tikzpeople") {
+		if got := detectTikzPackages(content); !slices.Contains(got, "tikzpeople") {
 			t.Errorf("detectTikzPackages(%q) = %v, want tikzpeople", content, got)
 		}
-	}
-}
-
-// TestDetectTikzPackagesLegacyIEC 验证 circuit ee IEC 内容在非 legacy (latexmk)
-// 模式下不再额外引入 circuitikz: TL2026 自带真的 circuits.ee.IEC 库, 不需要
-// circuitikz 兜底; 只有 tectonic (2021 bundle 缺该库) 才需要。
-func TestDetectTikzPackagesLegacyIEC(t *testing.T) {
-	content := "\\usetikzlibrary{circuits.ee.IEC}\n\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
-	if got := detectTikzPackages(content, false); len(got) != 0 {
-		t.Errorf("detectTikzPackages(legacyIEC=false) = %v, want none", got)
-	}
-	if got := detectTikzPackages(content, true); len(got) != 1 || got[0] != "circuitikz" {
-		t.Errorf("detectTikzPackages(legacyIEC=true) = %v, want [circuitikz]", got)
 	}
 }
 
@@ -1671,11 +1218,11 @@ func TestMergeTikzLibraries(t *testing.T) {
 // tikzducks 宏包探测 (issue #2): \duck / \randuck 走 TikZ 库, \picduck 只由
 // 宏包本体提供, 不探测会报 "Undefined control sequence"。
 func TestDetectTikzPackagesTikzducksPicture(t *testing.T) {
-	got := detectTikzPackages(`\picduck`, false)
+	got := detectTikzPackages(`\picduck`)
 	if !slices.Contains(got, "tikzducks") {
 		t.Fatalf("detectTikzPackages(\\picduck) = %v, want tikzducks", got)
 	}
-	if got := detectTikzPackages(`\picnic`, false); slices.Contains(got, "tikzducks") {
+	if got := detectTikzPackages(`\picnic`); slices.Contains(got, "tikzducks") {
 		t.Fatalf("detectTikzPackages(\\picnic) = %v, must not contain tikzducks", got)
 	}
 }
@@ -1804,51 +1351,15 @@ func TestDetectTikzlingsPics(t *testing.T) {
 	}
 }
 
-// TestTikzlingsPicPackages 验证 legacy 后端 pic 语法要加载的动物子宏包 (表顺序)。
-func TestTikzlingsPicPackages(t *testing.T) {
-	got := tikzlingsPicPackages(`pic{penguin} pic{bear} pic{seagull}`)
-	want := []string{"tikzlings-bears", "tikzlings-penguins"}
-	if !slices.Equal(got, want) {
-		t.Errorf("tikzlingsPicPackages() = %v, want %v", got, want)
-	}
-	if got := tikzlingsPicPackages(`\draw (0,0) -- (1,1);`); got != nil {
-		t.Errorf("tikzlingsPicPackages(plain) = %v, want nil", got)
-	}
-}
-
 // TestTikzLibrariesTikzlingsPics 验证 pic 语法只在非 legacy 后端注入 tikzlings
 // 库 (legacy bundle 没有该库文件, 走动物子宏包 + tikzlingsPicShim)。
 func TestTikzLibrariesTikzlingsPics(t *testing.T) {
 	pic := "\\begin{tikzpicture}\n\\path (1,0) pic{bear};\n\\end{tikzpicture}"
-	if got := tikzLibraries(latexmkProfile(), pic); !slices.Contains(got, "tikzlings") {
+	if got := tikzLibraries(pic); !slices.Contains(got, "tikzlings") {
 		t.Errorf("tikzLibraries(latexmk, pic{bear}) = %v, want tikzlings", got)
 	}
-	if got := tikzLibraries(tectonicProfile(), pic); slices.Contains(got, "tikzlings") {
-		t.Errorf("tikzLibraries(tectonic, pic{bear}) = %v, must not contain tikzlings (bundle lacks the library)", got)
-	}
-	if got := tikzLibraries(latexmkProfile(), `\path pic{seagull};`); slices.Contains(got, "tikzlings") {
+	if got := tikzLibraries(`\path pic{seagull};`); slices.Contains(got, "tikzlings") {
 		t.Errorf("tikzLibraries(latexmk, pic{seagull}) = %v, must not contain tikzlings", got)
-	}
-}
-
-// TestTikzShimsTikzlingsPic 验证 legacy 的 pic shim: 复刻库文件的 <name>/.pic
-// 与 thing/.search also (缺后者时 pic[thing/hat=red] 报未知键); latexmk 不注入。
-func TestTikzShimsTikzlingsPic(t *testing.T) {
-	picRaw := `\path (1,0) pic{bear};`
-	got := tikzShims(tectonicProfile(), picRaw, nil)
-	for _, want := range []string{
-		`\tikzset{thing/.search also={,/tikz,/pgf}}`,
-		`\tikzset{bear/.pic={\bear},bear/.search also={,/tikz,/pgf,/thing}}`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("tectonic shims missing tikzlings pic shim %q in:\n%s", want, got)
-		}
-	}
-	if got := tikzShims(tectonicProfile(), `\draw (0,0) -- (1,1);`, nil); strings.Contains(got, "/.pic=") {
-		t.Errorf("tectonic shims must not inject pic shim without pics: %q", got)
-	}
-	if got := tikzShims(latexmkProfile(), picRaw, nil); strings.Contains(got, "/.pic=") {
-		t.Errorf("latexmk shims must not inject tikzlings pic shim (uses the real library): %q", got)
 	}
 }
 
@@ -1862,20 +1373,18 @@ func TestIecNeedsLibrary(t *testing.T) {
 	plain := "\\draw (0,0) -- (1,1);"
 	tests := []struct {
 		name    string
-		profile tikzProfile
 		content string
 		want    bool
 	}{
-		{name: "bare latexmk", profile: latexmkProfile(), content: bare, want: true},
-		{name: "bare tectonic", profile: tectonicProfile(), content: bare, want: false},
-		{name: "loaded latexmk", profile: latexmkProfile(), content: loaded, want: true},
-		{name: "comma loaded latexmk", profile: latexmkProfile(), content: commaLoaded, want: true},
-		{name: "commented out load latexmk", profile: latexmkProfile(), content: commented, want: true},
-		{name: "no iec latexmk", profile: latexmkProfile(), content: plain, want: false},
+		{name: "bare", content: bare, want: true},
+		{name: "loaded", content: loaded, want: true},
+		{name: "comma loaded", content: commaLoaded, want: true},
+		{name: "commented out load", content: commented, want: true},
+		{name: "no iec", content: plain, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := iecNeedsLibrary(tt.profile, tt.content); got != tt.want {
+			if got := iecNeedsLibrary(tt.content); got != tt.want {
 				t.Errorf("iecNeedsLibrary() = %v, want %v", got, tt.want)
 			}
 		})
@@ -1886,16 +1395,12 @@ func TestTikzLibraries(t *testing.T) {
 	bare := "\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
 	loaded := "\\usetikzlibrary{circuits.ee.IEC}\n" + bare
 	calcAndIEC := "\\begin{tikzpicture}[circuit ee IEC]\n\\draw ($(0,0)$) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}"
-	gotBare := tikzLibraries(latexmkProfile(), bare)
+	gotBare := tikzLibraries(bare)
 	if !slices.Contains(gotBare, "circuits.ee.IEC") {
 		t.Errorf("tikzLibraries(latexmk, bare) = %v, want circuits.ee.IEC", gotBare)
 	}
-	gotTectonic := tikzLibraries(tectonicProfile(), bare)
-	if slices.Contains(gotTectonic, "circuits.ee.IEC") {
-		t.Errorf("tikzLibraries(tectonic, bare) = %v, must not contain circuits.ee.IEC", gotTectonic)
-	}
 	// 内容自带加载行时仍注入一次, 但绝不能重复 (pgf 幂等, 重复也无害, 只为整洁)。
-	gotLoaded := tikzLibraries(latexmkProfile(), loaded)
+	gotLoaded := tikzLibraries(loaded)
 	n := 0
 	for _, lib := range gotLoaded {
 		if lib == "circuits.ee.IEC" {
@@ -1905,33 +1410,27 @@ func TestTikzLibraries(t *testing.T) {
 	if n != 1 {
 		t.Errorf("tikzLibraries(latexmk, loaded) = %v, want exactly one circuits.ee.IEC, got %d", gotLoaded, n)
 	}
-	gotCalcAndIEC := tikzLibraries(latexmkProfile(), calcAndIEC)
+	gotCalcAndIEC := tikzLibraries(calcAndIEC)
 	if !slices.Contains(gotCalcAndIEC, "calc") || !slices.Contains(gotCalcAndIEC, "circuits.ee.IEC") {
 		t.Errorf("tikzLibraries(latexmk, calc+IEC) = %v, want calc and circuits.ee.IEC", gotCalcAndIEC)
 	}
 	canvas := "\\begin{scope}[canvas is zy plane at x=\\thelayer*1.8]"
-	gotCanvas := tikzLibraries(latexmkProfile(), canvas)
+	gotCanvas := tikzLibraries(canvas)
 	if !slices.Contains(gotCanvas, "3d") {
 		t.Errorf("tikzLibraries(canvas is zy plane at) = %v, want 3d", gotCanvas)
 	}
 	// \duck / \randuck 注入 ducks 库: 两个后端都要注入 (2021 bundle v1.5 也自带库文件)。
 	duck := "\\duck\n\\randuck[body=blue]"
-	if got := tikzLibraries(latexmkProfile(), duck); !slices.Contains(got, "ducks") {
+	if got := tikzLibraries(duck); !slices.Contains(got, "ducks") {
 		t.Errorf("tikzLibraries(latexmk, duck) = %v, want ducks", got)
-	}
-	if got := tikzLibraries(tectonicProfile(), duck); !slices.Contains(got, "ducks") {
-		t.Errorf("tikzLibraries(tectonic, duck) = %v, want ducks", got)
 	}
 	// matrix 库: "matrix 摆法"交换图 (\matrix(m)[matrix of math nodes] + >=angle 90)
 	// 需要它; 两个后端都注入 (TL2026 与 2021 bundle 均自带该库, 无后端门控)。
-	if got := tikzLibraries(latexmkProfile(), matrixSample); !slices.Contains(got, "matrix") {
+	if got := tikzLibraries(matrixSample); !slices.Contains(got, "matrix") {
 		t.Errorf("tikzLibraries(latexmk, matrixSample) = %v, want matrix", got)
 	}
-	if got := tikzLibraries(tectonicProfile(), matrixSample); !slices.Contains(got, "matrix") {
-		t.Errorf("tikzLibraries(tectonic, matrixSample) = %v, want matrix (bundle ships the library too)", got)
-	}
 	// 同一片段还要 arrows: >=angle 90 只在 pgflibraryarrows 声明。
-	if got := tikzLibraries(latexmkProfile(), matrixSample); !slices.Contains(got, "arrows") {
+	if got := tikzLibraries(matrixSample); !slices.Contains(got, "arrows") {
 		t.Errorf("tikzLibraries(latexmk, matrixSample) = %v, want arrows (>=angle 90)", got)
 	}
 }
@@ -2008,51 +1507,6 @@ func TestSiunitxAliasShim(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("siunitxAliasShim() missing %q in:\n%s", want, got)
 		}
-	}
-}
-
-func TestCircuitikzBuzzerShim(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-		want    string // "" = no shim
-	}{
-		{name: "no buzzer", content: "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"},
-		{
-			name:    "buzzer bipole",
-			content: "\\begin{circuitikz}\n\\draw (0,3) to[buzzer, a=Buzzer] (0,5);\n\\end{circuitikz}",
-			want:    tikzBuzzerShim + "\n",
-		},
-		{
-			name:    "reversed buzzer",
-			content: "\\draw (0,0) to[rbuzzer] (2,0);",
-			want:    tikzBuzzerShim + "\n",
-		},
-		{
-			name:    "whitespace before name",
-			content: "\\draw (0,0) to[ rbuzzer ] (2,0);",
-			want:    tikzBuzzerShim + "\n",
-		},
-		{
-			name:    "buzzer label only not a bipole",
-			content: "\\draw (0,0) to[R, a=Buzzer] (2,0);",
-		},
-		{
-			name:    "commented out usage ignored",
-			content: "% \\draw (0,0) to[buzzer] (2,0);\n\\draw (0,0) to[R] (2,0);",
-		},
-		{
-			name:    "inline comment after real usage still triggers",
-			content: "\\draw (0,0) to[buzzer] (2,0); % buzzer comment",
-			want:    tikzBuzzerShim + "\n",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := circuitikzBuzzerShim(tt.content); got != tt.want {
-				t.Errorf("circuitikzBuzzerShim() = %q, want %q", got, tt.want)
-			}
-		})
 	}
 }
 
@@ -2145,30 +1599,6 @@ func TestCircuitikzCompatDetected(t *testing.T) {
 	}
 }
 
-func TestCircuitikzIecShim(t *testing.T) {
-	if got := circuitikzIecShim("\\draw (0,0) -- (1,1);"); got != "" {
-		t.Errorf("circuitikzIecShim(plain) = %q, want empty", got)
-	}
-	if got := circuitikzIecShim("\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"); got != "" {
-		t.Errorf("circuitikzIecShim(circuitikz only) = %q, want empty", got)
-	}
-	got := circuitikzIecShim("\\begin{tikzpicture}[circuit ee IEC]\n\\draw (0,0) to[resistor={name=R}] (0,2);\n\\end{tikzpicture}")
-	for _, want := range []string{
-		`\pgfkeysifdefined{/tikz/circuit ee IEC}`,
-		`circuit ee IEC/.style={}`,
-		`resistor/.style={tikzcirciec@resistor={}, #1}`,
-		`diode/.style={tikzcirciec@diode={}, #1}`,
-		`amperemeter/.style={tikzcirciec@ammeter={}, #1}`,
-		`\pgf@circ@emptydiode@path`,
-		`tikzcirciec@resistor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bipole@path{generic}, l={#1}}`,
-		`tikzcirciec@var resistor/.style={\circuitikzbasekey, /tikz/to path=\pgf@circ@bipole@path{tgeneric}, l={#1}}`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("circuitikzIecShim() missing %q in:\n%s", want, got)
-		}
-	}
-}
-
 func TestTikzShims(t *testing.T) {
 	// 同时命中 buzzer / converter / apollonius / IEC / motor 的内容。
 	raw := "\\begin{circuitikz}\n\\draw (0,0) to[buzzer] (0,2);\n\\end{circuitikz}\n" +
@@ -2177,7 +1607,7 @@ func TestTikzShims(t *testing.T) {
 	pkgs := []string{"circuitikz", "siunitx", "tkz-euclide"}
 
 	// latexmk (TL2026) profile: 只注入与后端无关的 motor 与 siunitx shim。
-	modern := tikzShims(latexmkProfile(), raw, pkgs)
+	modern := tikzShims(raw, pkgs)
 	for _, want := range []string{tikzMotorShim, tikzSiunitxShim} {
 		if !strings.Contains(modern, want) {
 			t.Errorf("latexmk shims missing backend-independent shim %q", want)
@@ -2189,13 +1619,6 @@ func TestTikzShims(t *testing.T) {
 		}
 	}
 
-	// tectonic (2021 bundle) profile: 全部兼容 shim 都要注入。
-	legacy := tikzShims(tectonicProfile(), raw, pkgs)
-	for _, want := range []string{tikzBuzzerShim, tikzConverterShim, tikzApolloniusShim, tikzIecShim, tikzSiunitxShim} {
-		if !strings.Contains(legacy, want) {
-			t.Errorf("tectonic shims missing 2021-bundle shim %q", want)
-		}
-	}
 }
 
 // tcblistingWant 拼出 tcblistingSetup 的期望输出: libs 是高亮引擎库列表
@@ -2260,13 +1683,6 @@ func TestTcblistingSetup(t *testing.T) {
 			want:    tcblistingWant("listings,minted"),
 		},
 		{
-			name:    "tcblisting with tcolorbox (tectonic)",
-			profile: tectonicProfile(),
-			raw:     plainRaw,
-			pkgs:    []string{"tcolorbox", "tikzlings-marmots"},
-			want:    tcblistingWant("listings"),
-		},
-		{
 			name:    "plain tikz needs nothing",
 			profile: latexmkProfile(),
 			raw:     "\\draw (0,0) -- (1,1);",
@@ -2323,8 +1739,6 @@ func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
 		{"latexmk/no minted", latexmkProfile(), plainRaw, `\tcbuselibrary{listings}`},
 		{"latexmk/minted", latexmkProfile(), mintedRaw, `\tcbuselibrary{listings,minted}`},
 		{"latexmk/minted in title only (wide match)", latexmkProfile(), titleMintedRaw, `\tcbuselibrary{listings,minted}`},
-		{"tectonic/no minted", tectonicProfile(), plainRaw, `\tcbuselibrary{listings}`},
-		{"tectonic/minted", tectonicProfile(), mintedRaw, `\tcbuselibrary{listings}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2356,8 +1770,7 @@ func TestTcblistingSetupMintedGatedByProfile(t *testing.T) {
 func TestTcblistingSetupDefinesNoWrapStyle(t *testing.T) {
 	want := tcblistingNoWrapStyle + "/.style={before lower*={\\centering\\slingshotTcblistingTikzcdBg}, after lower*={}}"
 	for name, profile := range map[string]tikzProfile{
-		"latexmk":  latexmkProfile(),
-		"tectonic": tectonicProfile(),
+		"latexmk": latexmkProfile(),
 	} {
 		got := tcblistingSetup(profile, "\\begin{tcblisting}{}\\duck\\end{tcblisting}", []string{"tcolorbox"})
 		if !strings.Contains(got, want) {
@@ -2953,132 +2366,6 @@ func TestTexLogErrNil(t *testing.T) {
 	}
 }
 
-func TestCircuitikzConverterShim(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-		want    string // "" = no shim
-	}{
-		{name: "no converter", content: "\\begin{circuitikz}\n\\draw (0,0) to[R] (2,0);\n\\end{circuitikz}"},
-		{name: "plain tikz", content: "\\draw (0,0) -- (1,1);"},
-		{name: "tacdcshape node", content: "\\node[tacdcshape, anchor=ac mid in](acdc){};", want: tikzConverterShim + "\n"},
-		{name: "tdcacshape node", content: "\\draw (0,0) node[tdcacshape, anchor=dc up in](dcac){};", want: tikzConverterShim + "\n"},
-		{name: "anchor access only", content: "\\draw (0,0) -- (acdc.ac up in);"},
-		{name: "commented out usage ignored", content: "% \\node[tacdcshape, anchor=ac mid in](acdc){};\n\\draw (0,0) to[R] (2,0);"},
-		{name: "inline comment after real usage still triggers", content: "\\draw (0,0) node[tacdcshape]{}; % converter", want: tikzConverterShim + "\n"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := circuitikzConverterShim(tt.content); got != tt.want {
-				t.Errorf("circuitikzConverterShim() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-	got := circuitikzConverterShim("\\draw (0,0) node[tacdcshape, anchor=ac mid in](acdc){} to[smallR] ++(-2,0);")
-	for _, want := range []string{
-		`\ifcsname pgf@sh@s@tacdcshape\endcsname`,
-		`\expandafter\gdef\csname pgf@anchor@tacdcshape@ac mid in\endcsname{\northeast\pgf@y=0\pgf@y\pgf@x=-\pgf@x}`,
-		`\expandafter\gdef\csname pgf@anchor@tacdcshape@ac up in\endcsname{\northeast\pgf@y=.6\pgf@y\pgf@x=-\pgf@x}`,
-		`\expandafter\gdef\csname pgf@anchor@tacdcshape@dc up out\endcsname{\northeast\pgf@y=.4\pgf@y}`,
-		`\expandafter\gdef\csname pgf@anchor@tdcacshape@dc up in\endcsname{\northeast\pgf@y=.4\pgf@y\pgf@x=-\pgf@x}`,
-		`\expandafter\gdef\csname pgf@anchor@tdcacshape@ac mid out\endcsname{\northeast\pgf@y=0\pgf@y}`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("circuitikzConverterShim() missing %q in:\n%s", want, got)
-		}
-	}
-}
-
-// TestVendoredPackageFiles 验证 vendored 资产只在 tectonic profile 且命中
-// 对应包时才写入工作目录 (xe 用系统 TeX Live, 永远为空)。
-func TestVendoredPackageFiles(t *testing.T) {
-	tests := []struct {
-		name string
-		p    tikzProfile
-		pkgs []string
-		want []string
-	}{
-		{
-			name: "latexmk needs no vendored files",
-			p:    latexmkProfile(),
-			pkgs: []string{"figchild", "tikz-triminos"},
-		},
-		{
-			name: "tectonic figchild only",
-			p:    tectonicProfile(),
-			pkgs: []string{"figchild"},
-			want: []string{"figchild.sty"},
-		},
-		{
-			name: "tectonic both, figchild first",
-			p:    tectonicProfile(),
-			pkgs: []string{"figchild", "tikz-triminos"},
-			want: []string{"figchild.sty", "tikz-triminos.sty"},
-		},
-		{
-			name: "tectonic with no matching package",
-			p:    tectonicProfile(),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := vendoredPackageFiles(tt.p, tt.pkgs)
-			if len(got) != len(tt.want) {
-				t.Fatalf("vendoredPackageFiles() = %v, want %v", got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Fatalf("vendoredPackageFiles() = %v, want %v", got, tt.want)
-				}
-			}
-		})
-	}
-}
-
-// TestTriminosFpevalShim 验证 fpeval shim 只在包列表含 tikz-triminos 时产出,
-// 且内容用 \ifcsname 守卫 (未来 bundle 自带 \fpeval 时不重复定义)。
-func TestTriminosFpevalShim(t *testing.T) {
-	if got := triminosFpevalShim([]string{"tikz-triminos"}); got == "" {
-		t.Fatal("triminosFpevalShim(tikz-triminos) = empty, want the fpeval shim")
-	} else if !strings.Contains(got, `\ifcsname fpeval`) {
-		t.Errorf("triminosFpevalShim() = %q, want it to guard on \\ifcsname fpeval", got)
-	}
-	if got := triminosFpevalShim([]string{"tikz-euclide"}); got != "" {
-		t.Errorf("triminosFpevalShim(without tikz-triminos) = %q, want empty", got)
-	}
-	if got := triminosFpevalShim(nil); got != "" {
-		t.Errorf("triminosFpevalShim(nil) = %q, want empty", got)
-	}
-}
-
-// TestTikzAssetsEmbedded 验证两份 vendored .sty 都嵌进了二进制,
-// 且确实是对应宏包 (只扫前若干 KB, figchild.sty 有 1.8MB)。
-func TestTikzAssetsEmbedded(t *testing.T) {
-	// 大小下限断言防止资产被意外截断 / 替换成占位文件。
-	for name, tc := range map[string]struct {
-		want     string
-		minBytes int
-	}{
-		"figchild.sty":      {`\ProvidesPackage{figchild}`, 1_000_000},
-		"tikz-triminos.sty": {`\ProvidesPackage{tikz-triminos}`, 4096},
-	} {
-		data, err := tikzAssets.ReadFile("tikzassets/" + name)
-		if err != nil {
-			t.Fatalf("reading embedded %s: %v", name, err)
-		}
-		if len(data) < tc.minBytes {
-			t.Errorf("embedded %s is %d bytes, want >= %d", name, len(data), tc.minBytes)
-		}
-		head := data
-		if len(head) > 8192 {
-			head = head[:8192]
-		}
-		if !strings.Contains(string(head), tc.want) {
-			t.Errorf("embedded %s does not contain %q in its first 8KB", name, tc.want)
-		}
-	}
-}
-
 // TestStripTikzComments 验证注释剥离: 未转义 % 删到行尾 (保留换行),
 // 转义 \% 不算注释; % 前连续反斜杠数为奇数才转义。
 func TestStripTikzComments(t *testing.T) {
@@ -3102,134 +2389,6 @@ func TestStripTikzComments(t *testing.T) {
 				t.Errorf("stripTikzComments(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
-	}
-}
-
-// TestWriteVendoredPackages 验证 tectonic profile 会把命中的 vendored 宏包
-// 写进工作目录 (内容以 \ProvidesPackage 开头), latexmk profile 不写任何文件。
-func TestWriteVendoredPackages(t *testing.T) {
-	dir := t.TempDir()
-	pkgs := []string{"figchild", "tikz-triminos"}
-	if err := writeVendoredPackages(dir, tectonicProfile(), pkgs); err != nil {
-		t.Fatalf("writeVendoredPackages(tectonic) = %v", err)
-	}
-	for name, want := range map[string]string{
-		"figchild.sty":      `\ProvidesPackage{figchild}`,
-		"tikz-triminos.sty": `\ProvidesPackage{tikz-triminos}`,
-	} {
-		data, err := os.ReadFile(filepath.Join(dir, name))
-		if err != nil {
-			t.Fatalf("reading written %s: %v", name, err)
-		}
-		if len(data) == 0 {
-			t.Errorf("written %s is empty", name)
-		}
-		if !strings.Contains(string(data), want) {
-			t.Errorf("written %s does not contain %q", name, want)
-		}
-	}
-
-	dir2 := t.TempDir()
-	if err := writeVendoredPackages(dir2, latexmkProfile(), pkgs); err != nil {
-		t.Fatalf("writeVendoredPackages(latexmk) = %v", err)
-	}
-	entries, err := os.ReadDir(dir2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("latexmk profile wrote %d files, want 0", len(entries))
-	}
-}
-
-// fcNameRe 从 figchild.sty 提取 \fc* 命令名, 容忍 \newcommand* 与可选花括号。
-var fcNameRe = regexp.MustCompile(`\\newcommand\*?\s*\{?\\?(fc[A-Za-z0-9]*)`)
-
-// fcCamelRe 是 figchildRe 编码的 CamelCase 形式 (fc + 大写)。
-var fcCamelRe = regexp.MustCompile(`^fc[A-Z]`)
-
-// TestFigchildLowercaseExceptions 扫描嵌入的 figchild.sty, 断言 \fc* 命令中
-// 不匹配 ^fc[A-Z] 的小写例外恰为 figchildRe 硬编码的 5 个名字; 且这些名字
-// 都被 figchildRe 命中, 而内核 \fcolorbox 不被命中 (正则与上游名单一致)。
-func TestFigchildLowercaseExceptions(t *testing.T) {
-	data, err := tikzAssets.ReadFile("tikzassets/figchild.sty")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var lower []string
-	seen := make(map[string]bool)
-	for _, m := range fcNameRe.FindAllStringSubmatch(string(data), -1) {
-		n := m[1]
-		if !seen[n] {
-			seen[n] = true
-			if !fcCamelRe.MatchString(n) {
-				lower = append(lower, n)
-			}
-		}
-	}
-	slices.Sort(lower)
-	want := []string{"fcfrog", "fchamburger", "fcpink", "fcsheetA", "fcsheetB"}
-	if !slices.Equal(lower, want) {
-		t.Fatalf("lowercase fc exceptions = %v, want %v", lower, want)
-	}
-	for _, n := range want {
-		if !figchildRe.MatchString(`\` + n) {
-			t.Errorf("figchildRe does not match \\%s", n)
-		}
-	}
-	if figchildRe.MatchString(`\fcolorbox`) {
-		t.Error("figchildRe matches kernel \\fcolorbox, want no match")
-	}
-}
-
-// TestTikzAssetsSHA256 把 tikzassets/README.md 记录的 SHA-256 变成测试不变量:
-// 从 README 提取全部 64 位 hex token, 断言两份嵌入 .sty 的 sha256 都在其中
-// (README 表与资产由测试互相锁定, 刷新资产时必须同步哈希)。
-func TestTikzAssetsSHA256(t *testing.T) {
-	readme, err := os.ReadFile("tikzassets/README.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 逐文件映射: 解析 README 表行的 `name.sty` ... `sha256`, 断言每份
-	// 嵌入 .sty 的 sha256 与该行记录的哈希一致 (防复制粘贴时把两个哈希互换)。
-	rowRe := regexp.MustCompile("`([\\w-]+\\.sty)`[^\\n]*?`([0-9a-f]{64})`")
-	documented := make(map[string]string)
-	for _, m := range rowRe.FindAllStringSubmatch(string(readme), -1) {
-		documented[m[1]] = m[2]
-	}
-	if len(documented) == 0 {
-		t.Fatal("no .sty sha256 rows parsed from tikzassets/README.md")
-	}
-	// 以嵌入资产为准逐一遍历 (而非遍历解析结果): 若某个 .sty 的行没被解析
-	// 到, 这里会因查不到 documented 而失败, 避免"静默跳过一行"仍通过。
-	entries, err := tikzAssets.ReadDir("tikzassets")
-	if err != nil {
-		t.Fatal(err)
-	}
-	checked := 0
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || filepath.Ext(name) != ".sty" {
-			continue
-		}
-		checked++
-		want, ok := documented[name]
-		if !ok {
-			t.Errorf("embedded %s has no sha256 row in tikzassets/README.md", name)
-			continue
-		}
-		data, err := tikzAssets.ReadFile("tikzassets/" + name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sum := sha256.Sum256(data)
-		got := hex.EncodeToString(sum[:])
-		if got != want {
-			t.Errorf("sha256(%s) = %s, README records %s", name, got, want)
-		}
-	}
-	if checked != len(documented) {
-		t.Errorf("checked %d embedded .sty, README documents %d", checked, len(documented))
 	}
 }
 

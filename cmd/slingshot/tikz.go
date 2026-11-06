@@ -57,10 +57,8 @@ nesting it would silently discard the drawing; an explicit tikz lower or
 before lower* in the box options still wins.
 
 The output format is determined by the output file extension.
-Pipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript
-rasterization. --engine picks the TeX engine: xe (XeLaTeX, default),
-tectonic (bundled 2021 packages), auto (xe preferred, tectonic fallback).
-pdf (pdfLaTeX) and lua (LuaLaTeX) are reserved values, not implemented yet.
+Pipeline: latexmk -xelatex -> PDF -> mutool / ghostscript rasterization.
+--engine picks the TeX engine; currently only xe (XeLaTeX) is implemented.
 External commands are killed after TIKZ_TIMEOUT (Go duration, default 1m).
 Chinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be
 overridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).
@@ -73,7 +71,7 @@ Examples:
 	cmd.RunE = c.run
 	cmd.Args = cobra.ArbitraryArgs
 	cmd.Flags().StringVar(&c.engine, "engine", string(engineXe),
-		i18n.G("TeX engine: xe (XeLaTeX, default), tectonic, auto (xe preferred, tectonic fallback); pdf and lua are not implemented yet"))
+		i18n.G("TeX engine: xe (XeLaTeX); currently the only implemented engine"))
 	return cmd
 }
 
@@ -279,11 +277,6 @@ func siunitxAliasShim(pkgs []string) string {
 	return ""
 }
 
-// apolloniusUseRe 匹配 tkz-euclide 的阿波罗尼奥斯圆用法:
-// \tkzDefCircle[apollonius,…] / \tkzDrawCircle[s][apollonius,…] /
-// 直接调用内部宏 \tkzDefApolloniusCircle。
-var apolloniusUseRe = regexp.MustCompile(`\\tkz(?:DefCircle|DrawCircles?)\s*\[[^]]*\bapollonius\b|\\tkzDefApolloniusCircle`)
-
 // tikzApolloniusShim 覆盖 bundle 内置 4.051b 的 \tkzDefApolloniusCircle,
 // 使其结果点语义与 tkz-euclide 5.x 一致。两版实现 (tkz-obj-eu-circles.tex):
 //
@@ -318,35 +311,6 @@ const tikzApolloniusShim = `\makeatletter
 \fi
 \makeatother
 `
-
-// tkzApolloniusShimFor 检测输入是否用到阿波罗尼奥斯圆, 命中时返回兼容 shim。
-// 注释行中的用法不触发 (LaTeX 中 % 到行尾都是注释)。
-func tkzApolloniusShimFor(content string) string {
-	for _, m := range apolloniusUseRe.FindAllStringIndex(content, -1) {
-		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
-		if strings.Contains(content[lineStart:m[0]], "%") {
-			continue
-		}
-		return tikzApolloniusShim + "\n"
-	}
-	return ""
-}
-
-// buzzerBipoleRe 匹配 circuitikz 的 buzzer / rbuzzer 双端元件用法。
-var buzzerBipoleRe = regexp.MustCompile(`to\[\s*r?buzzer\b`)
-
-// circuitikzBuzzerShim 检测输入是否用到 buzzer 元件, 命中时返回兼容 shim。
-// 注释行中的用法不触发 (LaTeX 中 % 到行尾都是注释)。
-func circuitikzBuzzerShim(content string) string {
-	for _, m := range buzzerBipoleRe.FindAllStringIndex(content, -1) {
-		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
-		if strings.Contains(content[lineStart:m[0]], "%") {
-			continue
-		}
-		return tikzBuzzerShim + "\n"
-	}
-	return ""
-}
 
 // motorBipoleRe 匹配 circuitikz 的 motor 双端元件用法。
 // circuitikz 上游没有 motor 元件 (圆 + M), 由 tikzMotorShim 定制补齐。
@@ -408,14 +372,6 @@ const tikzIecShim = `\makeatletter
 }
 \makeatother`
 
-// circuitikzIecShim 检测输入是否使用 circuit ee IEC 风格, 命中时返回 IEC shim。
-func circuitikzIecShim(content string) string {
-	if circuitEeIECRe.MatchString(content) {
-		return tikzIecShim + "\n"
-	}
-	return ""
-}
-
 // iecNeedsLibrary 报告是否要为 circuit ee IEC 风格注入 circuits.ee.IEC 库加载行。
 //
 // 手册片段 (pgf/circuitikz 手册) 常只给 tikzpicture 主体, 不自己
@@ -426,28 +382,23 @@ func circuitikzIecShim(content string) string {
 // latexmk 上一律注入, 不检测内容是否已自行加载: pgf 对同一库重复加载幂等
 // (TL2026 实测 rc=0 无警告), 而"检测已加载"一旦误判 (注释/verbatim/节点文本
 // 里出现库名) 就会漏注入, 重新引入本函数要修的回归。
-func iecNeedsLibrary(p tikzProfile, content string) bool {
-	return !p.legacyIEC && circuitEeIECRe.MatchString(content)
+func iecNeedsLibrary(content string) bool {
+	return circuitEeIECRe.MatchString(content)
 }
 
 // tikzLibraries 返回需要注入前导的 tikz 库: 内容特征探测 + IEC 风格的原生真库
 // + pic 语法需要的 tikzlings 库。
-func tikzLibraries(p tikzProfile, content string) []string {
+func tikzLibraries(content string) []string {
 	libs := detectTikzLibraries(content)
-	if iecNeedsLibrary(p, content) && !slices.Contains(libs, "circuits.ee.IEC") {
+	if iecNeedsLibrary(content) && !slices.Contains(libs, "circuits.ee.IEC") {
 		libs = append(libs, "circuits.ee.IEC")
 	}
 	// pic{bear} 等 pic 语法的 /tikz/pics/<name> 键只由 tikzlings 的 TikZ 库提供。
-	// legacy (tectonic bundle v0.8) 没有该库文件, 不注入 — 改走动物子宏包 +
-	// tikzlingsPicShim (见 renderTikz / tikzShims), 否则编译报库文件不存在。
-	if !p.legacyTikzlings && len(detectTikzlingsPics(content)) > 0 && !slices.Contains(libs, "tikzlings") {
+	if len(detectTikzlingsPics(content)) > 0 && !slices.Contains(libs, "tikzlings") {
 		libs = append(libs, "tikzlings")
 	}
 	return libs
 }
-
-// converterShapeRe 匹配 AC-DC / DC-AC 三相转换器 shape 名 (手册示例写法)。
-var converterShapeRe = regexp.MustCompile(`\b(?:tacdcshape|tdcacshape)\b`)
 
 // tikzConverterShim 为 bundle 的转换器 shape 补 mnemonic anchor。
 // 新版 circuitikz (twoport 重构后) 的 tacdc / tdcac 使用记忆名 anchor
@@ -484,19 +435,6 @@ const tikzConverterShim = `\makeatletter
 \fi
 \makeatother`
 
-// circuitikzConverterShim 检测输入是否用到转换器 shape 名, 命中时返回
-// mnemonic anchor 补齐 shim。注释行中的用法不触发 (% 到行尾都是注释)。
-func circuitikzConverterShim(content string) string {
-	for _, m := range converterShapeRe.FindAllStringIndex(content, -1) {
-		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
-		if strings.Contains(content[lineStart:m[0]], "%") {
-			continue
-		}
-		return tikzConverterShim + "\n"
-	}
-	return ""
-}
-
 // circuitikzCompatRe 匹配显式 \usepackage[compatibility]{circuitikz(git)}。
 // circuitikzgit 是本地开发包名 (bundle 里是 circuitikz), 同样按 compat 处理。
 var circuitikzCompatRe = regexp.MustCompile(`\\usepackage\s*\[\s*[^\]]*compatibility[^\]]*\]\s*\{circuitikz(?:git)?\}`)
@@ -510,11 +448,6 @@ var circuitikzStarRe = regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`)
 func circuitikzCompatDetected(content string) bool {
 	return circuitikzCompatRe.MatchString(content) || circuitikzStarRe.MatchString(content)
 }
-
-// usetikzlibraryIECRe 匹配 \usetikzlibrary{circuits.ee.IEC} 行 (含行尾换行)。
-// bundle 缺该库, IEC 组件由 tikzIecShim 提供, 显式加载行直接丢弃, 否则
-// tectonic 会报文件不存在。
-var usetikzlibraryIECRe = regexp.MustCompile(`(?m)^[ \t]*\\usetikzlibrary\{circuits\.ee\.IEC\}[ \t]*\r?\n?`)
 
 // tikzExtraPackages 是 "内容特征 → 需要额外加载的 LaTeX 包" 探测表。
 // 顺序即 \usepackage 的加载顺序; 命中特征说明 tikzpicture 用到了该包的命令/环境。
@@ -674,21 +607,6 @@ func detectTikzlingsPics(content string) []string {
 	return names
 }
 
-// tikzlingsPicPackages 返回 legacy 后端上 pic 语法需要加载的动物子宏包 (表顺序, 去重)。
-// legacy bundle (tikzlings v0.8) 没有 TikZ 库文件, 由 tikzlingsPicShim 替它定义
-// <name>/.pic = {\<name>}; \<name> 宏由对应子宏包提供, 必须先加载。
-func tikzlingsPicPackages(content string) []string {
-	var pkgs []string
-	seen := make(map[string]bool)
-	for _, name := range detectTikzlingsPics(content) {
-		if pkg := tikzlingsPics[name]; !seen[pkg] {
-			seen[pkg] = true
-			pkgs = append(pkgs, pkg)
-		}
-	}
-	return pkgs
-}
-
 // tikzExtraLibraries 是 "内容特征 → 需要额外加载的 tikz 库" 探测表。
 // 与 tikzExtraPackages 不同, 库特征更微妙 (fit= / ($ / right=of 等),
 // 因此用正则而非子串匹配; 顺序即 \usetikzlibrary 的加载顺序。
@@ -846,9 +764,8 @@ var scsnowmanRe = regexp.MustCompile(`\\scsnowman(?:default|numeral)?(?:[^@A-Za-
 // \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 // 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
 var tikzExtraPackageRes = []struct {
-	re        *regexp.Regexp
-	pkg       string
-	legacyIEC bool // 仅 tectonic 后端才成立 (bundle 缺 IEC 库 → 映射到 circuitikz)
+	re  *regexp.Regexp
+	pkg string
 }{
 	// siunitx: \micro \farad \ohm 等前缀/单位命令只能由 siunitx 提供,
 	// circuitikz 标签 l=10<\micro\farad> 是典型用法。\b 边界排除内核命令:
@@ -858,9 +775,6 @@ var tikzExtraPackageRes = []struct {
 	// \up 前缀的直立希腊字母 (\upalpha / \upmu 等) 由 upgreek 包提供,
 	// 但 \uparrow 等是 LaTeX 内核符号, 不能按 "\up" 子串一概而论。
 	{re: regexp.MustCompile(`\\up(?:alpha|beta|gamma|delta|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|omicron|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega)\b`), pkg: "upgreek"},
-	// circuit ee IEC 是 TikZ circuits.ee.IEC 库提供的风格; bundle 缺该库,
-	// tikzIecShim 把它映射到 circuitikz 元件, 所以需要加载 circuitikz。
-	{re: regexp.MustCompile(`\bcircuit\s+ee\s+IEC\b`), pkg: "circuitikz", legacyIEC: true},
 	// to[*R=$R_1$] 是 circuitikz [compatibility] 的星号元件写法 (老式语法)。
 	{re: regexp.MustCompile(`to\s*\[\s*\*[A-Za-z]`), pkg: "circuitikz"},
 	// tikzpeople (独立 CTAN 包, Nils Fleischhacker): 人形 node shape 探测见
@@ -882,9 +796,7 @@ var tikzExtraPackageRes = []struct {
 }
 
 // detectTikzPackages 从输入内容推断需要的额外包: 命中特征的包按表顺序收集, 去重。
-// legacyIEC 为真时 (tectonic bundle 缺 circuits.ee.IEC 库) 把 circuit ee IEC
-// 风格映射到 circuitikz; latexmk (TL2026 真库) 下不映射, 让真库处理。
-func detectTikzPackages(content string, legacyIEC bool) []string {
+func detectTikzPackages(content string) []string {
 	var pkgs []string
 	seen := make(map[string]bool)
 	// tkz-euclide 前置检查: 原 `\tkz` 子串会误中 tikz-triminos 的 \tkztriminos,
@@ -902,9 +814,6 @@ func detectTikzPackages(content string, legacyIEC bool) []string {
 		pkgs = append(pkgs, e.pkg)
 	}
 	for _, e := range tikzExtraPackageRes {
-		if e.legacyIEC && !legacyIEC {
-			continue // 真库后端 (latexmk) 不把 IEC 风格映射到 circuitikz
-		}
 		if !e.re.MatchString(content) || seen[e.pkg] {
 			continue
 		}
@@ -1406,138 +1315,6 @@ func fixTkzPercentJoins(content string) string {
 	return b.String()
 }
 
-// nextToLCRe 匹配 \tkzInterLC 的旧版 next to 选项, 捕获指定点与直线/圆参数。
-// tkz-euclide 2.x 用 [next to=X] 取两交点中离 X 最近的那个; 5.x 保留该 key
-// (.store in = \tkz@nextto) 语义不变。bundle 内置的 4.051b 没有 next to,
-// 只有 near (取离直线第一端点近的交点) 与 common (pt 为交点之一, 取另一个),
-// 直接编译报 "I do not know the key '/linecircle/next to'"。
-// 语义等价映射 (5.x 文档 TKZdoc-euclide-intersection.tex):
-//
-//	next to=A (直线第一端点) -> near
-//	next to=B (直线第二端点) -> near 并交换直线参数 (交点集合不变)
-//	其他指定点 -> 4.051b 无等价物, 保持原样 (宁报错, 不静默画错)。
-//
-// 仅匹配 \tkzInterLC (\b 排除 \tkzInterLCR 等内部命令); \tkzInterCC 的
-// /circlecircle 家族 4.051b 连 near 都没有, 同样保持原样。
-var nextToLCRe = regexp.MustCompile(`\\tkzInterLC\b\s*\[\s*next\s+to\s*=\s*([A-Za-z0-9']+)\s*\]\s*\(\s*([A-Za-z0-9']+)\s*,\s*([A-Za-z0-9']+)\s*\)\s*\(\s*([A-Za-z0-9']+)\s*,\s*([A-Za-z0-9']+)\s*\)`)
-
-// fixNextToKeys 把 tkz-euclide 2.x 的 next to 选项翻译为 4.051b 的 near。
-func fixNextToKeys(content string) string {
-	return nextToLCRe.ReplaceAllStringFunc(content, func(m string) string {
-		sub := nextToLCRe.FindStringSubmatch(m)
-		x, a, b, c, d := sub[1], sub[2], sub[3], sub[4], sub[5]
-		switch x {
-		case a:
-			return `\tkzInterLC[near](` + a + `,` + b + `)(` + c + `,` + d + `)`
-		case b:
-			return `\tkzInterLC[near](` + b + `,` + a + `)(` + c + `,` + d + `)`
-		}
-		return m
-	})
-}
-
-// defPtCircleThroughRe 匹配 \tkzDefPointOnCircle 选项列表中的旧版
-// through 解析式参数 "through= center C angle a point P" (tkz-euclide
-// 2.x 语法, 5.x 手册示例仍在用, 如 TKZdoc-euclide-examples.tex 的
-// Apollonius 圆示例)。bundle 内置的 4.051b 也支持 through, 但 .code
-// args 的参数顺序不同 (tkz-obj-eu-points-spc.tex):
-//
-//	5.x/2.x:  through/.code args = {center #1 angle #2 point #3}
-//	4.051b:   through/.code args = {angle #1 center #2 point #3}
-//
-// 语义完全一致 (center=圆心, angle=圆上点方向角, point=圆所过之点),
-// 但 .code args 按字面 token 匹配, 顺序不对时报 "Use of \pgfkeys@code
-// doesn't match its definition", 因此把参数重排为 4.051b 顺序。
-// 仅匹配 \tkzDefPointOnCircle 的选项列表 ([^]]*? 不跨 ]), 保留
-// through 前后的其他 key; 4.051b 没有的 through in rad / R 变体
-// 保持原样 (宁报错, 不静默画错)。
-var defPtCircleThroughRe = regexp.MustCompile(`\\tkzDefPointOnCircle\b(\s*\[[^]]*?)through\s*=\s*center\s+([A-Za-z0-9']+)\s+angle\s+([^,\]\s]+)\s+point\s+([A-Za-z0-9']+)`)
-
-// fixDefPointOnCircleThrough 把 through 的 2.x/5.x 参数顺序重排为
-// 4.051b 认识的 angle → center → point 顺序。
-func fixDefPointOnCircleThrough(content string) string {
-	return defPtCircleThroughRe.ReplaceAllStringFunc(content, func(m string) string {
-		sub := defPtCircleThroughRe.FindStringSubmatch(m)
-		return `\tkzDefPointOnCircle` + sub[1] + `through= angle ` + sub[3] + ` center ` + sub[2] + ` point ` + sub[4]
-	})
-}
-
-// defCircleRRe 匹配 tkz-euclide 5.x 的 \tkzDefCircle[R](center,radius) 语法。
-// bundle 内置 4.051b 的 /tkzcircle 家族 (tkz-obj-eu-circles.tex) 没有 R key
-// (5.x 的 R/.code=\def\tkz@numc{0} 在 4.051b 中不存在, 只有 through/radius/
-// diameter/circum/in/ex/euler/nine/apollonius/orthogonal/spieker/K),
-// 直接编译报 "I do not know the key '/tkzcircle/R'"。
-var defCircleRRe = regexp.MustCompile(`\\tkzDefCircle\b\s*\[\s*R\s*\]\s*\(\s*([A-Za-z0-9']+)\s*,\s*([^()]+?)\s*\)`)
-
-// fixDefCircleR 把 \tkzDefCircle[R](A,1) 翻译为 4.051b 等价的 5.x 语义。
-// 5.x 的 R 分支最终调用 \tkzDefCircleR(#1,#2) (tkz-obj-eu-circles.tex):
-//
-//	\tkzLengthResult = 半径; tkzPointResult = tkzSecondPointResult =
-//	圆上 (角度 0 方向) 的点。手册示例 \tkzDefCircle[R](A,1)\tkzGetPoint{a}
-//	后用 \tkzDrawCircles(A,a) 画圆, a 必须是圆上点。
-//
-// 4.051b 自带同名 "for compatibility" 的 \tkzDefCircleR, 但语义不同:
-// tkzPointResult = 圆心, GetPoint 取不到圆上点——直接翻译会把圆画成半径 0。
-// 因此先调 4.051b 的 \tkzDefCircleR 得到 tkzLengthResult (global 存活),
-// 再按 5.x 的方式补建圆上点并覆盖 tkzPointResult: 只依赖 4.051b 内置宏,
-// 不重定义任何宏, \tkzDrawCircle[R] (4.051b 原生支持) 的行为不受影响。
-// 仅匹配纯 [R] 选项; [R,其他 key] 组合无意义, 保持原样 (宁报错, 不静默画错)。
-// 注释行中的用法不翻译 (% 到行尾都是注释): 翻译会引入换行, 若匹配点前有 %,
-// 新插入的 \path 行会从注释中泄出变成真实代码。
-func fixDefCircleR(content string) string {
-	var b strings.Builder
-	start := 0
-	for _, m := range defCircleRRe.FindAllStringIndex(content, -1) {
-		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
-		if strings.Contains(content[lineStart:m[0]], "%") {
-			continue
-		}
-		b.WriteString(content[start:m[0]])
-		sub := defCircleRRe.FindStringSubmatch(content[m[0]:m[1]])
-		b.WriteString(`\tkzDefCircleR(` + sub[1] + `,` + sub[2] + `)
-\path (` + sub[1] + `)--++(\tkzLengthResult,0) coordinate (tkzSecondPointResult);
-\tkzRenamePoint(tkzSecondPointResult){tkzPointResult}`)
-		start = m[1]
-	}
-	b.WriteString(content[start:])
-	return b.String()
-}
-
-// defLineTangentRe 匹配 tkz-euclide 5.x 的 \tkzDefLine[tangent at=X](O) 语法。
-// bundle 内置 4.051b 的 \tkz@DefLine 用 \pgfqkeys{/tkzDefLine/.cd}{选项} 分派,
-// 但 \pgfqkeys 把 "/tkzDefLine/.cd" 整体当路径前缀, key 被解析为
-// "/tkzDefLine/.cd/tangent at" → 报 "I do not know the key" 后被忽略,
-// \tkz@numl 保持未定义, \ifcase 归 0 误走 \tkzDefMediatorLine(#2) 分支;
-// 而 4.051b 的 MediatorLine 需要 (A,B) 两个点, 参数扫描吞掉后续整行内容,
-// 遇到逗号截断后 csname 展开撞 \endgroup → "Missing \endcsname inserted"
-// (无逗号时则是 "File ended while scanning use of \tkzDefMediatorLine")。
-var defLineTangentRe = regexp.MustCompile(`\\tkzDefLine\b\s*\[\s*tangent\s+at\s*=\s*([A-Za-z0-9']+)\s*\]\s*\(\s*([A-Za-z0-9']+)\s*\)`)
-
-// fixDefLineTangent 把 \tkzDefLine[tangent at=X](O) 翻译为 4.051b 直调宏。
-// 5.x 的 tangent at 分支最终调用 \tkzTgtAt (tkz-obj-eu-lines.tex); 4.051b
-// 同名宏存在且不依赖坏掉的 key 分派: \tkzTgtAt(#1)(#2) 内部执行
-// \tkz@VecKOrthNorm[-1](#2,#1) —— 路径起点取第 2 参数、方向为 (第2参-第1参)⊥,
-// 因此必须按 (圆心)(切点) 顺序调用, 结果 tkzPointResult 才是过切点 X 的
-// 切线上一点 (与 5.x 语义一致: \tkzGetPoint{h} 后 \tkzInterLL(X,h)(A,B)
-// 求切线与直线交点)。仅匹配纯 [tangent at=X] 选项; 组合选项保持原样
-// (宁报错, 不静默画错)。注释行中的用法不翻译 (% 到行尾都是注释)。
-func fixDefLineTangent(content string) string {
-	var b strings.Builder
-	start := 0
-	for _, m := range defLineTangentRe.FindAllStringIndex(content, -1) {
-		lineStart := strings.LastIndex(content[:m[0]], "\n") + 1
-		if strings.Contains(content[lineStart:m[0]], "%") {
-			continue
-		}
-		b.WriteString(content[start:m[0]])
-		sub := defLineTangentRe.FindStringSubmatch(content[m[0]:m[1]])
-		b.WriteString(`\tkzTgtAt(` + sub[2] + `)(` + sub[1] + `)`)
-		start = m[1]
-	}
-	b.WriteString(content[start:])
-	return b.String()
-}
-
 // tikzShims 按后端 profile 组装需要注入前导的兼容 shim。
 //
 // motor shim 与后端无关: circuitikz 上游 (含 1.8.5) 从来没有 motor 元件,
@@ -1551,81 +1328,11 @@ func fixDefLineTangent(content string) string {
 // fpeval shim 只在 tectonic 上注入 (bundle 的 LaTeX 2021 缺 \fpeval, 见
 // triminosFpevalShim); siunitx alias shim 与后端无关 (siunitx v3 行为),
 // 两个后端都保留。
-func tikzShims(p tikzProfile, raw string, pkgs []string) string {
+func tikzShims(raw string, pkgs []string) string {
 	var shims string
 	shims += circuitikzMotorShim(raw)
-	if p.legacyBuzzer {
-		shims += circuitikzBuzzerShim(raw)
-	}
-	if p.legacyConverter {
-		shims += circuitikzConverterShim(raw)
-	}
-	if p.legacyApollonius {
-		shims += tkzApolloniusShimFor(raw)
-	}
-	if p.legacyIEC {
-		shims += circuitikzIecShim(raw)
-	}
-	if p.legacyTikzlings {
-		shims += tikzlingsPicShim(raw)
-	}
-	if p.legacyTriminos {
-		shims += triminosFpevalShim(pkgs)
-	}
 	shims += siunitxAliasShim(pkgs)
 	return shims
-}
-
-// tikzFpevalShim 给 2021 bundle 补齐 \fpeval。
-// tectonic bundle 的 LaTeX 2021 没有 \fpeval (l3kernel 2021-05 才加入),
-// tikz-triminos 内部用它做尺寸计算, 缺失时报 "Undefined control sequence"。
-// \fp_eval:n 是 expl3 早已提供的可展开浮点求值, 语义与新版 \fpeval 一致,
-// 因此直接做别名。\ifcsname 守卫未来 bundle 自带 \fpeval 时不重复定义。
-// 不需要 \makeatletter/\makeatother: 块内没有 @ 名字; \ExplSyntaxOn 只是
-// 让 _ / : 取得 letter catcode (expl3 命令名) 所必需。
-// 注入位置在 \usepackage 行之后, 依赖 tikz-triminos 在文档阶段 (而非加载期)
-// 才使用 \fpeval (当前实现如此); 未来上游若在加载期使用, 需把 shim 前移。
-const tikzFpevalShim = `\ifcsname fpeval\endcsname\else
-  \ExplSyntaxOn
-  \cs_new_eq:NN \fpeval \fp_eval:n
-  \ExplSyntaxOff
-\fi`
-
-// triminosFpevalShim 在包列表含 tikz-triminos 时返回 fpeval shim (带行尾换行),
-// 否则返回空串。只在 tectonic profile 调用 (见 tikzShims)。
-func triminosFpevalShim(pkgs []string) string {
-	if !slices.Contains(pkgs, "tikz-triminos") {
-		return ""
-	}
-	return tikzFpevalShim + "\n"
-}
-
-// tikzlingsPicShim 为 legacy 后端补齐 tikzlings 的 TikZ 库所定义的 pic 定义。
-// 该库 (tikzlibrarytikzlings.code.tex) 是 v2.x 才加入的; tectonic bundle 内置
-// v0.8, 既没有库文件也没有任何 pic 定义, 由本 shim 复刻 v2.5 库文件的语义:
-//
-//   - thing/.search also = {,/tikz,/pgf}: pic 选项 thing/hat=red 的键是
-//     /tikz/thing/hat; 把 /tikz/thing/* 的未命中查询导到 addons 定义的
-//     /thing/hat 家族 (并回退 /tikz、/pgf) 的搜索路径由库文件设置。
-//     缺这一行时 pgfkeys 报 "I do not know the key '/tikz/thing/hat'"。
-//   - <name>/.pic = {\<name>} 与 <name>/.search also = {,/tikz,/pgf,/thing}:
-//     pic 定义 + 把 pic 选项里的裸键 (如 hat=red) 兜到 /thing/hat。
-//
-// 上游用 \exp_not:c 在 .expanded 下烘焙 \name, 此处直接写 \name (使用时求值),
-// 等价且避免 \csname 在 edef 里继续展开 \<name> 宏本体。
-// 内容无 pic 引用时返回空串; 名字按表顺序去重 (每个名字一行)。
-func tikzlingsPicShim(content string) string {
-	names := detectTikzlingsPics(content)
-	if len(names) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("\\tikzset{thing/.search also={,/tikz,/pgf}}\n")
-	for _, name := range names {
-		b.WriteString("\\tikzset{" + name + "/.pic={\\" + name + "}," +
-			name + "/.search also={,/tikz,/pgf,/thing}}\n")
-	}
-	return b.String()
 }
 
 // tcblistingSetup 为 tcblisting 文档示例注入 tcolorbox 配置, 未命中返回空串。
@@ -2096,33 +1803,9 @@ func normalizeTikz(content string, p tikzProfile) string {
 	// % 续行陷阱: 手册示例靠续行缩进提供空格, 抄写丢缩进时 P' 与下一项
 	// 粘合成 P'N; 在 \tkz 参数区内删除行尾 % 让换行还原为空格 (见上)。
 	content = fixTkzPercentJoins(content)
-	if p.legacyNextTo {
-		// next to (tkz-euclide 2.x 旧选项名) 翻译为 4.051b 的 common。
-		content = fixNextToKeys(content)
-	}
-	if p.legacyThrough {
-		// through= center … angle … point … (2.x/5.x 参数顺序) 重排为
-		// 4.051b 的 angle → center → point 顺序。
-		content = fixDefPointOnCircleThrough(content)
-	}
-	if p.legacyDefCircleR {
-		// \tkzDefCircle[R](A,1) (5.x 语法, /tkzcircle 家族 4.051b 没有 R key)
-		// 翻译为 4.051b 内置宏的等价序列, 保持 5.x 的圆上点语义 (见上)。
-		content = fixDefCircleR(content)
-	}
-	if p.legacyTangentAt {
-		// \tkzDefLine[tangent at=X](O) (5.x 语法): 4.051b 的 \tkz@DefLine key 分派
-		// 在 bundle 的 pgfkeys 下失效 (\pgfqkeys 把 .cd 当路径前缀), 选项被忽略后
-		// 误走 MediatorLine 分支吞掉后续代码, 翻译为 4.051b 直调宏 \tkzTgtAt。
-		content = fixDefLineTangent(content)
-	}
 	// tkzpicture (tkz-base 环境名, tkz-euclide 4.x 已移除) 归一化为 tikzpicture。
 	content = tkzpictureBeginRe.ReplaceAllString(content, `\begin{tikzpicture}$1`)
 	content = tkzpictureEndRe.ReplaceAllString(content, `\end{tikzpicture}`)
-	if p.legacyVeclen {
-		// veclen (tkz-euclide 5.x 的 xfp key 新名) 归一化为 4.051b 认识的 xfp。
-		content = veclenKeyRe.ReplaceAllString(content, `${1}xfp${2}`)
-	}
 	// 剥掉误包的空外壳, 避免 pgf 嵌套 picture 崩溃。
 	content = stripOuterTikzShells(content)
 	// new (tkz-euclide 文档自定义的高亮样式) 未定义时注入文档同款定义。
@@ -2230,33 +1913,18 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	if err != nil {
 		return err
 	}
-	// tectonic bundle 内置 2021 年的旧包, 需要 tkz-euclide / circuitikz 5.x → 旧版
-	// 语法翻译与 shim; xe/pdf/lua 走 TeX Live 新版语法, profile 全 false。
 	profile := latexmkProfile()
-	if eng == engineTectonic {
-		profile = tectonicProfile()
-	}
 	compat := circuitikzCompatDetected(raw)
-	// 仅 tectonic bundle 无 circuits.ee.IEC 库 (tikzIecShim 提供等价 IEC 组件),
-	// 丢弃显式加载行; TL2026 有真库, 保留原样。
-	if profile.legacyIEC {
-		raw = usetikzlibraryIECRe.ReplaceAllString(raw, "")
-	}
 	explicitPkgs, raw := extractUserPackages(raw)
 	commentedPkgs, raw := extractCommentedPackages(raw)
 	explicitPkgs = append(explicitPkgs, commentedPkgs...)
 	// 显式 \usetikzlibrary 行同样提到导言区 (见 extractUserTikzLibraries)。
 	explicitLibs, raw := extractUserTikzLibraries(raw)
-	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw, profile.legacyIEC))
+	pkgs := mergeTikzPackages(explicitPkgs, detectTikzPackages(raw))
 	if err := ensureUserModePackages(explicitPkgs); err != nil {
 		return err
 	}
-	if profile.legacyTikzlings {
-		// legacy bundle (tikzlings v0.8) 没有 TikZ 库文件, pic 语法由
-		// tikzlingsPicShim 定义 <name>/.pic = {\<name>}; \<name> 宏随对应子宏包加载。
-		pkgs = mergeTikzPackages(pkgs, tikzlingsPicPackages(raw))
-	}
-	libs := mergeTikzLibraries(explicitLibs, tikzLibraries(profile, raw))
+	libs := mergeTikzLibraries(explicitLibs, tikzLibraries(raw))
 	outAbs, err := filepath.Abs(outFile)
 	if err != nil {
 		return fmt.Errorf("resolving output path: %w", err)
@@ -2280,7 +1948,7 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	// 兼容 shim 按后端 profile 组装 (见 tikzShims); tcblisting 的 tcolorbox
 	// 配置也随 profile 分叉 (minted 库只在支持受限 shell escape 的后端加载,
 	// 见 tcblistingSetup), 文档局部颜色兜底 (tikzDocColorShims) 与后端无关。
-	shims := tikzShims(profile, raw, pkgs) + tcblistingSetup(profile, raw, pkgs) + tikzDocColorShims(raw)
+	shims := tikzShims(raw, pkgs) + tcblistingSetup(profile, raw, pkgs) + tikzDocColorShims(raw)
 
 	if err := os.WriteFile(filepath.Join(tmpDir, "input.tikz"),
 		[]byte(normalizeTikz(raw, profile)), 0644); err != nil {
@@ -2290,12 +1958,6 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 		fmt.Appendf(nil, tikzWrapper, tikzBorderSpec(raw), tikzPackageLines(pkgs, compat),
 			tikzLibraryLines(libs), shims, cjkPreamble), 0644); err != nil {
 		return fmt.Errorf("writing input.tex: %w", err)
-	}
-	// vendored 宏包 (figchild / tikz-triminos) 只在 tectonic profile 上写入
-	// 工作目录; tectonic 优先从输入文件所在目录解析 \usepackage (与 input.tikz
-	// 同一机制), 从而覆盖/补齐 bundle 版本。xe 用系统 TeX Live, 此处为空操作。
-	if err := writeVendoredPackages(tmpDir, profile, pkgs); err != nil {
-		return fmt.Errorf("writing vendored packages: %w", err)
 	}
 
 	// run 执行一条外部命令并施加超时; ctx 到期时 runCmd 会杀掉整个进程组
@@ -2309,12 +1971,7 @@ func renderTikz(inFile, outFile, engine string) (err error) {
 	// 编译 input.tex -> input.pdf; 编译失败不自动改用另一个后端。
 	pdf := filepath.Join(tmpDir, "input.pdf")
 	compileErr := func() error {
-		var err error
-		if eng == engineTectonic {
-			err = run("tectonic", "input.tex")
-		} else {
-			err = run("latexmk", latexmkCompileArgs(eng)...)
-		}
+		err := run("latexmk", latexmkCompileArgs(eng)...)
 		// 退出码 0 也可能没有产物; 两个后端统一显式报错, 避免下游出现
 		// "文件不存在" 这类难以定位的错误。
 		if err == nil && !fileExists(pdf) {

@@ -11,88 +11,28 @@ import (
 // tikzEngine 标识 tikz 子命令使用的 LaTeX 编译后端。
 type tikzEngine string
 
-// --engine 的取值命名的是 TeX 引擎而不是驱动: xe/pdf/lua 都由 latexmk 驱动
-// (latexmk -xelatex / -pdf / -lualatex), tectonic 自带驱动与 bundle。
+// 目前只有 xelatex 一个后端。pdf/lua 实现容易但没测, 等有测试再放开。
 const (
-	engineXe       tikzEngine = "xe"       // xelatex (默认)
-	engineTectonic tikzEngine = "tectonic" // tectonic bundle (2021, 旧版语法)
-	enginePDF      tikzEngine = "pdf"      // pdflatex — 尚未实现
-	engineLua      tikzEngine = "lua"      // lualatex — 尚未实现
-	engineAuto     tikzEngine = "auto"     // xe 优先, tectonic 回退
+	engineXe tikzEngine = "xe" // xelatex (默认, 唯一实现)
 )
 
-// tikzProfile 选择某个后端需要的兼容处理, 并声明该后端的能力。
-//
-// latexmk (TeX Live 2026) 走的是新版 tkz-euclide / circuitikz 5.x 语法,
-// 无需翻译; tectonic bundle 内置的是旧版 tkz-euclide 4.051b / circuitikz
-// 1.4.x, 才需要把这些 5.x 语法翻译回旧版等价形式。错误地启用 legacy
-// 处理会在 TL2026 上"反向出错"(见 tikz_engine 门控矩阵)。
-//
-// legacy* 字段描述"要不要把新语法翻译回旧的"; 能力字段描述"后端本身
-// 支不支持某个特性", 两者都可能让 profile 分叉, 故放在同一个结构里。
+// tikzProfile 声明某个后端的能力。目前只有 xelatex 一个后端。
 type tikzProfile struct {
-	legacyVeclen     bool // [veclen] -> [xfp]
-	legacyThrough    bool // through= center..angle..point.. 重排
-	legacyDefCircleR bool // \tkzDefCircle[R](A,r) 展开
-	legacyNextTo     bool // \tkzInterLC[next to=..] -> near
-	legacyTangentAt  bool // \tkzDefLine[tangent at=X](O) -> \tkzTgtAt
-	legacyApollonius bool // 覆盖 \tkzDefApolloniusCircle
-	legacyIEC        bool // tectonic: 丢弃 \usetikzlibrary{circuits.ee.IEC} + 注入 IEC shim; latexmk: 注入真库加载行, 见 iecNeedsLibrary
-	legacyBuzzer     bool // buzzer shim
-	legacyConverter  bool // tacdc/tdcac mnemonic anchor shim
-	legacyTikzlings  bool // tectonic: bundle 无 tikzlings TikZ 库 (v0.8) — pic 语法改用子宏包 + tikzlingsPicShim; latexmk: 注入 \usetikzlibrary{tikzlings}
-	legacyFigchild   bool // tectonic: bundle 的 figchild 是 v1.1.1 (2021, 3 必填参数老 API), 与当前 3.x 的可选 TikZ 选项形式不兼容; 写入 vendored v3.1.1 覆盖
-	legacyTriminos   bool // tectonic: bundle 无 tikz-triminos; 写入 vendored sty + fpeval shim
-
 	// supportsMinted 报告该后端能否加载 minted 库 (tcblisting 的
 	// listing engine=minted)。latexmk: TL2026 的 texmf.cnf 开启受限 shell
 	// escape (shell_escape = p), 白名单 shell_escape_commands 里含
 	// latexminted —— minted v3 把高亮交给该助手执行, 因此**不需要**
-	// -shell-escape 就能工作。tectonic: shell escape 被完全禁用, minted 在
-	// \RequirePackage 阶段就报 "You must invoke LaTeX with the -shell-escape
-	// flag", 会让文档里每一个 tcblisting 编译失败, 故为 false。
-	//
-	// 该能力是 TeX Live >= 2026 的假设: 旧版 TL (minted v2) 加载 minted 仍需
-	// -shell-escape, 而本工具从不传该开关。将来接线 pdf/lua 复用 profile 时需
-	// 保留此前提 (按 TeX Live 版本判定, 或维持"仅在 latexmk 上启用")。
+	// -shell-escape 就能工作。
 	supportsMinted bool
 }
 
-// latexmkProfile 是 TL2026 主后端: 不做任何 legacy 翻译, 且支持 minted
+// latexmkProfile 是唯一后端: TL2026 的 latexmk -xelatex, 支持 minted
 // (受限 shell escape 白名单里有 latexminted, 见 tikzProfile.supportsMinted)。
 func latexmkProfile() tikzProfile { return tikzProfile{supportsMinted: true} }
 
-// tectonicProfile 是 tectonic 后备后端: 启用全部 legacy 翻译, 但不支持
-// minted (tectonic 完全禁用 shell escape)。
-func tectonicProfile() tikzProfile {
-	return tikzProfile{
-		legacyVeclen:     true,
-		legacyThrough:    true,
-		legacyDefCircleR: true,
-		legacyNextTo:     true,
-		legacyTangentAt:  true,
-		legacyApollonius: true,
-		legacyIEC:        true,
-		legacyBuzzer:     true,
-		legacyConverter:  true,
-		legacyTikzlings:  true,
-		legacyFigchild:   true,
-		legacyTriminos:   true,
-		supportsMinted:   false, // tectonic 禁用 shell escape, 加载 minted 即在导言区报错
-	}
-}
-
-// latexmkEngineFlag 返回 latexmk 驱动 eng 所需的标志。
-// pdf/lua 尚未接入 (selectTikzEngine 提前报错), 但标志先就位, 将来只需放开校验。
+// latexmkEngineFlag 返回 latexmk 驱动所需的标志。目前只有 xelatex。
 func latexmkEngineFlag(eng tikzEngine) string {
-	switch eng {
-	case enginePDF:
-		return "-pdf"
-	case engineLua:
-		return "-lualatex"
-	default:
-		return "-xelatex"
-	}
+	return "-xelatex"
 }
 
 // latexmkCompileArgs 是 latexmk 后端的固定编译参数。
@@ -139,49 +79,16 @@ func latexmkAvailable(needCJK bool) error {
 	return nil
 }
 
-// tectonicAvailable 报告 tectonic 是否可用。
-func tectonicAvailable() error {
-	if _, err := lookPathFn("tectonic"); err != nil {
-		return fmt.Errorf("tectonic not found (install via 'apt install tectonic' or from https://tectonic-typesetting.github.io): %w", err)
-	}
-	return nil
-}
-
-// selectTikzEngine 根据请求值与内容选择渲染后端。
-//
-// - xe (默认)/tectonic: 显式指定时探测失败直接报错, 不静默回退
-// - auto: xe 可用则 xe; 否则 tectonic 可用则 tectonic; 都不可用报错(两个安装提示都给出)
-// - pdf/lua: 保留取值但尚未实现, 明确报错而不是当成非法值
+// selectTikzEngine 根据请求值选择渲染后端。目前只有 xe。
 func selectTikzEngine(requested, content string) (tikzEngine, error) {
 	switch requested {
 	case "", string(engineXe):
 		if err := latexmkAvailable(contentHasCJK(content)); err != nil {
-			// 默认引擎不再静默回退, 所以这里必须指出替代方案。
-			return engineXe, fmt.Errorf("latexmk unavailable: %w; %s",
-				err, i18n.G("use --engine tectonic to fall back to the bundled tectonic engine"))
+			return engineXe, fmt.Errorf("latexmk unavailable: %w", err)
 		}
 		return engineXe, nil
-	case string(engineAuto):
-		needCJK := contentHasCJK(content)
-		lmkErr := latexmkAvailable(needCJK)
-		if lmkErr == nil {
-			return engineXe, nil
-		}
-		tectErr := tectonicAvailable()
-		if tectErr == nil {
-			return engineTectonic, nil
-		}
-		return engineAuto, fmt.Errorf("latexmk unavailable: %v; %s; %s",
-			lmkErr, latexmkInstallHint(needCJK), tectErr)
-	case string(engineTectonic):
-		if err := tectonicAvailable(); err != nil {
-			return engineTectonic, fmt.Errorf("tectonic unavailable: %w", err)
-		}
-		return engineTectonic, nil
-	case string(enginePDF), string(engineLua):
-		return tikzEngine(requested), fmt.Errorf(i18n.G("engine %q is not implemented yet; use xe or tectonic"), requested)
 	default:
-		return "", fmt.Errorf(i18n.G("invalid engine %q (want xe, tectonic, pdf, lua or auto)"), requested)
+		return "", fmt.Errorf(i18n.G("invalid engine %q (only xe is implemented)"), requested)
 	}
 }
 

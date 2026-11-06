@@ -61,15 +61,13 @@ func TestSelectTikzEngine(t *testing.T) {
 		latexmk    bool
 		xelatex    bool
 		xecjk      bool
-		tectonic   bool
 		wantEngine tikzEngine
 		wantErr    bool
 	}{
-		// xe: 默认引擎; 显式指定时探测失败直接报错, 不静默回退。
 		{
 			name:      "empty requested defaults to xe",
 			requested: "", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
+			latexmk: true, xelatex: true,
 			wantEngine: engineXe,
 		},
 		{
@@ -81,95 +79,49 @@ func TestSelectTikzEngine(t *testing.T) {
 		{
 			name:      "explicit xe cjk complete",
 			requested: "xe", content: "\\node {中文};",
-			latexmk: true, xelatex: true, xecjk: true, tectonic: true,
+			latexmk: true, xelatex: true, xecjk: true,
 			wantEngine: engineXe,
 		},
 		{
 			name:      "explicit xe cjk missing xecjk errors",
 			requested: "xe", content: "\\node {中文};",
-			latexmk: true, xelatex: true, xecjk: false, tectonic: true,
+			latexmk: true, xelatex: true, xecjk: false,
 			wantErr: true,
 		},
 		{
 			name:      "explicit xe latexmk missing errors",
 			requested: "xe", content: "\\draw (0,0);",
-			latexmk: false, xelatex: true, tectonic: true,
+			latexmk: false, xelatex: true,
 			wantErr: true,
 		},
-		// auto: xe 优先, 缺失时回退 tectonic。
 		{
-			name:      "auto prefer xe no cjk",
-			requested: "auto", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
-			wantEngine: engineXe,
-		},
-		{
-			name:      "auto xe unusable cjk falls to tectonic",
-			requested: "auto", content: "\\node {中文};",
-			latexmk: true, xelatex: true, xecjk: false, tectonic: true,
-			wantEngine: engineTectonic,
-		},
-		{
-			name:      "auto xe with cjk complete",
-			requested: "auto", content: "\\node {中文};",
-			latexmk: true, xelatex: true, xecjk: true, tectonic: true,
-			wantEngine: engineXe,
-		},
-		{
-			name:      "auto latexmk absent falls to tectonic",
-			requested: "auto", content: "\\draw (0,0);",
-			latexmk: false, xelatex: true, tectonic: true,
-			wantEngine: engineTectonic,
-		},
-		{
-			name:      "auto xelatex absent falls to tectonic",
-			requested: "auto", content: "\\draw (0,0);",
-			latexmk: true, xelatex: false, tectonic: true,
-			wantEngine: engineTectonic,
-		},
-		{
-			name:      "auto none available errors",
-			requested: "auto", content: "\\draw (0,0);",
-			latexmk: false, xelatex: false, tectonic: false,
-			wantErr: true,
-		},
-		// 显式 tectonic: 探测失败直接报错, 不静默回退。
-		{
-			name:      "explicit tectonic ok",
-			requested: "tectonic", content: "\\draw (0,0);",
-			tectonic:   true,
-			wantEngine: engineTectonic,
-		},
-		{
-			name:      "explicit tectonic missing errors",
-			requested: "tectonic", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: false,
-			wantErr: true,
-		},
-		// pdf/lua: 取值已保留, 但尚未实现 —— 必须明确报 "未实现", 不能当成非法值。
-		{
-			name:      "pdf not implemented",
+			name:      "pdf rejected",
 			requested: "pdf", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
+			latexmk: true, xelatex: true,
 			wantErr: true,
 		},
 		{
-			name:      "lua not implemented",
+			name:      "lua rejected",
 			requested: "lua", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
+			latexmk: true, xelatex: true,
 			wantErr: true,
 		},
-		// 旧取值 latexmk 命名的是驱动而不是引擎, 已随 --engine 语义调整移除。
 		{
-			name:      "legacy latexmk value rejected",
-			requested: "latexmk", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
+			name:      "tectonic rejected",
+			requested: "tectonic", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true,
+			wantErr: true,
+		},
+		{
+			name:      "auto rejected",
+			requested: "auto", content: "\\draw (0,0);",
+			latexmk: true, xelatex: true,
 			wantErr: true,
 		},
 		{
 			name:      "invalid engine",
 			requested: "bogus", content: "\\draw (0,0);",
-			latexmk: true, xelatex: true, tectonic: true,
+			latexmk: true, xelatex: true,
 			wantErr: true,
 		},
 	}
@@ -183,9 +135,8 @@ func TestSelectTikzEngine(t *testing.T) {
 				kpsewhichHasFn = oldKps
 			})
 			lookPathFn = stubLookPath(map[string]bool{
-				"latexmk":  tt.latexmk,
-				"xelatex":  tt.xelatex,
-				"tectonic": tt.tectonic,
+				"latexmk": tt.latexmk,
+				"xelatex": tt.xelatex,
 			})
 			kpsewhichHasFn = func(file string) bool { return tt.xecjk }
 
@@ -214,9 +165,6 @@ func TestLatexmkCompileArgs(t *testing.T) {
 		want   string
 	}{
 		{engine: engineXe, want: "-xelatex"},
-		{engine: enginePDF, want: "-pdf"},
-		{engine: engineLua, want: "-lualatex"},
-		{engine: engineAuto, want: "-xelatex"}, // auto 最终解析成 xe 或 tectonic
 	}
 	for _, tt := range tests {
 		args := latexmkCompileArgs(tt.engine)
@@ -506,41 +454,6 @@ func TestRenderTikzIntegrationXe(t *testing.T) {
 	}
 }
 
-// TestRenderTikzIntegrationTectonic 真跑 tectonic (可用时)。legacy 翻译与
-// 2021-bundle shim 全部挂在 tectonic profile 上, 因此覆盖全部样例, 并额外
-// 覆盖含 CJK 的片段 (tectonic bundle 自带 xeCJK)。
-func TestRenderTikzIntegrationTectonic(t *testing.T) {
-	if err := tectonicAvailable(); err != nil {
-		t.Skipf("tectonic unavailable: %v", err)
-	}
-	for name, sample := range tikzIntegrationSamples {
-		t.Run(name, func(t *testing.T) {
-			pdf := renderTikzSample(t, "tectonic", name, sample)
-			if name == "zorder_3d_themecolor" {
-				assertPDFContainsText(t, pdf, "zorder")
-			}
-		})
-	}
-	cjk := `\begin{tikzpicture}
-\node at (0,0) {\text{中文}};
-\end{tikzpicture}
-`
-	t.Run("cjk", func(t *testing.T) {
-		assertPDFContainsText(t, renderTikzSample(t, "tectonic", "cjk", cjk), "中文")
-	})
-	// 数学模式与 xe 腿同契约: bundle 的 xeCJK 3.8.8 同样支持 CJKmath。
-	cjkMath := `\begin{tikzcd}
-  左 \ar[r, "右"] & 右
-\end{tikzcd}
-`
-	t.Run("cjk_math", func(t *testing.T) {
-		requirePDFTextTool(t)
-		mathPDF := renderTikzSample(t, "tectonic", "cjk_math", cjkMath)
-		assertPDFContainsText(t, mathPDF, "左")
-		assertPDFContainsText(t, mathPDF, "右")
-	})
-}
-
 // TestRenderTikzTcblistingNotBlank 是 tcblisting_figchild 的像素级回归。
 // 该 bug 是**静默丢失**: 嵌套 picture 时编译 exit 0、PDF 有效, 只有盒子右侧
 // 内容区变白 —— 编译级断言完全抓不住, 必须解码栅格图后统计暗像素。
@@ -686,17 +599,11 @@ func TestRenderTikzTcblistingBackgroundAndBorderNotBlank(t *testing.T) {
 		{name: "xe tcblisting", engine: "xe",
 			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
 			sample: tcblistingBgSample, wantEdgeLo: true},
-		{name: "tectonic tcblisting twin", engine: "tectonic",
-			avail: tectonicAvailable, reason: "tectonic unavailable",
-			sample: tcblistingBgTwinSample, wantEdgeLo: true},
 		{name: "xe user colback (red!30)", engine: "xe",
 			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
 			sample: tcblistingBgColbackSample, wantEdgeLo: true, wantColback: true},
 		{name: "xe negative control (bare tikzcd)", engine: "xe",
 			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
-			sample: tcblistingBgOnlySample, wantEdgeLo: false},
-		{name: "tectonic negative control (bare tikzcd)", engine: "tectonic",
-			avail: tectonicAvailable, reason: "tectonic unavailable",
 			sample: tcblistingBgOnlySample, wantEdgeLo: false},
 	}
 	for _, leg := range legs {
@@ -768,8 +675,6 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 	}{
 		{name: "xe", avail: func() error { return latexmkAvailable(false) },
 			reason: "latexmk unavailable"},
-		{name: "tectonic", avail: tectonicAvailable,
-			reason: "tectonic unavailable"},
 	}
 	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
 	if _, err := exec.LookPath("mutool"); err != nil {
@@ -825,8 +730,6 @@ func TestRenderTikzAmscdNotBlank(t *testing.T) {
 	}{
 		{name: "xe", avail: func() error { return latexmkAvailable(false) },
 			reason: "latexmk unavailable"},
-		{name: "tectonic", avail: tectonicAvailable,
-			reason: "tectonic unavailable"},
 	}
 	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
 	if _, err := exec.LookPath("mutool"); err != nil {
@@ -890,8 +793,6 @@ func TestRenderTikzMatrixNotBlank(t *testing.T) {
 	}{
 		{name: "xe", avail: func() error { return latexmkAvailable(false) },
 			reason: "latexmk unavailable"},
-		{name: "tectonic", avail: tectonicAvailable,
-			reason: "tectonic unavailable"},
 	}
 	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
 	if _, err := exec.LookPath("mutool"); err != nil {
@@ -956,8 +857,6 @@ func TestRenderTikzRawCdStylesNotBlank(t *testing.T) {
 	}{
 		{name: "xe", avail: func() error { return latexmkAvailable(false) },
 			reason: "latexmk unavailable"},
-		{name: "tectonic", avail: tectonicAvailable,
-			reason: "tectonic unavailable"},
 	}
 	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
 	if _, err := exec.LookPath("mutool"); err != nil {
@@ -1296,30 +1195,16 @@ func TestRenderTikzEngineExit0WithoutPDF(t *testing.T) {
 		t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	}
 
-	t.Run("explicit tectonic", func(t *testing.T) {
-		fakeEngine(t, "tectonic")
-		in, out := writeInput(t)
-		err := renderTikz(in, out, "tectonic")
-		if err == nil {
-			t.Fatal("renderTikz() = nil, want an explicit error when the engine produces no PDF")
-		}
-		if !strings.Contains(err.Error(), "tectonic exited successfully but") {
-			t.Fatalf("error = %v, want it to name the selected engine tectonic", err)
-		}
-	})
-
-	t.Run("auto resolves to xe", func(t *testing.T) {
-		if _, err := exec.LookPath("xelatex"); err != nil {
-			t.Skipf("xelatex unavailable: %v", err)
-		}
+	t.Run("explicit xe", func(t *testing.T) {
 		fakeEngine(t, "latexmk")
+		fakeEngine(t, "xelatex")
 		in, out := writeInput(t)
-		err := renderTikz(in, out, "auto")
+		err := renderTikz(in, out, "xe")
 		if err == nil {
 			t.Fatal("renderTikz() = nil, want an explicit error when the engine produces no PDF")
 		}
 		if !strings.Contains(err.Error(), "xe exited successfully but") {
-			t.Fatalf("error = %v, want the resolved engine (xe), not the --engine flag value (auto)", err)
+			t.Fatalf("error = %v, want it to name the selected engine xe", err)
 		}
 	})
 }
