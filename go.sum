@@ -51,8 +51,8 @@ github.com/modelcontextprotocol/go-sdk v1.6.1 h1:0zOSupjKUxPKSocPT1Wtago+mUHU2/u
 github.com/modelcontextprotocol/go-sdk v1.6.1/go.mod h1:kzm3kzFL1/+AziGOE0nUs3gvPoNxMCvkxokMkuFapXQ=
 github.com/nanjj/clog v0.3.1 h1:ITk72YxtqSmSXH0H16uEFcQZd27rwjixCrqmCEdd1jI=
 github.com/nanjj/clog v0.3.1/go.mod h1:NJ8TabwP8398XUE5FQQK8nC0odx4A47QAjQkCRX2Aqw=
-github.com/nanjj/i18n v0.1.1 h1:c4aH8jbyUbFcKyCYFRSLoie8UwMJKUDdn9QFNzMnLOM=
-github.com/nanjj/i18n v0.1.1/go.mod h1:IGxk3rSPggOqjCKkHP42KtuPtx72F8a7FcxG82hL/b8=
+github.com/nanjj/i18n v0.2.0 h1:acAoE64uSfliElZQevR2bRjyLIwzEWZ2LG81EEL1NWM=
+github.com/nanjj/i18n v0.2.0/go.mod h1:IGxk3rSPggOqjCKkHP42KtuPtx72F8a7FcxG82hL/b8=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
 github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
 github.com/odvcencio/gotreesitter v0.20.2 h1:oWxGgy0WzLJKeiZB8EFzXDDlHYG/hqiZmWrW+81uwy4=

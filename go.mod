@@ -3,12 +3,13 @@ module github.com/nanjj/slingshot
 go 1.27.1
 
 require (
+	github.com/chromedp/cdproto v0.0.0-20260321001828-e3e3800016bc
 	github.com/chromedp/chromedp v0.15.1
 	github.com/fatih/color v1.18.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/nanjj/clog v0.3.1
-	github.com/nanjj/i18n v0.1.1
+	github.com/nanjj/i18n v0.2.0
 	github.com/odvcencio/gotreesitter v0.20.2
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/spf13/cobra v1.8.1
@@ -21,7 +22,6 @@ require (
 )
 
 require (
-	github.com/chromedp/cdproto v0.0.0-20260321001828-e3e3800016bc // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
