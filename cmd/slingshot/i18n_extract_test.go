@@ -185,7 +185,7 @@ func TestX(t *testing.T) {
 
 	expected := []string{"Hello, World!", "Goodbye, World!"}
 	for _, e := range expected {
-		if !got[e] {
+		if got[e] == nil {
 			t.Errorf("expected msgid %q not found in extracted set: %v", e, got)
 		}
 	}
@@ -233,10 +233,10 @@ func f() { _ = i18n.G("should-be-skipped") }
 	if len(got) != 1 {
 		t.Fatalf("expected 1 msgid (from visible file only), got %d: %v", len(got), got)
 	}
-	if !got["visible"] {
+	if got["visible"] == nil {
 		t.Errorf("expected 'visible' to be extracted")
 	}
-	if got["should-be-skipped"] {
+	if got["should-be-skipped"] != nil {
 		t.Errorf("'should-be-skipped' from %s should not be extracted", "vendor")
 	}
 }

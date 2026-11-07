@@ -18,12 +18,17 @@ func TestI18nVerifySourceAgainstLocales(t *testing.T) {
 	}
 	dir := filepath.Join(root, "internal/i18n/locales")
 
-	sourceMsgids, err := extractMsgids(root)
+	sourceInfos, err := extractMsgids(root)
 	if err != nil {
 		t.Fatalf("extractMsgids: %v", err)
 	}
-	if len(sourceMsgids) == 0 {
+	if len(sourceInfos) == 0 {
 		t.Skip("no i18n.G() calls found")
+	}
+
+	sourceMsgids := make(map[string]bool, len(sourceInfos))
+	for msgid := range sourceInfos {
+		sourceMsgids[msgid] = true
 	}
 
 	allLocales, err := loadAllLocales(dir)
@@ -51,7 +56,7 @@ func TestI18nVerifySourceAgainstLocales(t *testing.T) {
 }
 
 // TestCompareWithSource pins the split between missing and orphaned.
-// missing is a runtime panic, orphaned is stale text; keeping them apart
+// missing is an untranslated string, orphaned is stale text; keeping them apart
 // is what lets verify fail the build on the first and only warn on the
 // second.
 func TestCompareWithSource(t *testing.T) {

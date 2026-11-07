@@ -15,9 +15,12 @@ import (
 //
 // i18n check compares locales against each other. i18n verify compares
 // every locale against the source code: each i18n.G() argument in the
-// tree must have an entry in each .po file. A missing entry there is
-// what i18n.G would panic on at runtime, so this command is the place
-// to catch it — before the binary is built, not after it is shipped.
+// tree must have an entry in each .po file.
+//
+// i18n.G itself falls back to the msgid when an entry is missing, so a
+// gap here shows up as an untranslated string, never as a crash. That
+// makes verify a quality gate rather than a safety net: it keeps the
+// shipped binary from silently regressing to English in one locale.
 type cmdI18nVerify struct {
 	global        *cmdGlobal
 	i18nCmd       *cmdI18n
@@ -33,8 +36,9 @@ each locale's .po file.
 
 "i18n check" compares locales against each other. "i18n verify" compares
 each locale against the source tree, which is what i18n.G() actually
-calls at runtime. A missing entry here is a panic waiting for the first
-user who runs the command, so this check belongs in the build gate.
+consults at runtime. i18n.G() falls back to the msgid when an entry is
+missing, so a gap here degrades to an untranslated string. This check
+belongs in the build gate to keep that from shipping unnoticed.
 
 Orphaned entries (in a .po but no longer used in source) are reported
 but do not fail the check, because a dynamically built msgid can look
@@ -55,13 +59,18 @@ func (c *cmdI18nVerify) run(cmd *cobra.Command, args []string) error {
 	dir := c.i18nCmd.resolveDir()
 	root := c.i18nCmd.resolveRoot()
 
-	sourceMsgids, err := extractMsgids(root)
+	sourceInfos, err := extractMsgids(root)
 	if err != nil {
 		return fmt.Errorf("extracting msgids from source: %w", err)
 	}
-	if len(sourceMsgids) == 0 {
+	if len(sourceInfos) == 0 {
 		fmt.Fprintln(os.Stderr, i18n.G("No i18n.G() calls found in source."))
 		return nil
+	}
+
+	sourceMsgids := make(map[string]bool, len(sourceInfos))
+	for msgid := range sourceInfos {
+		sourceMsgids[msgid] = true
 	}
 
 	allLocales, err := loadAllLocales(dir)
@@ -120,7 +129,7 @@ func (c *cmdI18nVerify) run(cmd *cobra.Command, args []string) error {
 }
 
 // compareWithSource splits a locale table against the source msgid set.
-// missing: used in source, absent from the locale — a runtime panic.
+// missing: used in source, absent from the locale — ships untranslated.
 // orphaned: present in the locale, no longer used in source — stale text.
 // The header entry (empty msgid) is skipped.
 func compareWithSource(table map[string]string, sourceMsgids map[string]bool) (missing, orphaned []string) {

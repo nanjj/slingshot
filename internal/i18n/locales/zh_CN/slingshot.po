@@ -730,9 +730,6 @@ msgstr "（空 — 翻译已清除）"
 msgid "(empty)"
 msgstr "（空）"
 
-msgid "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (would panic at runtime)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
-msgstr "检查各语言环境 .po 文件的一致性。\n\n将每个语言环境与 en_US 哨兵进行比较，报告：\n  - 缺失条目：在 en_US 中存在但不在该语言环境中（运行时会 panic）\n  - 未翻译条目：msgstr 为空（运行时容忍）\n  - 孤立条目：在该语言环境中但不在 en_US 中（过时）\n\n不带参数时检查除 en_US 外的所有语言环境。\n指定语言环境参数时只检查指定的环境。\n\n退出码：\n  无 --exit-code：始终 0\n  有 --exit-code：如果任何语言环境有缺失或孤立条目则返回 1"
-
 msgid "Check locale consistency for missing, untranslated, and orphaned entries"
 msgstr "检查语言环境的缺失、未翻译和孤立条目一致性"
 
@@ -982,21 +979,6 @@ msgstr "公式处理：auto（SVG 优先，MathJax 渲染；PNG 兜底，latexmk
 msgid "Install TeX Live: Arch: sudo pacman -S texlive-binextra texlive-bin texlive-core; Debian: sudo apt install latexmk texlive-xetex texlive-latex-base; macOS/Windows: install TeX Live or MiKTeX (MiKTeX auto-installs packages)"
 msgstr "安装 TeX Live：Arch：sudo pacman -S texlive-binextra texlive-bin texlive-core；Debian：sudo apt install latexmk texlive-xetex texlive-latex-base；macOS/Windows：安装 TeX Live 或 MiKTeX（MiKTeX 自动装包）"
 
-msgid "TeX engine: xe (XeLaTeX, default), tectonic, auto (xe preferred, tectonic fallback); pdf and lua are not implemented yet"
-msgstr "TeX 引擎：xe（XeLaTeX，默认）、tectonic、auto（优先 xe，回退 tectonic）；pdf 与 lua 尚未实现"
-
-msgid "engine %q is not implemented yet; use xe or tectonic"
-msgstr "引擎 %q 尚未实现；请使用 xe 或 tectonic"
-
-msgid "invalid engine %q (want xe, tectonic, pdf, lua or auto)"
-msgstr "非法引擎 %q（可选：xe、tectonic、pdf、lua 或 auto）"
-
-msgid "use --engine tectonic to fall back to the bundled tectonic engine"
-msgstr "可用 --engine tectonic 回退到内置的 tectonic 引擎"
-
-msgid "Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).\n\nThe input file may contain a full tikzpicture environment or just the\ncommands inside it — a tikzpicture wrapper is added automatically when\nmissing. \\usetikzlibrary lines are hoisted above the environment.\n\nPackages are loaded automatically by content detection (tkz-euclide,\ntikz-cd, pgfplots, circuitikz, tikzlings, forest, ...); explicit \\usepackage\nlines in the input are hoisted into the preamble. A tcblisting documentation\nbox loads tcolorbox with the listings library and \\tcbset{tikz lower}, so\nTikZ code inside the box is executed in a picture; the box is laid out side\nby side like the package manuals (code left, compiled result right). When the\nbox body is self-contained (a figchild \\fc* command, \\tkztriminos, \\scsnowman,\nor a whole picture environment), the outer picture wrapper is dropped, because\nnesting it would silently discard the drawing; an explicit tikz lower or\nbefore lower* in the box options still wins.\n\nThe output format is determined by the output file extension.\nPipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript\nrasterization. --engine picks the TeX engine: xe (XeLaTeX, default),\ntectonic (bundled 2021 packages), auto (xe preferred, tectonic fallback).\npdf (pdfLaTeX) and lua (LuaLaTeX) are reserved values, not implemented yet.\nExternal commands are killed after TIKZ_TIMEOUT (Go duration, default 1m).\nChinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be\noverridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).\n\nExamples:\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
-msgstr "将 TikZ 片段渲染为图片文件（.png / .jpg / .svg / .pdf）。\n\n输入文件可以包含完整的 tikzpicture 环境，也可以只包含其中的命令——\n缺失 tikzpicture 外壳时自动补全。\\usetikzlibrary 行会被提升到环境之外。\n\n包通过内容探测自动加载（tkz-euclide、tikz-cd、pgfplots、circuitikz、\ntikzlings、forest 等）；输入中显式的 \\usepackage 行会被提升到导言区。\ntcblisting 文档盒子会自动加载 tcolorbox 的 listings 库并设置\n\\tcbset{tikz lower}，盒子内的 TikZ 代码在 picture 内执行；盒子按手册同款\n左右布局排版（代码在左、编译结果在右）。当盒子正文本身自包含（figchild 的\n\\fc* 命令、\\tkztriminos、\\scsnowman，或整段 picture 环境）时会自动摘掉\n外层 picture 包裹——再套一层会让图形静默丢失；盒子选项里显式写在后面的\ntikz lower 或 before lower* 仍然优先。\n\n输出格式由输出文件扩展名决定。\n管线：latexmk -xelatex（默认）→ PDF → mutool / ghostscript 栅格化。\n--engine 选择 TeX 引擎：xe（XeLaTeX，默认）、tectonic（内置 2021 年旧包）、\nauto（优先 xe，不可用时回退 tectonic）。pdf（pdfLaTeX）与 lua（LuaLaTeX）\n是保留取值，尚未实现。外部命令超过 TIKZ_TIMEOUT（Go duration，默认 1m）会被杀掉。\n中文（CJK）文本通过 xeCJK 支持（内容含 CJK 时注入）；字体可用 TIKZ_CJK_FONT\n环境变量覆盖（默认：Noto Sans CJK SC）。\n\n示例：\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
-
 # site rsync long description
 msgid "Run the configured rsync command to deploy site content to remote.\n\nFor zine-type sites, automatically runs 'zine build' before rsync\nand executes rsync from the 'public/' output directory.\nFor page-type sites, rsync runs directly from the site directory.\n\nBefore deploying, all HTML files are syntax-highlighted. That pass is\nidempotent: pages that are already highlighted are written through\nunchanged, so running it on every deploy is safe. Use --no-highlight to\nskip the pass entirely (e.g. for a site highlighted by another tool)."
 msgstr "运行配置的 rsync 命令，将站点内容部署到远程。\n\n对 zine 类型站点，先自动执行 zine build，再从 public/ 输出目录执行 rsync。\n对 page 类型站点，直接从站点目录执行 rsync。\n\n部署前会对所有 HTML 文件做语法高亮。该步骤是幂等的：已高亮的页面原样写出，\n因此每次部署都执行它是安全的。用 --no-highlight 可完全跳过该步骤\n（例如站点由其它工具负责高亮时）。"
@@ -1124,9 +1106,6 @@ msgstr "通过 DeepSeek tools API 搜索网页并将页面获取为 Markdown。\
 msgid "Fail on orphaned entries too: msgids no longer used in source"
 msgstr "孤立条目也视为失败：源码中已不再使用的 msgid"
 
-msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
-msgstr "验证源码中使用的每个 msgid 是否都出现在每个语言环境的 .po 文件中。\n\n\"i18n check\" 比较语言环境之间的一致性。\"i18n verify\" 比较每个语言环境与源码树，\n这才是 i18n.G() 在运行时真正面对的东西。这里缺失的条目，\n就是等着第一个运行该命令的用户踩到的 panic，所以这项检查属于构建门禁。\n\n孤立条目（在 .po 中但源码已不再使用）会被报告，但不导致检查失败，\n因为动态构造的 msgid 在 AST 扫描器看来可能像孤立条目。\n使用 --strict-orphans 可将其也视为失败。\n\n不带参数时验证所有语言环境。带语言环境参数时只检查指定的语言环境。\n任何语言环境缺失 msgid 时以非零状态退出。"
-
 msgid "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
 msgstr "i18n verify：%d 个孤立条目；请运行：slingshot i18n sync --delete"
 
@@ -1165,3 +1144,45 @@ msgstr "TeX 引擎：xe（XeLaTeX）；目前唯一实现的引擎"
 
 msgid "invalid engine %q (only xe is implemented)"
 msgstr "无效的引擎 %q（只实现了 xe）"
+
+msgid "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (ships untranslated)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
+msgstr "检查各语言环境之间 .po 文件的一致性。\n\n将每个语言环境与 en_US 哨兵进行比较，并报告：\n  - 缺失条目：在 en_US 中但不在该语言环境中（会以未翻译状态发布）\n  - 未翻译条目：msgstr 为空（运行时容忍）\n  - 孤立条目：在该语言环境中但不在 en_US 中（过时/陈旧）\n\n不带参数时，检查除 en_US 外的所有语言环境。\n带语言环境参数时，只检查指定的语言环境。\n\n退出码：\n  不带 --exit-code：始终为 0\n  带 --exit-code：    若任一语言环境存在缺失或孤立条目则为 1"
+
+msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\nconsults at runtime. i18n.G() falls back to the msgid when an entry is\nmissing, so a gap here degrades to an untranslated string. This check\nbelongs in the build gate to keep that from shipping unnoticed.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+msgstr "验证源码中使用的每个 msgid 在每个语言环境的 .po 文件中都有条目。\n\n\"i18n check\" 比较各语言环境之间的一致性。\"i18n verify\" 则把\n每个语言环境与源码树进行比较，而源码树正是 i18n.G() 在运行时\n实际查询的对象。当条目缺失时，i18n.G() 会回退到 msgid，因此这里\n的缺口只会降级为一条未翻译的字符串。此项检查属于构建门禁，用于\n防止这种退化在无人察觉的情况下发布出去。\n\n孤立条目（在 .po 中但源码已不再使用）会被报告，但不导致检查失败，\n因为动态构造的 msgid 在 AST 扫描器看来可能像是孤立条目。使用\n--strict-orphans 可将其也视为失败。\n\n不带参数时验证所有语言环境。带语言环境参数时只检查指定的语言环境。\n任何语言环境缺失 msgid 时以非零状态退出。"
+
+msgid "Generate the .pot template from source code"
+msgstr "从源码生成 .pot 模板"
+
+msgid "Generate the .pot translation template from i18n.G() and i18n.NG()\ncalls in the source tree.\n\nThe template records each msgid once, with every \"#: file:line\" location\nwhere it is used, a \"#, c-format\" flag when the string looks like a printf\nformat, and msgid_plural when a plural call supplied one. This is what the\ngettext toolchain — and xgettext before it — produces, so the file can be\nhanded to translators or merged into .po files without post-processing.\n\nUnlike xgettext it never aborts on a non-constant argument: such a call is\nreported on stderr and skipped."
+msgstr "从源码树中的 i18n.G() 和 i18n.NG() 调用生成 .pot 翻译模板。\n\n模板为每个 msgid 记录一次，并附上所有使用它的 \"#: file:line\" 位置；\n当字符串看起来像 printf 格式串时附上 \"#, c-format\" 标记；当复数调用\n提供了复数形式时附上 msgid_plural。这正是 gettext 工具链——以及更早的\nxgettext——所产出的形式，因此生成的文件可以直接交给译者，或无需后处理\n就合并进 .po 文件。\n\n与 xgettext 不同，它绝不会因为参数不是常量而中止：这类调用会在 stderr\n报告后跳过。"
+
+msgid "Output path (default: <locales dir>/slingshot.pot)"
+msgstr "输出路径（默认：<locales dir>/slingshot.pot）"
+
+msgid "Scanning source code for i18n calls..."
+msgstr "正在扫描源码中的 i18n 调用..."
+
+msgid "c-format"
+msgstr "c-format"
+
+msgid "msgids"
+msgstr "条 msgid"
+
+msgid "plural"
+msgstr "条复数"
+
+msgid "with locations"
+msgstr "条带位置"
+
+msgid "Override POT-Creation-Date (default: now, for reproducible builds)"
+msgstr "覆盖 POT-Creation-Date（默认：当前时间；用于可复现构建）"
+
+msgid "Project-Id-Version in the template header"
+msgstr "模板头部中的 Project-Id-Version"
+
+msgid "Report-Msgid-Bugs-To in the template header"
+msgstr "模板头部中的 Report-Msgid-Bugs-To"
+
+msgid "Restrict the scan to DIR, FILE or GLOB (repeatable; default: whole module)"
+msgstr "将扫描限制在 DIR、FILE 或 GLOB（可重复；默认：整个模块）"

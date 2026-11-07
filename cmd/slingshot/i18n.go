@@ -15,7 +15,7 @@ import (
 //  1. i18n.G() calls are added to source code
 //  2. slingshot i18n sync (old binary) extracts msgids to .po
 //  3. Translations are added to .po files
-//  4. New binary is built — .po has translations, no panic at runtime
+//  4. New binary is built — .po has translations for every call site
 type cmdI18n struct {
 	global *cmdGlobal
 	dir    string // --dir flag: path to locales directory
@@ -47,6 +47,7 @@ func (c *cmdI18n) command() *cobra.Command {
 		c.cmdTranslate().command(),
 		c.cmdAdd().command(),
 		c.cmdInit().command(),
+		c.cmdPot().command(),
 	)
 
 	return cmd
@@ -130,6 +131,13 @@ func (c *cmdI18n) cmdAdd() *cmdI18nAdd {
 
 func (c *cmdI18n) cmdInit() *cmdI18nInit {
 	return &cmdI18nInit{
+		global:  c.global,
+		i18nCmd: c,
+	}
+}
+
+func (c *cmdI18n) cmdPot() *cmdI18nPot {
+	return &cmdI18nPot{
 		global:  c.global,
 		i18nCmd: c,
 	}

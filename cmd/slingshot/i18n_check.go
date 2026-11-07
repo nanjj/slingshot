@@ -31,7 +31,7 @@ func (c *cmdI18nCheck) command() *cobra.Command {
 	cmd.Long = i18n.G(`Check .po file consistency across locales.
 
 Compares each locale against the en_US sentinel and reports:
-  - Missing entries: in en_US but not in the locale (would panic at runtime)
+  - Missing entries: in en_US but not in the locale (ships untranslated)
   - Untranslated entries: msgstr is empty (tolerated at runtime)
   - Orphaned entries: in the locale but not in en_US (stale/outdated)
 
@@ -127,7 +127,7 @@ func (c *cmdI18nCheck) run(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(color.Output, "%s %s\n",
 			color.YellowString("!"), r.locale)
 
-		// Missing entries (would panic)
+		// Missing entries (untranslated at runtime)
 		if len(a.Missing) > 0 {
 			sort.Strings(a.Missing)
 			fmt.Fprintf(color.Output, "  %s %s\n",

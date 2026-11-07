@@ -725,9 +725,6 @@ msgstr "(empty — translation cleared)"
 msgid "(empty)"
 msgstr "(empty)"
 
-msgid "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (would panic at runtime)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
-msgstr "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (would panic at runtime)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
-
 msgid "Check locale consistency for missing, untranslated, and orphaned entries"
 msgstr "Check locale consistency for missing, untranslated, and orphaned entries"
 
@@ -977,21 +974,6 @@ msgstr "Formula handling: auto (SVG via MathJax, PNG via latexmk/pdflatex with t
 msgid "Install TeX Live: Arch: sudo pacman -S texlive-binextra texlive-bin texlive-core; Debian: sudo apt install latexmk texlive-xetex texlive-latex-base; macOS/Windows: install TeX Live or MiKTeX (MiKTeX auto-installs packages)"
 msgstr "Install TeX Live: Arch: sudo pacman -S texlive-binextra texlive-bin texlive-core; Debian: sudo apt install latexmk texlive-xetex texlive-latex-base; macOS/Windows: install TeX Live or MiKTeX (MiKTeX auto-installs packages)"
 
-msgid "TeX engine: xe (XeLaTeX, default), tectonic, auto (xe preferred, tectonic fallback); pdf and lua are not implemented yet"
-msgstr "TeX engine: xe (XeLaTeX, default), tectonic, auto (xe preferred, tectonic fallback); pdf and lua are not implemented yet"
-
-msgid "engine %q is not implemented yet; use xe or tectonic"
-msgstr "engine %q is not implemented yet; use xe or tectonic"
-
-msgid "invalid engine %q (want xe, tectonic, pdf, lua or auto)"
-msgstr "invalid engine %q (want xe, tectonic, pdf, lua or auto)"
-
-msgid "use --engine tectonic to fall back to the bundled tectonic engine"
-msgstr "use --engine tectonic to fall back to the bundled tectonic engine"
-
-msgid "Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).\n\nThe input file may contain a full tikzpicture environment or just the\ncommands inside it — a tikzpicture wrapper is added automatically when\nmissing. \\usetikzlibrary lines are hoisted above the environment.\n\nPackages are loaded automatically by content detection (tkz-euclide,\ntikz-cd, pgfplots, circuitikz, tikzlings, forest, ...); explicit \\usepackage\nlines in the input are hoisted into the preamble. A tcblisting documentation\nbox loads tcolorbox with the listings library and \\tcbset{tikz lower}, so\nTikZ code inside the box is executed in a picture; the box is laid out side\nby side like the package manuals (code left, compiled result right). When the\nbox body is self-contained (a figchild \\fc* command, \\tkztriminos, \\scsnowman,\nor a whole picture environment), the outer picture wrapper is dropped, because\nnesting it would silently discard the drawing; an explicit tikz lower or\nbefore lower* in the box options still wins.\n\nThe output format is determined by the output file extension.\nPipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript\nrasterization. --engine picks the TeX engine: xe (XeLaTeX, default),\ntectonic (bundled 2021 packages), auto (xe preferred, tectonic fallback).\npdf (pdfLaTeX) and lua (LuaLaTeX) are reserved values, not implemented yet.\nExternal commands are killed after TIKZ_TIMEOUT (Go duration, default 1m).\nChinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be\noverridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).\n\nExamples:\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
-msgstr "Render a TikZ snippet to an image file (.png / .jpg / .svg / .pdf).\n\nThe input file may contain a full tikzpicture environment or just the\ncommands inside it — a tikzpicture wrapper is added automatically when\nmissing. \\usetikzlibrary lines are hoisted above the environment.\n\nPackages are loaded automatically by content detection (tkz-euclide,\ntikz-cd, pgfplots, circuitikz, tikzlings, forest, ...); explicit \\usepackage\nlines in the input are hoisted into the preamble. A tcblisting documentation\nbox loads tcolorbox with the listings library and \\tcbset{tikz lower}, so\nTikZ code inside the box is executed in a picture; the box is laid out side\nby side like the package manuals (code left, compiled result right). When the\nbox body is self-contained (a figchild \\fc* command, \\tkztriminos, \\scsnowman,\nor a whole picture environment), the outer picture wrapper is dropped, because\nnesting it would silently discard the drawing; an explicit tikz lower or\nbefore lower* in the box options still wins.\n\nThe output format is determined by the output file extension.\nPipeline: latexmk -xelatex (default) -> PDF -> mutool / ghostscript\nrasterization. --engine picks the TeX engine: xe (XeLaTeX, default),\ntectonic (bundled 2021 packages), auto (xe preferred, tectonic fallback).\npdf (pdfLaTeX) and lua (LuaLaTeX) are reserved values, not implemented yet.\nExternal commands are killed after TIKZ_TIMEOUT (Go duration, default 1m).\nChinese (CJK) text is supported via xeCJK (injected when the content contains CJK); the font can be\noverridden with the TIKZ_CJK_FONT environment variable (default: Noto Sans CJK SC).\n\nExamples:\n  slingshot tikz fig.tikz fig.png\n  slingshot tikz fig.tikz fig.svg\n  slingshot tikz fig.tikz fig.pdf"
-
 msgid "Run the configured rsync command to deploy site content to remote.\n\nFor zine-type sites, automatically runs 'zine build' before rsync\nand executes rsync from the 'public/' output directory.\nFor page-type sites, rsync runs directly from the site directory.\n\nBefore deploying, all HTML files are syntax-highlighted. That pass is\nidempotent: pages that are already highlighted are written through\nunchanged, so running it on every deploy is safe. Use --no-highlight to\nskip the pass entirely (e.g. for a site highlighted by another tool)."
 msgstr "Run the configured rsync command to deploy site content to remote.\n\nFor zine-type sites, automatically runs 'zine build' before rsync\nand executes rsync from the 'public/' output directory.\nFor page-type sites, rsync runs directly from the site directory.\n\nBefore deploying, all HTML files are syntax-highlighted. That pass is\nidempotent: pages that are already highlighted are written through\nunchanged, so running it on every deploy is safe. Use --no-highlight to\nskip the pass entirely (e.g. for a site highlighted by another tool)."
 
@@ -1118,9 +1100,6 @@ msgstr "Search the web and fetch pages as Markdown via the DeepSeek\ntools API.\
 msgid "Fail on orphaned entries too: msgids no longer used in source"
 msgstr "Fail on orphaned entries too: msgids no longer used in source"
 
-msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
-msgstr "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\ncalls at runtime. A missing entry here is a panic waiting for the first\nuser who runs the command, so this check belongs in the build gate.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
-
 msgid "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
 msgstr "i18n verify: %d orphaned entries; run: slingshot i18n sync --delete"
 
@@ -1159,3 +1138,45 @@ msgstr "TeX engine: xe (XeLaTeX); currently the only implemented engine"
 
 msgid "invalid engine %q (only xe is implemented)"
 msgstr "invalid engine %q (only xe is implemented)"
+
+msgid "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (ships untranslated)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
+msgstr "Check .po file consistency across locales.\n\nCompares each locale against the en_US sentinel and reports:\n  - Missing entries: in en_US but not in the locale (ships untranslated)\n  - Untranslated entries: msgstr is empty (tolerated at runtime)\n  - Orphaned entries: in the locale but not in en_US (stale/outdated)\n\nWithout arguments, checks all locales except en_US.\nWith locale arguments, checks only the specified locales.\n\nExit code:\n  Without --exit-code: always 0\n  With --exit-code:    1 if any locale has missing or orphaned entries"
+
+msgid "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\nconsults at runtime. i18n.G() falls back to the msgid when an entry is\nmissing, so a gap here degrades to an untranslated string. This check\nbelongs in the build gate to keep that from shipping unnoticed.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+msgstr "Verify that every msgid used in source code has an entry in\neach locale's .po file.\n\n\"i18n check\" compares locales against each other. \"i18n verify\" compares\neach locale against the source tree, which is what i18n.G() actually\nconsults at runtime. i18n.G() falls back to the msgid when an entry is\nmissing, so a gap here degrades to an untranslated string. This check\nbelongs in the build gate to keep that from shipping unnoticed.\n\nOrphaned entries (in a .po but no longer used in source) are reported\nbut do not fail the check, because a dynamically built msgid can look\norphaned to the AST scanner. Use --strict-orphans to fail on them too.\n\nWithout arguments, verifies every locale. With locale arguments, checks\nonly those locales. Exits non-zero if any locale is missing a msgid."
+
+msgid "Generate the .pot template from source code"
+msgstr "Generate the .pot template from source code"
+
+msgid "Generate the .pot translation template from i18n.G() and i18n.NG()\ncalls in the source tree.\n\nThe template records each msgid once, with every \"#: file:line\" location\nwhere it is used, a \"#, c-format\" flag when the string looks like a printf\nformat, and msgid_plural when a plural call supplied one. This is what the\ngettext toolchain — and xgettext before it — produces, so the file can be\nhanded to translators or merged into .po files without post-processing.\n\nUnlike xgettext it never aborts on a non-constant argument: such a call is\nreported on stderr and skipped."
+msgstr "Generate the .pot translation template from i18n.G() and i18n.NG()\ncalls in the source tree.\n\nThe template records each msgid once, with every \"#: file:line\" location\nwhere it is used, a \"#, c-format\" flag when the string looks like a printf\nformat, and msgid_plural when a plural call supplied one. This is what the\ngettext toolchain — and xgettext before it — produces, so the file can be\nhanded to translators or merged into .po files without post-processing.\n\nUnlike xgettext it never aborts on a non-constant argument: such a call is\nreported on stderr and skipped."
+
+msgid "Output path (default: <locales dir>/slingshot.pot)"
+msgstr "Output path (default: <locales dir>/slingshot.pot)"
+
+msgid "Scanning source code for i18n calls..."
+msgstr "Scanning source code for i18n calls..."
+
+msgid "c-format"
+msgstr "c-format"
+
+msgid "msgids"
+msgstr "msgids"
+
+msgid "plural"
+msgstr "plural"
+
+msgid "with locations"
+msgstr "with locations"
+
+msgid "Override POT-Creation-Date (default: now, for reproducible builds)"
+msgstr "Override POT-Creation-Date (default: now, for reproducible builds)"
+
+msgid "Project-Id-Version in the template header"
+msgstr "Project-Id-Version in the template header"
+
+msgid "Report-Msgid-Bugs-To in the template header"
+msgstr "Report-Msgid-Bugs-To in the template header"
+
+msgid "Restrict the scan to DIR, FILE or GLOB (repeatable; default: whole module)"
+msgstr "Restrict the scan to DIR, FILE or GLOB (repeatable; default: whole module)"

@@ -1,15 +1,22 @@
 package main
 
 import (
-	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 // poLineRE matches msgid/msgstr lines in .po files.
 var poLineRE = regexp.MustCompile(`^(msgid|msgstr)\s+"(.*)"\s*$`)
+
+// poPluralIDRE matches `msgid_plural "..."`.
+var poPluralIDRE = regexp.MustCompile(`^msgid_plural\s+"(.*)"\s*$`)
+
+// poStrPluralRE matches `msgstr[N] "..."`.
+var poStrPluralRE = regexp.MustCompile(`^msgstr\[(\d+)\]\s+"(.*)"\s*$`)
 
 // listLocales returns locale directory names from the locales directory.
 func listLocales(dir string) ([]string, error) {
@@ -60,69 +67,15 @@ func loadEnUS(dir string) (map[string]string, error) {
 }
 
 // parsePO parses .po content into a msgid→msgstr map.
-// This is identical in behavior to internal/i18n.parsePO.
+// Plural forms are not represented here; use parsePOFull for that.
 func parsePO(data string) map[string]string {
 	table := make(map[string]string)
 
-	var currentID string
-	var currentStr string
-	var inID bool
-	var inStr bool
-
-	scanner := bufio.NewScanner(strings.NewReader(data))
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Skip empty lines and comments — save the current pair
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			if currentID != "" {
-				table[currentID] = currentStr
-				currentID = ""
-				currentStr = ""
-			}
-			inID = false
-			inStr = false
+	for _, e := range parsePOFull(data) {
+		if e.Msgid == "" {
 			continue
 		}
-
-		if matches := poLineRE.FindStringSubmatch(trimmed); len(matches) == 3 {
-			key := matches[1]
-			val := matches[2]
-			val = unescapePO(val)
-
-			switch key {
-			case "msgid":
-				if currentID != "" {
-					table[currentID] = currentStr
-				}
-				currentID = val
-				currentStr = ""
-				inID = true
-				inStr = false
-			case "msgstr":
-				currentStr = val
-				inID = false
-				inStr = true
-			}
-		} else if inID {
-			// Continuation of a multi-line msgid
-			cont := strings.TrimSpace(line)
-			cont = strings.Trim(cont, `"`)
-			cont = unescapePO(cont)
-			currentID += cont
-		} else if inStr {
-			// Continuation of a multi-line msgstr
-			cont := strings.TrimSpace(line)
-			cont = strings.Trim(cont, `"`)
-			cont = unescapePO(cont)
-			currentStr += cont
-		}
-	}
-
-	// Save the last pair
-	if currentID != "" {
-		table[currentID] = currentStr
+		table[e.Msgid] = e.Msgstr
 	}
 
 	return table
@@ -145,90 +98,124 @@ func unescapePO(s string) string {
 
 // --- Entry-based .po parsing and writing ---
 
-// poEntry represents a single .po file entry with its preceding comments.
+// poEntry represents a single .po file entry.
+//
+// Locations, Flags, MsgidPlural and MsgstrPlural map onto the corresponding
+// gettext constructs. Every other '#' line is preserved verbatim in Comments,
+// so round-tripping a .po file does not lose translator notes.
 type poEntry struct {
-	Comments []string // preceding comment lines (including #)
-	Msgid    string
-	Msgstr   string
+	Comments     []string // "#", "#." and "#|" lines, verbatim, in file order
+	Locations    []string // "#:" fields, each "file:line"
+	Flags        []string // "#," fields, e.g. "c-format"
+	Msgid        string
+	MsgidPlural  string
+	Msgstr       string
+	MsgstrPlural []string
 }
 
-// parsePOFull parses .po content into ordered entries, preserving comments and structure.
+// unquotePO strips one pair of surrounding quotes and unescapes the result.
+//
+// Trimming exactly one leading and one trailing quote matters: a value ending
+// in an escaped quote, like "say \"hi\"", would be mangled by strings.Trim.
+func unquotePO(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	return unescapePO(s)
+}
+
+// parsePOFull parses .po content into ordered entries, preserving comments,
+// source locations, flags and plural forms.
 func parsePOFull(data string) []poEntry {
 	var entries []poEntry
 	var current *poEntry
-	inMsgid := false
-	inMsgstr := false
+	inMsgid, inMsgstr, inPluralID := false, false, false
+	inPluralStr := -1
 
-	scanner := bufio.NewScanner(strings.NewReader(data))
-	for scanner.Scan() {
-		line := scanner.Text()
+	flush := func() {
+		if current != nil {
+			entries = append(entries, *current)
+		}
+		current = nil
+		inMsgid, inMsgstr, inPluralID, inPluralStr = false, false, false, -1
+	}
 
-		// Blank line — finalize current entry
-		if strings.TrimSpace(line) == "" {
-			if current != nil {
-				entries = append(entries, *current)
-				current = nil
-				inMsgid = false
-				inMsgstr = false
-			}
+	for _, line := range strings.Split(data, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			flush()
 			continue
 		}
 
-		// Comment line
-		if strings.HasPrefix(line, "#") {
-			if current == nil {
-				current = &poEntry{}
-				inMsgid = false
-				inMsgstr = false
+		if current == nil {
+			current = &poEntry{}
+		}
+
+		switch {
+		case strings.HasPrefix(trimmed, "#:"):
+			for _, loc := range strings.Fields(trimmed[2:]) {
+				current.Locations = append(current.Locations, loc)
 			}
+			continue
+		case strings.HasPrefix(trimmed, "#,"):
+			for _, f := range strings.Split(trimmed[2:], ",") {
+				if f = strings.TrimSpace(f); f != "" {
+					current.Flags = append(current.Flags, f)
+				}
+			}
+			continue
+		case strings.HasPrefix(trimmed, "#"):
 			current.Comments = append(current.Comments, line)
 			continue
 		}
 
-		if matches := poLineRE.FindStringSubmatch(line); len(matches) == 3 {
-			key := matches[1]
-			val := matches[2]
-			val = unescapePO(val)
+		if m := poPluralIDRE.FindStringSubmatch(trimmed); m != nil {
+			current.MsgidPlural = unescapePO(m[1])
+			inMsgid, inMsgstr, inPluralID, inPluralStr = false, false, true, -1
+			continue
+		}
 
-			switch key {
+		if m := poStrPluralRE.FindStringSubmatch(trimmed); m != nil {
+			idx, err := strconv.Atoi(m[1])
+			if err != nil {
+				continue
+			}
+			for len(current.MsgstrPlural) <= idx {
+				current.MsgstrPlural = append(current.MsgstrPlural, "")
+			}
+			current.MsgstrPlural[idx] = unescapePO(m[2])
+			inMsgid, inMsgstr, inPluralID, inPluralStr = false, false, false, idx
+			continue
+		}
+
+		if m := poLineRE.FindStringSubmatch(trimmed); m != nil {
+			switch m[1] {
 			case "msgid":
-				if current == nil {
-					current = &poEntry{}
-				} else if current.Msgid != "" {
-					// Starting a new entry — save previous
-					entries = append(entries, *current)
-					current = &poEntry{}
-				}
-				current.Msgid = val
-				inMsgid = true
-				inMsgstr = false
+				current.Msgid = unescapePO(m[2])
+				inMsgid, inMsgstr, inPluralID, inPluralStr = true, false, false, -1
 			case "msgstr":
-				current.Msgstr = val
-				inMsgid = false
-				inMsgstr = true
+				current.Msgstr = unescapePO(m[2])
+				inMsgid, inMsgstr, inPluralID, inPluralStr = false, true, false, -1
 			}
 			continue
 		}
 
-		// Continuation line (string concatenation)
-		if inMsgid {
-			cont := strings.TrimSpace(line)
-			cont = strings.Trim(cont, `"`)
-			cont = unescapePO(cont)
+		// Continuation of a multi-line value.
+		cont := unquotePO(line)
+		switch {
+		case inMsgid:
 			current.Msgid += cont
-		} else if inMsgstr {
-			cont := strings.TrimSpace(line)
-			cont = strings.Trim(cont, `"`)
-			cont = unescapePO(cont)
+		case inMsgstr:
 			current.Msgstr += cont
+		case inPluralID:
+			current.MsgidPlural += cont
+		case inPluralStr >= 0:
+			current.MsgstrPlural[inPluralStr] += cont
 		}
 	}
 
-	// Save the last entry
-	if current != nil {
-		entries = append(entries, *current)
-	}
-
+	flush()
 	return entries
 }
 
@@ -246,23 +233,71 @@ func quotePO(s string) string {
 	return `"` + escapePO(s) + `"`
 }
 
+// writePOValue writes one keyword/value pair in .po syntax.
+//
+// When split is false the value stays on a single quoted line, which is what
+// the hand-maintained slingshot .po files look like, so sync never rewrites
+// them. When split is true a multi-line value is emitted as an empty first
+// segment followed by one quoted line per source line — the shape xgettext
+// produces, needed for .pot output.
+func writePOValue(b *strings.Builder, keyword, value string, split bool) {
+	if !split || !strings.Contains(value, "\n") {
+		b.WriteString(keyword)
+		b.WriteByte(' ')
+		b.WriteString(quotePO(value))
+		b.WriteByte('\n')
+		return
+	}
+
+	b.WriteString(keyword)
+	b.WriteString(" \"\"\n")
+	for _, seg := range strings.SplitAfter(value, "\n") {
+		if seg == "" {
+			continue
+		}
+		b.WriteString(quotePO(seg))
+		b.WriteByte('\n')
+	}
+}
+
 // writePO serializes entries to .po format string.
 func writePO(entries []poEntry) string {
 	var b strings.Builder
 	for i, e := range entries {
-		// Write comments
 		for _, comment := range e.Comments {
 			b.WriteString(comment)
 			b.WriteByte('\n')
 		}
-		// Write msgid and msgstr
-		b.WriteString("msgid ")
-		b.WriteString(quotePO(e.Msgid))
-		b.WriteByte('\n')
-		b.WriteString("msgstr ")
-		b.WriteString(quotePO(e.Msgstr))
-		b.WriteByte('\n')
-		// Blank line separator (not after last entry)
+
+		if len(e.Locations) > 0 {
+			b.WriteString("#:")
+			for _, loc := range e.Locations {
+				b.WriteByte(' ')
+				b.WriteString(loc)
+			}
+			b.WriteByte('\n')
+		}
+
+		if len(e.Flags) > 0 {
+			b.WriteString("#, ")
+			b.WriteString(strings.Join(e.Flags, ", "))
+			b.WriteByte('\n')
+		}
+
+		writePOValue(&b, "msgid", e.Msgid, false)
+		if e.MsgidPlural != "" {
+			writePOValue(&b, "msgid_plural", e.MsgidPlural, false)
+			forms := e.MsgstrPlural
+			for len(forms) < 2 {
+				forms = append(forms, "")
+			}
+			for j := range forms {
+				writePOValue(&b, fmt.Sprintf("msgstr[%d]", j), forms[j], false)
+			}
+		} else {
+			writePOValue(&b, "msgstr", e.Msgstr, false)
+		}
+
 		if i < len(entries)-1 {
 			b.WriteByte('\n')
 		}
@@ -367,7 +402,7 @@ func analyseLocale(locale string, table, enUS map[string]string) *poAnalysis {
 func setPOLanguage(metadata, locale string) string {
 	// Replace "Language: <old>" with "Language: <locale>"
 	// Matches "Language: " followed by non-newline characters
-	re := regexp.MustCompile(`Language:\s*\S+`)
+	re := regexp.MustCompile(`Language:\s*\S*`)
 	if re.MatchString(metadata) {
 		return re.ReplaceAllString(metadata, "Language: "+locale)
 	}
