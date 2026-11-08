@@ -3,15 +3,23 @@
 # Targets:
 #   build         go build
 #   test          go test
+#   cover         go test with coverage; prints the total and the least-covered
+#                 functions, writes coverage.out
+#   cover-html    same run, then render coverage.html for browsing
 #   install       go test, then go install (aborts on test failure)
 #   release       cross-compile for linux/macos/windows amd64 & arm64 + gzip + sha256
 #   release-gh    release + create/upload GitHub release (requires gh CLI)
 #   clean         remove build artifacts
 #   fmt           go fmt
 
-BINARY   := slingshot
-MODULE   := github.com/nanjj/slingshot
-CMD_PATH := ./cmd/slingshot
+BINARY        := slingshot
+MODULE        := github.com/nanjj/slingshot
+CMD_PATH      := ./cmd/slingshot
+COVER_PROFILE := coverage.out
+COVER_HTML    := coverage.html
+# Functions at or above this percentage are left out of the "least covered"
+# list; the point of the list is to find gaps, not to re-read the good ones.
+COVER_FLOOR   ?= 60
 
 # Go version check (requires 1.24+)
 GO_VERSION := $(shell go env GOVERSION 2>/dev/null | sed 's/^go//')
@@ -29,6 +37,25 @@ build:
 .PHONY: test
 test:
 	go test -v -count=1 ./...
+
+.PHONY: cover
+cover:
+	go test -count=1 -coverprofile=$(COVER_PROFILE) ./...
+	@echo
+	@go tool cover -func=$(COVER_PROFILE) | tail -1
+	@echo
+	@echo "Functions below $(COVER_FLOOR)% (profile: $(COVER_PROFILE)):"
+	@go tool cover -func=$(COVER_PROFILE) \
+	  | sed -nE 's|^([^:]+):[0-9]+:[[:space:]]+([^[:space:]]+)[[:space:]]+([0-9.]+)%$$|\3 \1 \2|p' \
+	  | awk '$$1 + 0 < $(COVER_FLOOR)' \
+	  | sort -n \
+	  | awk '{printf "  %6.1f%%  %s  %s\n", $$1, $$2, $$3}'
+
+.PHONY: cover-html
+cover-html:
+	@test -f $(COVER_PROFILE) || { echo "run 'make cover' first"; exit 1; }
+	go tool cover -html=$(COVER_PROFILE) -o $(COVER_HTML)
+	@echo "wrote $(COVER_HTML)"
 
 .PHONY: install
 install: test
