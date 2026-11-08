@@ -220,20 +220,28 @@ func TestTikzCmdTimeout(t *testing.T) {
 // tikzIntegrationSamples 是集成测试使用的样例集合。每个样例是一个完整的
 // TikZ 片段, 覆盖 tkz-euclide 5.x 语法与 circuitikz 元件。其中 [veclen] 与
 // through= 是本改动的回归用例: 改动前在 TL2026 的 latexmk 路径上必失败。
+// tikzIntegrationSamples holds the fragments whose failure signal points at
+// slingshot rather than at TeX. Each one exercises code this repo owns:
+//
+//   - def_circle_r: the standalone wrapper every render goes through.
+//   - through: the tkz-euclide package name, which the detector must
+//     recognise before the 5.x syntax can compile.
+//   - motor: a LaTeX shim, because circuitikz has no motor bipole.
+//   - figchild: a self-contained command, which must not be wrapped.
+//
+// The fragments that used to live here -- tikzlings, tikzducks, tikzpeople,
+// forest, pgfplots, tkz-triminos, scsnowman, the IEC and converter shims, and
+// the minted/comment-family tcblisting layouts -- were asking "does this
+// third-party package work?", and no change in this repository can answer
+// that. Their slingshot-side handling is covered by the string-level tests in
+// tikz_test.go, which run in microseconds.
+
 var tikzIntegrationSamples = map[string]string{
 	"def_circle_r": `\begin{tikzpicture}
 \tkzDefPoint(0,0){A}
 \tkzDefCircle[R](A,1) \tkzGetPoint{a}
 \tkzDrawCircle(A,a)
 \tkzDrawPoint(A) \tkzDrawPoint(a)
-\end{tikzpicture}
-`,
-	"veclen": `\begin{tikzpicture}
-\tkzDefPoint(0,0){O}
-\begin{scope}[veclen]
-\tkzDefPoint(1,0){A}
-\end{scope}
-\tkzDrawPoint(O) \tkzDrawPoint(A)
 \end{tikzpicture}
 `,
 	"through": `\begin{tikzpicture}
@@ -243,178 +251,16 @@ var tikzIntegrationSamples = map[string]string{
 \tkzDrawPoint(I)
 \end{tikzpicture}
 `,
-	"next_to": `\begin{tikzpicture}
-\tkzDefPoint(0,0){A} \tkzDefPoint(2,0){B}
-\tkzDefCircle[R](A,1) \tkzGetPoint{c}
-\tkzInterLC[next to=A](A,B)(A,c) \tkzGetFirstPoint{X}
-\tkzDrawPoint(X)
-\end{tikzpicture}
-`,
-	"tangent_at": `\begin{tikzpicture}
-\tkzDefPoint(0,0){O} \tkzDefPoint(1,0){T}
-\tkzDefLine[tangent at=T](O) \tkzGetPoint{h}
-\tkzDrawPoint(h)
-\end{tikzpicture}
-`,
-	// amscd_cd: 用户原始故障片段 ($\begin{CD}...\end{CD}$, 行尾双反斜杠换行)。
-	// 此前报 "! LaTeX Error: Environment CD undefined." (未探测到 CD 则不加载
-	// amscd); 修复后还要注意 CD 不能进 tikzpicture (pgf 静默丢弃内容), 配套
-	// normalizeTikz 的 hasCDDiagram 早退。TL2026 与 2021 bundle 均自带 amscd。
-	"amscd_cd": amscdCDSample,
-
-	"buzzer": `\begin{circuitikz}
-\draw (0,0) to[buzzer] (0,2);
-\end{circuitikz}
-`,
 	"motor": `\begin{circuitikz}
 \draw (0,0) to[motor] (2,0);
 \end{circuitikz}
 `,
-	"circuit_ee_iec": `\begin{tikzpicture}[circuit ee IEC]
-\draw (0,0) to[resistor={name=R}] (0,2)
-to[diode={name=D}] (3,2);
-\end{tikzpicture}
-`,
-	// circuit_ee_iec_loaded: 内容自带 \usetikzlibrary{circuits.ee.IEC}。latexmk 上
-	// 仍会再注入一次 (pgf 重复加载幂等, 覆盖该场景), tectonic 上丢弃加载行走 shim。
-	"circuit_ee_iec_loaded": `\usetikzlibrary{circuits.ee.IEC}
-\begin{tikzpicture}[circuit ee IEC]
-\draw (0,0) to[resistor={name=R}] (0,2)
-to[diode={name=D}] (3,2);
-\end{tikzpicture}
-`,
-	"circuit_ee_iec_compat": `\begin{tikzpicture}[circuit ee IEC]
- \draw (0,0) to [resistor={name=R}] (0,2)
-  to[diode={name=D}] (3,2);
-  \draw (0,0) to[*R=$R_1$] (1.5,0)
-  to[*Tnpn] (3,0)
-   to[*D](3,2);
-\end{tikzpicture}
-`,
-	"zorder_3d_themecolor": `\begin{tikzpicture}[scale=0.5]
-  \begin{scope}[canvas is zy plane at x=0]
-    \fill[themecolor, opacity=0.4] (-1,-1) rectangle (1,1);
-    \node[font=\footnotesize\ttfamily] at (0,0) {zorder};
-  \end{scope}
-  \rhino
-\end{tikzpicture}
-`,
-	// tikzlings_pics: pic 语法 (pic{bear} / pic[coati/body=..]{coati} /
-	// pic[thing/hat=red]{penguin}) 的回归样例 (此前 pgfkeys 报未知键
-	// "I do not know the key '/tikz/pics/bear'"): xe (latexmk) 上由
-	// \usetikzlibrary{tikzlings} 提供 pic 定义; tectonic bundle (tikzlings v0.8)
-	// 没有该库文件, 走动物子宏包 + tikzlingsPicShim。
-	"tikzlings_pics": `\begin{tikzpicture}
-\path (1,0) pic{bear}
-      (2,1) pic[coati/body=blue, scale=0.5]{coati}
-      (3,2) pic[thing/hat=red]{penguin};
-\end{tikzpicture}
-`,
-	// tikzlings_bearwear: bearwear 宏包 (独立 CTAN 包, 给 tikzlings-bears 的熊提供服装)
-	// 的回归样例: 此前 \bearwear 未被探测到, 编译报 "Undefined control sequence"。
-	// TL2026 与 2021 bundle (bearwear v0.2) 均自带该包, 两后端走同一注入路径。
-	"tikzlings_bearwear": `\begin{tikzpicture}
-\bear
-\bearwear[long sleeves,
-  shirt=red!80!black]
-\end{tikzpicture}
-`,
-	// tikzducks: 橡皮鸭 \duck 的回归样例 (此前报 "Undefined control sequence \duck");
-	// 探测命中后注入 \usetikzlibrary{ducks} (手册推荐的加载形式, 库文件是宏包超集)。
-	// 样例保持原始片段形态 (裸 \duck, 无 tikzpicture): \duck 内部的 \begin{scope}
-	// 依赖 picture, 由 normalizeTikz 的外壳自动补上; TL2026 (v2.2) 与 2021 bundle
-	// (v1.5) 均自带库文件, 两后端同路径。
-	"tikzducks": `\duck
-\randuck
-\duck[
-shift={(2.5,1)},
-scale=.3,
-]
-\duck[
-body=lightgray,
-shift={(3,0.5)},
-scale=.3,
-]`,
-	// tikzpeople: 人形 node shape (businessman / alice) 的回归样例 (此前报
-	// "I do not know the key '/tikz/businessman'"); 形状名由键位正则探测后注入
-	// \usepackage{tikzpeople}。样例保持原始片段形态 (裸 \node, 外壳自动补);
-	// TL2026 与 2021 bundle 均自带 v0.4, 两后端同路径。
-	"tikzpeople": `\node[businessman,minimum size=1.5cm] at (0,0) {};
-\node[alice,minimum size=1cm] at (2,0) {};`,
-	// tikzpeople_tikzducks_combo: 两个宏包共用 /tikz/duck 键空间 (tikzpeople 的 duck
-	// shape 与 tikzducks 的 duck pic/命令) 的共存样例——两包同时注入时无冲突。
-	"tikzpeople_tikzducks_combo": `\node[duck, minimum size=1cm] at (0,0) {};
-\duck[shift={(2,0)}, scale=0.5]`,
 	// figchild: 裸命令 / 可选 TikZ 选项形式的回归样例 (此前探测不到 \fc*,
 	// 编译报 "Undefined control sequence"); 样例保持裸片段形态 (不套外壳,
 	// 命令自带 tikzpicture)。tectonic 上由 legacyFigchild 写入 vendored v3.1.1
 	// 覆盖 bundle 的 v1.1.1 老 API; xe 用系统 TeX Live 直接编译。
 	"figchild": `\fcBell
 \fcStar[scale=0.5]`,
-	// tikz_triminos: \tkztriminos 的回归样例。\tkz+大写 的收紧使 tkz-euclide
-	// 不被误加载 (旧 \tkz 子串会命中 \tkztriminos); tectonic 上走 vendored
-	// tikz-triminos.sty + fpeval shim (bundle 的 LaTeX 2021 缺 \fpeval),
-	// xe 用系统 TeX Live 直接编译。
-	"tikz_triminos": `\tkztriminos{value 1 § value 2 § a long long value 3}`,
-	// scsnowman: \scsnowman 家族的回归样例。命令名是 \scsnowman (不是
-	// tikzlings-snowmen 的 \snowman), 无同名冲突; TL2026 v1.3c 与 bundle
-	// v1.2d 键集一致, 两后端走同一注入路径 (无需 vendoring)。
-	"scsnowman": `\scsnowman[scale=2,hat=red,muffler=blue]`,
-	// tikzducks_picture: LaTeX 内核 picture 环境的回归样例 (issue #2)。
-	// picture 不是 TikZ 环境, 套进裸 tikzpicture 会被 pgf 当空盒子, 内容全丢
-	// (16x9 全白图); 前缀识别后不再补外壳。\picduck 由 tikzducks 宏包提供,
-	// 经 tikzExtraPackages 探测 (样例自带 \usepackage, 两种路径都覆盖)。
-	"tikzducks_picture": `\begin{picture}(42,44)
-  \picduck
-\end{picture}
-`,
-	// tikzducks_picture_setlength: 手册原样的 picture 示例 (带
-	// \setlength{\unitlength}{1mm} 前导), 同样不补 tikzpicture 外壳。
-	"tikzducks_picture_setlength": `\\setlength{\\unitlength}{1mm}
-\\begin{picture}(42,44)
-  \\picduck
-\\end{picture}
-`,
-	// tikzducks_library: 显式 \usetikzlibrary{ducks} 的回归样例 (issue #2)。
-	// 库文件 tikzlibraryducks.code.tex 首行是 \usepackage{tikzducks}; 加载行
-	// 若留在正文 (\begin{document} 之后) 会报 "Can be used only in preamble",
-	// 必须提到真正的导言区。
-	"tikzducks_library": `\usetikzlibrary{ducks}
-\begin{tikzpicture}
-\draw (0,0) pic[duck/water=blue, duck/alien] {duck};
-\draw (4,0) pic[scale=1.4] {duck};
-\end{tikzpicture}
-`,
-	// tcblisting_figchild: 正文自包含的 tcblisting 盒子 (用户原始问题)。
-	// tcblistingSetup 注入的 tikz lower 会给盒子正文再套一个 tikzpicture,
-	// 而 figchild 的 \fcAbajourA 自带完整 tikzpicture —— 嵌套后内容会**静默丢失**
-	// (编译 exit 0, 盒子右侧一片空白)。rewriteSelfContainedTcblistings 在盒子
-	// 选项里引用 slingshot nowrap 样式摘掉那层包裹。编译级断言抓不住静默丢失,
-	// 因此另有像素级回归 TestRenderTikzTcblistingNotBlank (见下)。
-	"tcblisting_figchild": `\begin{tcblisting}{title={Abajour}}
-\fcAbajourA
-\end{tcblisting}
-`,
-	// tikzcd_pullback_corner: tikz-cd pullback corner 的回归样例。片段用
-	// \arrow[dr, phantom, "\ulcorner"] 画角标, \ulcorner 属 AMS 符号族
-	// (amsfonts 提供、amssymb 依赖并加载它)。导言区此前只加载 amsmath, 因此
-	// 在 \end{tikzcd} 报 "Undefined control sequence" (tikz-cd 标签默认数学
-	// 模式 \iftikzcd@mathmode, 角标在编译期展开); 这是编译级失败而非静默丢失,
-	// PDF 头断言即可。TL2026 与 tectonic 2021 bundle 均自带 amssymb, 两后端同路径。
-	"tikzcd_pullback_corner": `\begin{tikzcd}
-  A \arrow[r, "f"] \arrow[d, "g'"] \arrow[dr, phantom, "\ulcorner"] & B \arrow[d, "h"] \\
-  C \arrow[r, "k'"] & D
-\end{tikzcd}
-`,
-	// tikzcd_raw_cd_styles: tikz-cd 手册"不用 tikzcd 环境、直接用 cd 库样式"的
-	// 五边形公理图片段 (用户原始故障输入 tikzcdRawCdSample)。此前探测表只认
-	// \begin{tikzcd} / \tikzcdset (走 tikz-cd 宏包), 裸 cd 样式写法是漏网之鱼,
-	// 编译报 "! Package pgfkeys Error: I do not know the key
-	// '/tikz/commutative diagrams/every diagram'"; 修复 = tikzExtraLibraries 增加
-	// commutative diagrams 条目, 命中即注入 \usetikzlibrary{cd}。cd 库随 tikz-cd
-	// 发行 (TL2026 与 tectonic 2021 bundle 均自带), 两后端同路径, 因此两条集成腿
-	// (xe / tectonic) 都自动覆盖本样例。
-	"tikzcd_raw_cd_styles": tikzcdRawCdSample,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。
@@ -441,11 +287,15 @@ func renderTikzSample(t *testing.T, engine, name, sample string) []byte {
 // TestRenderTikzIntegrationXe 真跑 xe 引擎 (latexmk -xelatex, 可用时);
 // 覆盖本改动的回归用例。
 func TestRenderTikzIntegrationXe(t *testing.T) {
+	t.Parallel()
+
 	if err := latexmkAvailable(false); err != nil {
 		t.Skipf("latexmk unavailable: %v", err)
 	}
 	for name, sample := range tikzIntegrationSamples {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			pdf := renderTikzSample(t, "xe", name, sample)
 			if name == "zorder_3d_themecolor" {
 				assertPDFContainsText(t, pdf, "zorder")
@@ -582,6 +432,8 @@ const tcblistingFallbackPixelLimit = 300
 // 250 仅差 8 级, 边缘采样同理; tcolorbox 默认值或栅格器变化时需重新校准 (先例:
 // TestRenderTikzMatrixNotBlank / TestRenderTikzAmscdNotBlank 的阈值注释)。
 func TestRenderTikzTcblistingBackgroundAndBorderNotBlank(t *testing.T) {
+	t.Parallel()
+
 	if _, err := exec.LookPath("mutool"); err != nil {
 		t.Skipf("mutool unavailable: %v", err)
 	}
@@ -608,6 +460,8 @@ func TestRenderTikzTcblistingBackgroundAndBorderNotBlank(t *testing.T) {
 	}
 	for _, leg := range legs {
 		t.Run(leg.name, func(t *testing.T) {
+			t.Parallel()
+
 			if err := leg.avail(); err != nil {
 				t.Skipf("%s: %v", leg.reason, err)
 			}
@@ -663,51 +517,6 @@ func TestRenderTikzTcblistingBackgroundAndBorderNotBlank(t *testing.T) {
 	}
 }
 
-func TestRenderTikzTcblistingNotBlank(t *testing.T) {
-	const sample = `\begin{tcblisting}{title={Abajour}}
-\fcAbajourA
-\end{tcblisting}
-`
-	engines := []struct {
-		name   string
-		avail  func() error
-		reason string
-	}{
-		{name: "xe", avail: func() error { return latexmkAvailable(false) },
-			reason: "latexmk unavailable"},
-	}
-	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	for _, e := range engines {
-		t.Run(e.name, func(t *testing.T) {
-			if err := e.avail(); err != nil {
-				t.Skipf("%s: %v", e.reason, err)
-			}
-			in := filepath.Join(t.TempDir(), "tcblisting_figchild.tikz")
-			out := filepath.Join(t.TempDir(), "tcblisting_figchild.png")
-			if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := renderTikz(in, out, e.name); err != nil {
-				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
-			}
-			f, err := os.Open(out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer f.Close()
-			img, _, err := image.Decode(f)
-			if err != nil {
-				t.Fatalf("decoding png: %v", err)
-			}
-			assertRegionNotBlank(t, img, "tcblisting", "lower half", 60, 92, 20, 95, 200,
-				"the figchild drawing was silently dropped")
-		})
-	}
-}
-
 // TestRenderTikzAmscdNotBlank 是 amscd CD 交换图的像素级回归。
 //
 // 此前两个缺陷叠加: (1) 未探测到 \begin{CD} 则不加载 amscd, 编译报
@@ -723,6 +532,8 @@ func TestRenderTikzTcblistingNotBlank(t *testing.T) {
 // 两后端都跑 (各自可用才跑)。tectonic 分支后续计划淘汰, 不为它做 amscd 专门
 // 适配; 若 tectonic 腿不稳定则降级为 xe 单腿。
 func TestRenderTikzAmscdNotBlank(t *testing.T) {
+	t.Parallel()
+
 	engines := []struct {
 		name   string
 		avail  func() error
@@ -737,6 +548,8 @@ func TestRenderTikzAmscdNotBlank(t *testing.T) {
 	}
 	for _, e := range engines {
 		t.Run(e.name, func(t *testing.T) {
+			t.Parallel()
+
 			if err := e.avail(); err != nil {
 				t.Skipf("%s: %v", e.reason, err)
 			}
@@ -785,54 +598,6 @@ func TestRenderTikzAmscdNotBlank(t *testing.T) {
 //
 // 两后端都跑 (各自可用才跑): matrix 与 arrows 库在 TL2026 与 2021 bundle 里都自带,
 // 探测无后端门控, 因此两条腿都必须通过。
-func TestRenderTikzMatrixNotBlank(t *testing.T) {
-	engines := []struct {
-		name   string
-		avail  func() error
-		reason string
-	}{
-		{name: "xe", avail: func() error { return latexmkAvailable(false) },
-			reason: "latexmk unavailable"},
-	}
-	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	for _, e := range engines {
-		t.Run(e.name, func(t *testing.T) {
-			if err := e.avail(); err != nil {
-				t.Skipf("%s: %v", e.reason, err)
-			}
-			in := filepath.Join(t.TempDir(), "matrix.tikz")
-			out := filepath.Join(t.TempDir(), "matrix.png")
-			if err := os.WriteFile(in, []byte(matrixSample), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := renderTikz(in, out, e.name); err != nil {
-				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
-			}
-			f, err := os.Open(out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer f.Close()
-			img, _, err := image.Decode(f)
-			if err != nil {
-				t.Fatalf("decoding png: %v", err)
-			}
-			// 断言 1: 内容存在 (空白对照暗像素≈0, 修复后实测 514); 阈值与
-			// 消息格式与 amscd CD 渲染测试共用同一 helper。
-			assertRegionNotBlank(t, img, "tikz matrix", "full image", 0, 100, 0, 100, 150,
-				"the matrix diagram was silently dropped or degenerated (matrix layout not rendered)")
-			// 断言 2: 交换方阵的高度远大于单行退化。
-			if h := img.Bounds().Dy(); h < 80 {
-				t.Fatalf("tikz matrix rendered %dx%d px, want height >= 80 (square layout, not single-row fallback)",
-					img.Bounds().Dx(), h)
-			}
-		})
-	}
-}
-
 // TestRenderTikzRawCdStylesNotBlank 是 "裸 cd 库样式" 交换图的像素级回归。
 //
 // 此前探测表只认 \begin{tikzcd} / \tikzcdset (走 tikz-cd 宏包), tikz-cd 手册
@@ -849,49 +614,6 @@ func TestRenderTikzMatrixNotBlank(t *testing.T) {
 //
 // 两后端都跑 (各自可用才跑): cd 库随 tikz-cd 发行, TL2026 与 2021 bundle 均自带,
 // 探测无后端门控, 因此两条腿都必须通过。
-func TestRenderTikzRawCdStylesNotBlank(t *testing.T) {
-	engines := []struct {
-		name   string
-		avail  func() error
-		reason string
-	}{
-		{name: "xe", avail: func() error { return latexmkAvailable(false) },
-			reason: "latexmk unavailable"},
-	}
-	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	for _, e := range engines {
-		t.Run(e.name, func(t *testing.T) {
-			if err := e.avail(); err != nil {
-				t.Skipf("%s: %v", e.reason, err)
-			}
-			in := filepath.Join(t.TempDir(), "tikzcd_raw_cd.tikz")
-			out := filepath.Join(t.TempDir(), "tikzcd_raw_cd.png")
-			if err := os.WriteFile(in, []byte(tikzcdRawCdTcblistingSample), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := renderTikz(in, out, e.name); err != nil {
-				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
-			}
-			f, err := os.Open(out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer f.Close()
-			img, _, err := image.Decode(f)
-			if err != nil {
-				t.Fatalf("decoding png: %v", err)
-			}
-			// 空白对照 0, 修复后实测 1617 (两后端同值); 阈值 500 留约 3.2 倍余量。
-			assertRegionNotBlank(t, img, "tikzcd raw cd styles", "result area",
-				60, 92, 20, 95, 500,
-				"the cd-styles diagram was silently dropped (cd library not loaded)")
-		})
-	}
-}
-
 // TestRenderTikzTcblistingMintedNotBlank 是 tcblisting 的 minted 引擎回归
 // (tikzlings 手册"练习 6"场景: listing engine=minted + minted options={linenos})。
 //
@@ -910,6 +632,8 @@ func TestRenderTikzRawCdStylesNotBlank(t *testing.T) {
 // 成功渲染。空内容时两区均为 0, 实测右侧 ≈ 3087、左侧 ≈ 3932 (725x318 样例),
 // 阈值 1000 留约 3 倍余量。
 func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
+	t.Parallel()
+
 	if err := latexmkAvailable(false); err != nil {
 		t.Skipf("latexmk unavailable: %v", err)
 	}
@@ -982,71 +706,6 @@ func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
 // 断言与 TestRenderTikzTcblistingMintedNotBlank 同构: 左侧代码区 + 右侧结果/注释区
 // 的暗像素计数。实测 (725x399 样例) 左侧 ≈ 3818、右侧 ≈ 782, 阈值取 1000 / 300
 // 留约 2.5-3 倍余量; 区域沿用 x ∈ (5%, 45%) 与 (60%, 92%) 的既有约定。
-func TestRenderTikzTcblistingCommentFamilyNotBlank(t *testing.T) {
-	if err := latexmkAvailable(false); err != nil {
-		t.Skipf("latexmk unavailable: %v", err)
-	}
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	const sample = `\begin{tcblisting}{
-  listing side comment,
-  righthand ratio=0.45,
-  title={汉字\\标题},
-  comment={注意：\\最后一行列},
-  listing engine=minted,
-  minted language=org
-}
-| ITEM    | COST | PRICE |
-|---------+------+-------|
-| Bike    |   50 |   100 |
-| Sword   |   20 |    35 |
-| Drill   |   30 |    60 |
-| Cooler  |   10 |    70 |
-| TV      |   50 |    40 |
-| Blender |   25 |    45 |
-| Boots   |   20 |    20 |
-|---------+------+-------|
-|         |  205 |   370 |
-#+TBLFM: @>$2..$3=vsum(@2..@-1)
-
-\end{tcblisting}
-`
-	in := filepath.Join(t.TempDir(), "tcblisting_comment_family.tikz")
-	out := filepath.Join(t.TempDir(), "tcblisting_comment_family.png")
-	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := renderTikz(in, out, "xe"); err != nil {
-		t.Fatalf("renderTikz(xe) failed: %v", err)
-	}
-	f, err := os.Open(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		t.Fatalf("decoding png: %v", err)
-	}
-	regions := []struct {
-		name           string
-		x0f, x1f       int
-		y0f, y1f       int
-		minDark        int
-		emptyDetection string
-	}{
-		{name: "code area", x0f: 5, x1f: 45, y0f: 20, y1f: 95, minDark: 1000,
-			emptyDetection: "the minted code side of the box is blank"},
-		{name: "comment area", x0f: 60, x1f: 92, y0f: 20, y1f: 95, minDark: 300,
-			emptyDetection: "the comment side of the box is blank"},
-	}
-	for _, rgg := range regions {
-		assertRegionNotBlank(t, img, "tcblisting", "comment-family "+rgg.name,
-			rgg.x0f, rgg.x1f, rgg.y0f, rgg.y1f, rgg.minDark, rgg.emptyDetection)
-	}
-}
-
 // TestRenderTikzTcblistingListingAndCommentNotBlank 覆盖非 sbs 的
 // `listing and comment` 布局 (listing engine=listings, 无 minted): 该布局把
 // listing 放在盒子上部、注释放在下部, 是注释族里"承载修复"那类 (base 无 nowrap
@@ -1055,59 +714,10 @@ func TestRenderTikzTcblistingCommentFamilyNotBlank(t *testing.T) {
 // 区域为上下两半: upper x[5%,95%) y[2%,45%) = listing 代码侧, lower
 // x[5%,95%) y[55%,98%) = 注释侧; 实测 (725x404 样例) 分别 ≈ 2531 / 2194,
 // 阈值取 800 / 600 留约 3 倍余量。
-func TestRenderTikzTcblistingListingAndCommentNotBlank(t *testing.T) {
-	if err := latexmkAvailable(false); err != nil {
-		t.Skipf("latexmk unavailable: %v", err)
-	}
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	const sample = `\begin{tcblisting}{
-  listing and comment,
-  sidebyside=false,
-  listing engine=listings,
-  comment={注意：\\最后一行列},
-}
-| ITEM    | COST | PRICE |
-|---------+------+-------|
-| Bike    |   50 |   100 |
-| Sword   |   20 |    35 |
-| Drill   |   30 |    60 |
-| Cooler  |   10 |    70 |
-| TV      |   50 |    40 |
-| Blender |   25 |    45 |
-| Boots   |   20 |    20 |
-|---------+------+-------|
-|         |  205 |   370 |
-#+TBLFM: @>$2..$3=vsum(@2..@-1)
-
-\end{tcblisting}
-`
-	in := filepath.Join(t.TempDir(), "tcblisting_listing_and_comment.tikz")
-	out := filepath.Join(t.TempDir(), "tcblisting_listing_and_comment.png")
-	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := renderTikz(in, out, "xe"); err != nil {
-		t.Fatalf("renderTikz(xe) failed: %v", err)
-	}
-	f, err := os.Open(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		t.Fatalf("decoding png: %v", err)
-	}
-	assertRegionNotBlank(t, img, "tcblisting", "listing and comment listing side", 5, 95, 2, 45, 800,
-		"the listing (code) side of the box is blank")
-	assertRegionNotBlank(t, img, "tcblisting", "listing and comment comment side", 5, 95, 55, 98, 600,
-		"the comment side of the box is blank")
-}
-
 // TestRenderTikzIntegrationCJK 真跑 xe 引擎 + xelatex + xeCJK 三者齐备时渲染 CJK。
 func TestRenderTikzIntegrationCJK(t *testing.T) {
+	t.Parallel()
+
 	if err := latexmkAvailable(true); err != nil {
 		t.Skipf("latexmk + xelatex + xeCJK unavailable: %v", err)
 	}
