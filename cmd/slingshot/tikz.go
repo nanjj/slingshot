@@ -878,8 +878,10 @@ func extractCommentedPackages(content string) ([]string, string) {
 	return pkgs, commentedPackageRe.ReplaceAllString(head, "") + tail
 }
 
-// userModePackageCache 记录已经确认安装的 tlmgr usermode 包, 避免每次渲染
-// 都调用 tlmgr。
+// userModePackageCache 记录已经确认可用的 tlmgr usermode 包, 避免同一次渲染
+// 里重复探测。它是进程内缓存: `slingshot tikz` 每次是新进程, 跨次调用不会
+// 命中, 所以下面的快速路径必须便宜——这正是用 kpsewhich 而不是 tlmgr 判断
+// "装没装"的原因。
 var userModePackageCache = map[string]bool{}
 
 // userModePackageName 把 LaTeX 包名映射到 tlmgr 包名。带点的名字
@@ -891,37 +893,110 @@ func userModePackageName(name string) string {
 	return name
 }
 
-// ensureUserModePackage 检查 tlmgr --usermode 是否安装了 name 对应的包,
-// 没有则安装。已经检查过的包直接返回, 不重复调用 tlmgr。
+// kpsewhichCount 在一次 kpsewhich 调用里数出 files 中有几个能找到。
+//
+// kpsewhich 启动约 200ms, tlmgr 启动要数秒 (加载 TeX Live 数据库), 两者对
+// "文件在不在搜索路径里"的判断一致。kpsewhich 对多参数逐个输出路径 (每个
+// 找到的文件一行), 因此行数就是命中数; 有文件缺失时它可能以非零状态退出,
+// 此时返回 0, 调用方走逐个探测的慢路径即可 (安全方向)。
+func kpsewhichCount(files []string) int {
+	out, err := exec.Command("kpsewhich", files...).Output()
+	if err != nil {
+		return 0
+	}
+
+	n := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+
+	return n
+}
+
+// kpsewhichCountFn 是 kpsewhichCount 的可测试 seam。
+var kpsewhichCountFn = kpsewhichCount
+
+// ensureUserModePackage 检查 name 对应的 tlmgr 包是否可用, 缺失则安装。
+//
+// 快速路径先问 kpsewhich: 文件已在搜索路径里 (系统树、TEXMFHOME, 或之前
+// tlmgr --usermode 装过) 就直接返回, 不启动 tlmgr。绝大多数渲染走这条路径;
+// 以前无条件调用 tlmgr, 使单包文档多花约 5 秒、四包文档多花约 15 秒。
 func ensureUserModePackage(name string) error {
 	pkg := userModePackageName(name)
 	if pkg == "" || userModePackageCache[pkg] {
 		return nil
 	}
+
+	if kpsewhichHasFn(pkg + ".sty") {
+		userModePackageCache[pkg] = true
+		return nil
+	}
+
 	if _, err := exec.LookPath("tlmgr"); err != nil {
 		return fmt.Errorf("tlmgr not found (needed for %q): %w", pkg, err)
 	}
+
+	// kpsewhich 找不到, 但 tlmgr 可能认为已安装 (例如装进了 kpsewhich 不
+	// 搜索的树里), 先问一句再装; 已安装时 install 也能幂等, 但 info 更便宜。
 	info := exec.Command("tlmgr", "--usermode", "info", pkg)
 	if err := info.Run(); err == nil {
 		userModePackageCache[pkg] = true
 		return nil
 	}
+
 	install := exec.Command("tlmgr", "--usermode", "install", pkg)
 	out, err := install.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tlmgr --usermode install %s failed: %w: %s", pkg, err, strings.TrimSpace(string(out)))
 	}
+
 	userModePackageCache[pkg] = true
 	return nil
 }
 
-// ensureUserModePackages 对 pkgs 逐个调用 ensureUserModePackage。
+// ensureUserModePackages 保证 pkgs 对应的 tlmgr 包都可用。
+//
+// 先用一次 kpsewhich 判断是否全部已安装 (常见情形; 多包文档也只付一次启动
+// 成本), 只有确实缺包时才退回到逐个探测 + tlmgr 安装。
 func ensureUserModePackages(pkgs []string) error {
+	var pending []string
+
+	seen := make(map[string]bool, len(pkgs))
 	for _, p := range pkgs {
-		if err := ensureUserModePackage(p); err != nil {
+		pkg := userModePackageName(p)
+		if pkg == "" || userModePackageCache[pkg] || seen[pkg] {
+			continue
+		}
+
+		seen[pkg] = true
+		pending = append(pending, pkg)
+	}
+
+	if len(pending) == 0 {
+		return nil
+	}
+
+	files := make([]string, len(pending))
+	for i, pkg := range pending {
+		files[i] = pkg + ".sty"
+	}
+
+	if kpsewhichCountFn(files) == len(files) {
+		for _, pkg := range pending {
+			userModePackageCache[pkg] = true
+		}
+
+		return nil
+	}
+
+	for _, pkg := range pending {
+		if err := ensureUserModePackage(pkg); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
