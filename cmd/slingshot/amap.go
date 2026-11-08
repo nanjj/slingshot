@@ -396,8 +396,12 @@ func printResult(cmd *cobra.Command, v any) error {
 }
 
 // argString returns the i-th required argument.
+//
+// The index is bounds-checked on both sides: every caller passes a literal
+// today, but a negative one would index the slice from the end and panic
+// rather than report a missing argument.
 func argString(parsed []*u.Parsed, i int) (string, error) {
-	if i >= len(parsed) || parsed[i].Skipped {
+	if i < 0 || i >= len(parsed) || parsed[i].Skipped {
 		return "", errors.New(i18n.G("expected an argument"))
 	}
 	return parsed[i].String, nil
@@ -405,7 +409,7 @@ func argString(parsed []*u.Parsed, i int) (string, error) {
 
 // argOptionalString returns the i-th optional argument if present.
 func argOptionalString(parsed []*u.Parsed, i int) (string, bool) {
-	if i >= len(parsed) || parsed[i].Skipped {
+	if i < 0 || i >= len(parsed) || parsed[i].Skipped {
 		return "", false
 	}
 	return parsed[i].String, true
