@@ -230,3 +230,55 @@ func TestEnsureUserModePackageInstallFailure(t *testing.T) {
 		t.Error("failed package was cached as installed")
 	}
 }
+
+// TestEnsureUserModePackageTlmgrInfoSaysInstalled covers the branch where
+// kpsewhich cannot see the file but tlmgr reports the package as installed.
+// That happens when a package lives in a tree kpsewhich does not search, and
+// the code asks tlmgr before installing rather than reinstalling blindly.
+func TestEnsureUserModePackageTlmgrInfoSaysInstalled(t *testing.T) {
+	resetUserModeCache(t)
+
+	oldKps := kpsewhichHasFn
+	t.Cleanup(func() { kpsewhichHasFn = oldKps })
+	kpsewhichHasFn = func(string) bool { return false }
+
+	dir := t.TempDir()
+	log := filepath.Join(dir, "tlmgr.log")
+
+	// info succeeds, so install must never be reached.
+	script := "#!/bin/sh\n" +
+		"echo \"$@\" >> " + log + "\n" +
+		"shift\n" +
+		"case \"$1\" in\n" +
+		"  info) exit 0 ;;\n" +
+		"  install) exit 1 ;;\n" +
+		"esac\n" +
+		"exit 0\n"
+
+	if err := os.WriteFile(filepath.Join(dir, "tlmgr"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := ensureUserModePackage("somepkg"); err != nil {
+		t.Fatalf("ensureUserModePackage() = %v, want nil when tlmgr reports it installed", err)
+	}
+
+	calls, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(calls)
+	if !strings.Contains(got, "--usermode info somepkg") {
+		t.Errorf("tlmgr info was not called; log:\n%s", got)
+	}
+
+	if strings.Contains(got, "install") {
+		t.Errorf("tlmgr install was called for an installed package; log:\n%s", got)
+	}
+
+	if !userModePackageCache["somepkg"] {
+		t.Error("package not cached after tlmgr reported it installed")
+	}
+}
