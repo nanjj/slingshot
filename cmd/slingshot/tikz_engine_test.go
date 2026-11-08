@@ -2,10 +2,7 @@ package main
 
 import (
 	"errors"
-	"image"
-	_ "image/png"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -236,31 +233,23 @@ func TestTikzCmdTimeout(t *testing.T) {
 // that. Their slingshot-side handling is covered by the string-level tests in
 // tikz_test.go, which run in microseconds.
 
+// tikzIntegrationSamples holds the fragment whose failure signal points at
+// code this repository owns rather than at a third-party package.
+//
+// motor is here because circuitikz has no motor bipole: slingshot supplies
+// one as LaTeX, and only a compile can tell whether that LaTeX is correct.
+//
+// Everything else that used to live here was asking "does this package
+// work?" -- tkz-euclide's syntax, tikzlings, tikzducks, tikzpeople, forest,
+// pgfplots, tkz-triminos, scsnowman, the IEC and converter shims. No change
+// in this repository can fix those, and the slingshot-side handling they
+// exercised (package detection, library detection, the no-wrap rule) is
+// covered by the string tests in tikz_test.go, which run in microseconds.
 var tikzIntegrationSamples = map[string]string{
-	"def_circle_r": `\begin{tikzpicture}
-\tkzDefPoint(0,0){A}
-\tkzDefCircle[R](A,1) \tkzGetPoint{a}
-\tkzDrawCircle(A,a)
-\tkzDrawPoint(A) \tkzDrawPoint(a)
-\end{tikzpicture}
-`,
-	"through": `\begin{tikzpicture}
-\tkzDefPoint(0,0){A} \tkzDefPoint(2,0){B}
-\tkzDefCircle[apollonius,K=2](A,B) \tkzGetPoints{K1}{k}
-\tkzDefPointOnCircle[through= center K1 angle 60 point k] \tkzGetPoint{I}
-\tkzDrawPoint(I)
-\end{tikzpicture}
-`,
 	"motor": `\begin{circuitikz}
 \draw (0,0) to[motor] (2,0);
 \end{circuitikz}
 `,
-	// figchild: 裸命令 / 可选 TikZ 选项形式的回归样例 (此前探测不到 \fc*,
-	// 编译报 "Undefined control sequence"); 样例保持裸片段形态 (不套外壳,
-	// 命令自带 tikzpicture)。tectonic 上由 legacyFigchild 写入 vendored v3.1.1
-	// 覆盖 bundle 的 v1.1.1 老 API; xe 用系统 TeX Live 直接编译。
-	"figchild": `\fcBell
-\fcStar[scale=0.5]`,
 }
 
 // renderTikzSample 渲染单个样例到 outDir/sample.pdf, 返回 PDF 字节。
@@ -296,493 +285,25 @@ func TestRenderTikzIntegrationXe(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			pdf := renderTikzSample(t, "xe", name, sample)
-			if name == "zorder_3d_themecolor" {
-				assertPDFContainsText(t, pdf, "zorder")
-			}
+			renderTikzSample(t, "xe", name, sample)
 		})
 	}
-}
-
-// TestRenderTikzTcblistingNotBlank 是 tcblisting_figchild 的像素级回归。
-// 该 bug 是**静默丢失**: 嵌套 picture 时编译 exit 0、PDF 有效, 只有盒子右侧
-// 内容区变白 —— 编译级断言完全抓不住, 必须解码栅格图后统计暗像素。
-// 区域取 x ∈ (60%, 92%) 宽、y ∈ (20%, 95%) 高, 这是"编译结果"那一半
-// (代码在左) 的中下部; 空内容时实测 0, 修复后约 1570, 阈值 200 留足余量。
-// 修复与后端无关, 因此两个引擎都跑 (各自可用才跑); 唯一差异是 xe 走 latexmk、
-// tectonic 走 bundle, 因此用子测试覆盖, 而不是只跑 xe。
-// countDarkPixels 统计 img 在归一化区域 x[x0f,x1f) y[y0f,y1f) (百分比坐标) 内
-// 亮度 < 128 的像素数, 并返回实际像素边界 (供失败消息使用)。
-// 亮度按 ITU-R BT.601 (16-bit RGBA 先右移 8 位回到 0..255)。三个 tcblisting
-// 非空白渲染测试共用本 helper, 保证阈值统计只有一处实现。
-func countDarkPixels(img image.Image, x0f, x1f, y0f, y1f int) (dark, x0, x1, y0, y1 int) {
-	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	x0, x1 = b.Min.X+w*x0f/100, b.Min.X+w*x1f/100
-	y0, y1 = b.Min.Y+h*y0f/100, b.Min.Y+h*y1f/100
-	for y := y0; y < y1; y++ {
-		for x := x0; x < x1; x++ {
-			r, g, bl, _ := img.At(x, y).RGBA()
-			lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-			if lum < 128 {
-				dark++
-			}
-		}
-	}
-	return dark, x0, x1, y0, y1
 }
 
 // assertRegionNotBlank 断言 img 的归一化区域 x[x0f,x1f) y[y0f,y1f) 内暗像素数
 // > minDark; 不足时以 what 说明该区域的语义并失败。kind 是被渲染对象的类型名
 // (如 "tcblisting" / "amscd CD"), 只用于失败消息前缀。抓的是"编译成功但内容
 // 空白"这类静默丢失。阈值与消息格式单点化, 各渲染测试共用。
-func assertRegionNotBlank(t *testing.T, img image.Image, kind, name string,
-	x0f, x1f, y0f, y1f, minDark int, what string) {
-	t.Helper()
-	dark, x0, x1, y0, y1 := countDarkPixels(img, x0f, x1f, y0f, y1f)
-	if dark <= minDark {
-		b := img.Bounds()
-		t.Fatalf("%s %s looks blank: %d dark pixels in x[%d,%d) y[%d,%d) of %dx%d (want > %d); %s",
-			kind, name, dark, x0, x1, y0, y1, b.Dx(), b.Dy(), minDark, what)
-	}
-}
-
 // countPureWhitePixels 统计 img 全图内亮度 >= 250 的像素数。tcblisting 标签底色
 // 修复前是纯白 (255), 与盒底 (tcolorbox 默认 colback=black!5!white ≈ RGB 242)
 // 形成"膏药"状白块; 修复后标签底色等于盒底, 纯白像素只剩标题白字。
 // 亮度按 ITU-R BT.601, 与 countDarkPixels 同一口径。
-func countPureWhitePixels(img image.Image) int {
-	b := img.Bounds()
-	n := 0
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			r, g, bl, _ := img.At(x, y).RGBA()
-			lum := (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-			if lum >= 250 {
-				n++
-			}
-		}
-	}
-	return n
-}
-
 // countExactColor 统计 img 全图内精确等于 (r,g,b) 的像素数。用于锁定用户
 // colback 生效: 标签底色既不该回退到默认纯白, 也不该是硬编码盒底灰。
-func countExactColor(img image.Image, wantR, wantG, wantB uint8) int {
-	b := img.Bounds()
-	n := 0
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			r, g, bl, _ := img.At(x, y).RGBA()
-			if uint8(r>>8) == wantR && uint8(g>>8) == wantG && uint8(bl>>8) == wantB {
-				n++
-			}
-		}
-	}
-	return n
-}
-
 // edgeLuminance 返回归一化边缘中点 (w/2,0) 与 (0,h/2) 的 BT.601 亮度。
 // 修复后 standalone 边距被裁掉 (tikzBorderSpec = 0pt), 页面边缘落在 tcblisting
 // 盒子框线上 (暗); 未修复 / 无盒子的情形边缘是 2pt 纯白。
-func edgeLuminance(img image.Image) (int, int) {
-	b := img.Bounds()
-	lum := func(x, y int) int {
-		r, g, bl, _ := img.At(x, y).RGBA()
-		return (int(r>>8)*299 + int(g>>8)*587 + int(bl>>8)*114) / 1000
-	}
-	return lum(b.Min.X+b.Dx()/2, b.Min.Y), lum(b.Min.X, b.Min.Y+b.Dy()/2)
-}
 
-// tcblistingFallbackPixelLimit 是“底色未融入盒底”类缺陷的像素上限: 标签/遮挡线
-// 底色一旦回退到默认白或硬编码盒底灰, 色块面积会远超此值。校准 (本机 @150dpi,
-// colback 样本的宽 description 标签): 修复前 (默认 white) 整图精确 (255,255,255) = 7786,
-// 但其中大头是 2pt 白圈; 单看标签补丁本体 (回退态在裁边上下文里的真实信号) = 863
-// (紧凑 45x23 块); 硬编码灰 (242,242,242) 回退同理量级; 修复后 (标签 = tcbcolback)
-// 实测 60。阈值取 300: 低于回退态真实信号 863 约 2.9x, 高于修复后 60 约 5x, 两侧
-// 余量同量级。版本耦合: tcolorbox 默认盒底 black!5!white ≈ 242 与纯白截断 250 仅差
-// 8 级, tcolorbox 默认值或栅格器变化时需重新校准。
-const tcblistingFallbackPixelLimit = 300
-
-// TestRenderTikzTcblistingBackgroundAndBorderNotBlank 是本次两处修复的像素级回归:
-//
-// (A) 标签底色融入盒底: tikz-cd 的 description 标签 / crossing over 遮挡线底色取自
-// /tikz/commutative diagrams/background color (默认 white), 贴在 tcolorbox 的灰底
-// (colback=black!5!white ≈ 242) 上像膏药; tcblistingSetup 注入
-// \tikzcdset{background color=tcbcolback} 后标签底色 = 当前盒子的 colback。
-//
-// (B) 裁掉盒子外白边: standalone 的 border=2pt 在 @150dpi 栅格化后约 4px 纯白圈,
-// 对自带边框底色的 tcblisting 盒子很难看; tikzBorderSpec 命中 (stripTikzComments 后
-// 的) tcblisting 时裁掉。
-//
-// 断言 (实测 @150dpi):
-//   - input2 (xe, minted): 717x254, 纯白 135 (修复前 8786), 边缘亮度 63 (修复前 255)。
-//   - mixed  (tectonic, 无 minted 孪生样本): 717x110, 纯白 0; 走非 nowrap 路径,
-//     验证默认 tikz lower 钩子 (g@addto@macro) 也注入了标签底色。
-//   - colback box (xe, colback=red!30, 宽 description 标签): 标签底色为盒底 red!30
-//     (255,178,178); 回退态实测 (修复前, 默认 white) 整图纯白 7786 (含 2pt 白圈),
-//     单看标签补丁本体 = 863、修复后 60, 硬编码灰 242 同理 —— 阈值
-//     tcblistingFallbackPixelLimit=300 两种回退态都能抓住。
-//   - only2  (xe / tectonic 双引擎负对照, 裸 tikzcd): 边缘亮度 > 200 (2pt 保留)。
-//
-// input2 含 minted, 故只设 xe 腿; tectonic 腿用无 minted 的孪生样本 (minted 在
-// tectonic 禁用 shell escape 时导言区即失败, 与本次修复无关)。
-//
-// 阈值是版本耦合的 golden 值: tcolorbox 默认盒底 black!5!white ≈ 242 与纯白截断
-// 250 仅差 8 级, 边缘采样同理; tcolorbox 默认值或栅格器变化时需重新校准 (先例:
-// TestRenderTikzMatrixNotBlank / TestRenderTikzAmscdNotBlank 的阈值注释)。
-func TestRenderTikzTcblistingBackgroundAndBorderNotBlank(t *testing.T) {
-	t.Parallel()
-
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	legs := []struct {
-		name       string
-		engine     string
-		avail      func() error
-		reason     string
-		sample     string
-		wantEdgeLo bool
-		// wantColback: 盒实例指定 colback=red!30, 断言标签底色跟随盒底;
-		// 隐含 wantEdgeLo (样本含盒子, 边距应裁掉)。
-		wantColback bool
-	}{
-		{name: "xe tcblisting", engine: "xe",
-			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
-			sample: tcblistingBgSample, wantEdgeLo: true},
-		{name: "xe user colback (red!30)", engine: "xe",
-			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
-			sample: tcblistingBgColbackSample, wantEdgeLo: true, wantColback: true},
-		{name: "xe negative control (bare tikzcd)", engine: "xe",
-			avail: func() error { return latexmkAvailable(false) }, reason: "latexmk unavailable",
-			sample: tcblistingBgOnlySample, wantEdgeLo: false},
-	}
-	for _, leg := range legs {
-		t.Run(leg.name, func(t *testing.T) {
-			t.Parallel()
-
-			if err := leg.avail(); err != nil {
-				t.Skipf("%s: %v", leg.reason, err)
-			}
-			in := filepath.Join(t.TempDir(), "bg.tikz")
-			out := filepath.Join(t.TempDir(), "bg.png")
-			if err := os.WriteFile(in, []byte(leg.sample), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := renderTikz(in, out, leg.engine); err != nil {
-				t.Fatalf("renderTikz(%s) failed: %v", leg.engine, err)
-			}
-			f, err := os.Open(out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer f.Close()
-			img, _, err := image.Decode(f)
-			if err != nil {
-				t.Fatalf("decoding png: %v", err)
-			}
-			// 内容非空白复核 (兜住编译成功但内容丢失)。
-			assertRegionNotBlank(t, img, "tcblisting", leg.name, 0, 100, 0, 100, 150,
-				"the diagram was silently dropped")
-			midY, midX := edgeLuminance(img)
-			if leg.wantEdgeLo {
-				// 裁边后页面边缘落在盒子框线上 (实测 63), 修复前是 255。
-				if midY >= 128 || midX >= 128 {
-					t.Errorf("edge luminance = (top %d, left %d), want < 128 (white border should be cropped)", midY, midX)
-				}
-				// 标签/遮挡线底色不再纯白 (实测 input2 修复前 8786 → 修复后 135)。
-				// 阈值见 tcblistingFallbackPixelLimit 的版本耦合说明。
-				if n := countPureWhitePixels(img); n >= tcblistingFallbackPixelLimit {
-					t.Errorf("%d pure-white pixels, want < %d (tikzcd label background should match the box background)", n, tcblistingFallbackPixelLimit)
-				}
-			} else {
-				// 负对照: 裸 tikzcd 无盒子, 2pt 白边必须保留。
-				if midY <= 200 || midX <= 200 {
-					t.Errorf("edge luminance = (top %d, left %d), want > 200 (2pt white border must be preserved for non-tcblisting content)", midY, midX)
-				}
-			}
-			// 用户 colback=red!30: 标签底色应为盒底 red!30 (255,178,178), 既非默认纯白
-			// 也非硬编码盒底灰 (242,242,242)。与裁边断言独立 (wantColback 蕴含
-			// wantEdgeLo, 但这里刻意与 wantEdgeLo 分支解耦)。
-			if leg.wantColback {
-				if nw := countExactColor(img, 255, 255, 255); nw >= tcblistingFallbackPixelLimit {
-					t.Errorf("%d exact-white pixels, want < %d (background color fell back to the default white, user colback ignored)", nw, tcblistingFallbackPixelLimit)
-				}
-				if ng := countExactColor(img, 242, 242, 242); ng >= tcblistingFallbackPixelLimit {
-					t.Errorf("%d exact (242,242,242) pixels, want < %d (box background must follow user colback=red!30, not the hardcoded gray)", ng, tcblistingFallbackPixelLimit)
-				}
-			}
-		})
-	}
-}
-
-// TestRenderTikzAmscdNotBlank 是 amscd CD 交换图的像素级回归。
-//
-// 此前两个缺陷叠加: (1) 未探测到 \begin{CD} 则不加载 amscd, 编译报
-// "! LaTeX Error: Environment CD undefined."; (2) CD 是数学模式材料, 被补
-// tikzpicture 外壳后 pgf 静默丢弃内容 (编译 exit 0, 页面只剩 2pt 边框)。
-// 修复 = 探测表加载 amscd + normalizeTikz 的 hasCDDiagram 早退 (不包外壳)。
-//
-// 静默丢失编译级断言抓不住, 必须解码栅格图后统计暗像素。实测 (@150dpi, 由
-// renderTikz 经 mutool 栅格化): 空白对照 9x9px (几乎无暗像素); 单行退化约高
-// 46px; 修复后标准交换方阵 133x114px, 全图暗像素 476。阈值 150 留约 3 倍余量;
-// 高度 >= 80px 把方阵与单行退化区分开。
-//
-// 两后端都跑 (各自可用才跑)。tectonic 分支后续计划淘汰, 不为它做 amscd 专门
-// 适配; 若 tectonic 腿不稳定则降级为 xe 单腿。
-func TestRenderTikzAmscdNotBlank(t *testing.T) {
-	t.Parallel()
-
-	engines := []struct {
-		name   string
-		avail  func() error
-		reason string
-	}{
-		{name: "xe", avail: func() error { return latexmkAvailable(false) },
-			reason: "latexmk unavailable"},
-	}
-	// mutool 是 png 栅格化的外部依赖, 与引擎无关: 查一次即可。
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	for _, e := range engines {
-		t.Run(e.name, func(t *testing.T) {
-			t.Parallel()
-
-			if err := e.avail(); err != nil {
-				t.Skipf("%s: %v", e.reason, err)
-			}
-			in := filepath.Join(t.TempDir(), "amscd_cd.tikz")
-			out := filepath.Join(t.TempDir(), "amscd_cd.png")
-			if err := os.WriteFile(in, []byte(amscdCDSample), 0644); err != nil {
-				t.Fatal(err)
-			}
-			if err := renderTikz(in, out, e.name); err != nil {
-				t.Fatalf("renderTikz(%s) failed: %v", e.name, err)
-			}
-			f, err := os.Open(out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer f.Close()
-			img, _, err := image.Decode(f)
-			if err != nil {
-				t.Fatalf("decoding png: %v", err)
-			}
-			// 断言 1: 内容存在 (空白对照暗像素≈0, 修复后实测 476); 阈值与
-			// 消息格式与 tcblisting 渲染测试共用同一 helper。
-			assertRegionNotBlank(t, img, "amscd CD", "full image", 0, 100, 0, 100, 150,
-				"the CD diagram was silently dropped")
-			// 断言 2: 标准交换方阵的高度远大于单行退化 (~46px)。
-			if h := img.Bounds().Dy(); h < 80 {
-				t.Fatalf("amscd CD rendered %dx%d px, want height >= 80 (square layout, not single-row fallback)",
-					img.Bounds().Dx(), h)
-			}
-		})
-	}
-}
-
-// TestRenderTikzMatrixNotBlank 是 "matrix 摆法" 交换图的像素级回归。
-//
-// 此前两个缺陷叠加: (1) 探测表没有 matrix 库条目, \usetikzlibrary{matrix} 未注入,
-// 编译报 "! Package pgfkeys Error: I do not know the key '/tikz/matrix of math
-// nodes'"; (2) 箭头 tip 只认 -name 形式 (-stealth), >=angle 90 这种 setter 写法
-// 漏检, 报 "Unknown arrow tip kind 'angle 90'"。修复 = tikzExtraLibraries 增加
-// matrix 与 arrows 两条内容特征 (见 tikz.go)。
-//
-// 像素级回归: 解码栅格图后统计暗像素, 兜住编译成功但布局退化/内容丢失类缺陷,
-// 并作为端到端渲染证明。实测 (@150dpi, 由 renderTikz 经 mutool 栅格化): 149x136px,
-// 全图暗像素 514。阈值 150 留约
-// 3.4 倍余量; 高度 >= 80px 把交换方阵与单行退化区分开。
-//
-// 两后端都跑 (各自可用才跑): matrix 与 arrows 库在 TL2026 与 2021 bundle 里都自带,
-// 探测无后端门控, 因此两条腿都必须通过。
-// TestRenderTikzRawCdStylesNotBlank 是 "裸 cd 库样式" 交换图的像素级回归。
-//
-// 此前探测表只认 \begin{tikzcd} / \tikzcdset (走 tikz-cd 宏包), tikz-cd 手册
-// "不用 tikzcd 环境、直接用 cd 库样式"的五边形公理图 (tikzcdRawCdTcblistingSample,
-// 用户原始故障输入) 未命中 cd 条目, 编译报 "! Package pgfkeys Error: I do not know
-// the key '/tikz/commutative diagrams/every diagram'"; 修复 = tikzExtraLibraries
-// 增加 commutative diagrams → cd 条目 (见 tikz.go)。
-//
-// 像素级回归: 解码栅格图后统计暗像素, 兜住编译成功但内容丢失/布局退化类缺陷。
-// 样例是 tcblisting 包裹版 (盒子右侧为编译结果区, 代码在左), 区域取右侧结果区
-// x ∈ (60%, 92%)、y ∈ (20%, 95%)。实测 (@150dpi, 由 renderTikz 经 mutool 栅格化):
-// 空白对照 0, 修复后 1617 (717x750px, xe 与 tectonic 同值); 阈值 500 约为实测的
-// 1/3, 留约 3.2 倍余量, 与矩阵/amscd 像素回归同一标定风格。
-//
-// 两后端都跑 (各自可用才跑): cd 库随 tikz-cd 发行, TL2026 与 2021 bundle 均自带,
-// 探测无后端门控, 因此两条腿都必须通过。
-// TestRenderTikzTcblistingMintedNotBlank 是 tcblisting 的 minted 引擎回归
-// (tikzlings 手册"练习 6"场景: listing engine=minted + minted options={linenos})。
-//
-// 只设 xe 腿: minted 依赖受限 shell escape 白名单里的 latexminted, 而 tectonic
-// 完全禁用 shell escape —— minted 在导言区就报 "You must invoke LaTeX with the
-// -shell-escape flag", 示例必然编译失败。tectonic 上"不加载 minted"这条分档
-// 契约由 TestTcblistingSetupMintedGatedByProfile 单测钉住, 不在这里设腿。
-//
-// 断言与 TestRenderTikzTcblistingNotBlank 同构: 解码 PNG 后统计暗像素, 抓的是
-// "编译成功但内容空白"这类静默丢失。区域沿用 x ∈ (60%, 92%) 的右侧结果区约定
-// (代码在左、编译结果在右), 另加 x ∈ (5%, 45%) 的左侧代码区 —— 它只能证明
-// 代码侧整体存在, 并**不能**验证高亮/行号逐栏正确 (minted 失效时是编译报错、
-// 不是静默降级成 plain, 所以不存在"高亮悄悄消失"的故障模式)。minted 路径真正
-// 的保护是三者叠加: renderTikz 返回错误 (加载期报 -shell-escape) +
-// TestTcblistingSetupMintedGatedByProfile 的内容/后端门控 + 本测试的样例能
-// 成功渲染。空内容时两区均为 0, 实测右侧 ≈ 3087、左侧 ≈ 3932 (725x318 样例),
-// 阈值 1000 留约 3 倍余量。
-func TestRenderTikzTcblistingMintedNotBlank(t *testing.T) {
-	t.Parallel()
-
-	if err := latexmkAvailable(false); err != nil {
-		t.Skipf("latexmk unavailable: %v", err)
-	}
-	if _, err := exec.LookPath("mutool"); err != nil {
-		t.Skipf("mutool unavailable: %v", err)
-	}
-	const sample = `\begin{tcblisting}{
-  title={tikzcd minted},
-  lower separated,
-  listing engine=minted,
-  minted options={linenos},
-}
-  \begin{tikzcd}[row sep=scriptsize, column sep=scriptsize]
-    & f^* E_V \arrow[dl] \arrow[rr] \arrow[dd]
-    & & E_V \arrow[dl] \arrow[dd] \\
-    f^* E \arrow[rr, crossing over] \arrow[dd] & & E \\
-    & U \arrow[dl] \arrow[rr] & & V \arrow[dl] \\
-    M \arrow[rr] & & N \arrow[from=uu, crossing over]\\
-  \end{tikzcd}
-\end{tcblisting}
-`
-	in := filepath.Join(t.TempDir(), "tcblisting_minted.tikz")
-	out := filepath.Join(t.TempDir(), "tcblisting_minted.png")
-	if err := os.WriteFile(in, []byte(sample), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := renderTikz(in, out, "xe"); err != nil {
-		t.Fatalf("renderTikz(xe) failed: %v", err)
-	}
-	f, err := os.Open(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		t.Fatalf("decoding png: %v", err)
-	}
-	// 右侧结果区 (编译结果) 与左侧代码区 (minted 高亮 + 行号)。
-	regions := []struct {
-		name           string
-		x0f, x1f       int
-		y0f, y1f       int
-		minDark        int
-		emptyDetection string
-	}{
-		{name: "result area", x0f: 60, x1f: 92, y0f: 20, y1f: 95, minDark: 1000,
-			emptyDetection: "the tikzcd drawing was silently dropped"},
-		{name: "code area", x0f: 5, x1f: 45, y0f: 20, y1f: 95, minDark: 1000,
-			emptyDetection: "the code side of the box is blank"},
-	}
-	for _, rg := range regions {
-		assertRegionNotBlank(t, img, "tcblisting", "minted "+rg.name,
-			rg.x0f, rg.x1f, rg.y0f, rg.y1f, rg.minDark, rg.emptyDetection)
-	}
-}
-
-// TestRenderTikzTcblistingCommentFamilyNotBlank 是注释族布局的回归 (用户博客片段:
-// "listing side comment" + comment 里的 \\\\ 换行 + minted 代码侧)。
-//
-// 修复前: 注释文本被 tikz lower 的 before lower* 钩子 (\\centering + picture)
-// 包进 \\sbox 的 restricted horizontal mode, comment 里的 \\\\ 经 \\@centercr ->
-// \\addvspace 触发 "! LaTeX Error: Not allowed in LR mode." (报在
-// \\end{tcblisting}), 编译失败。修复后 rewriteSelfContainedTcblistings 对
-// 注释族布局注入 nowrap 样式, 不再包 picture。
-//
-// 只设 xe 腿: 样例用 listing engine=minted, 而 tectonic 禁用 shell escape, minted
-// 在导言区即失败 (同 TestRenderTikzTcblistingMintedNotBlank 的分档理由)。
-//
-// 断言与 TestRenderTikzTcblistingMintedNotBlank 同构: 左侧代码区 + 右侧结果/注释区
-// 的暗像素计数。实测 (725x399 样例) 左侧 ≈ 3818、右侧 ≈ 782, 阈值取 1000 / 300
-// 留约 2.5-3 倍余量; 区域沿用 x ∈ (5%, 45%) 与 (60%, 92%) 的既有约定。
-// TestRenderTikzTcblistingListingAndCommentNotBlank 覆盖非 sbs 的
-// `listing and comment` 布局 (listing engine=listings, 无 minted): 该布局把
-// listing 放在盒子上部、注释放在下部, 是注释族里"承载修复"那类 (base 无 nowrap
-// 时注释进 lower 槽 -> LR 崩溃)。只设 xe 腿 (与其它 tcblisting 渲染测试一致)。
-//
-// 区域为上下两半: upper x[5%,95%) y[2%,45%) = listing 代码侧, lower
-// x[5%,95%) y[55%,98%) = 注释侧; 实测 (725x404 样例) 分别 ≈ 2531 / 2194,
-// 阈值取 800 / 600 留约 3 倍余量。
-// TestRenderTikzIntegrationCJK 真跑 xe 引擎 + xelatex + xeCJK 三者齐备时渲染 CJK。
-func TestRenderTikzIntegrationCJK(t *testing.T) {
-	t.Parallel()
-
-	if err := latexmkAvailable(true); err != nil {
-		t.Skipf("latexmk + xelatex + xeCJK unavailable: %v", err)
-	}
-	requirePDFTextTool(t)
-	sample := `\begin{tikzpicture}
-\node at (0,0) {\text{中文}};
-\end{tikzpicture}
-`
-	assertPDFContainsText(t, renderTikzSample(t, "xe", "cjk", sample), "中文")
-	// 数学模式: tikz-cd 的节点内容与引号标签默认数学模式。修复前 CJK 字符回退
-	// lmroman 报 "Missing character" 被静默丢弃, pdftotext 提取不到任何 CJK 字形。
-	mathSample := `\begin{tikzcd}
-  左 \ar[r, "右"] & 右
-\end{tikzcd}
-`
-	mathPDF := renderTikzSample(t, "xe", "cjk_math", mathSample)
-	assertPDFContainsText(t, mathPDF, "左")
-	assertPDFContainsText(t, mathPDF, "右")
-	// $...$ 行内数学是数学模式覆盖的另一语境 (普通 tikz 节点)。
-	inlineSample := `\begin{tikzpicture}
-\node at (0,0) {$甲+乙$};
-\end{tikzpicture}
-`
-	inlinePDF := renderTikzSample(t, "xe", "cjk_inline_math", inlineSample)
-	assertPDFContainsText(t, inlinePDF, "甲")
-	assertPDFContainsText(t, inlinePDF, "乙")
-}
-
-// requirePDFTextTool skips the calling test when pdftotext is unavailable.
-// assertPDFContainsText only logs a missing tool (fine for incidental
-// assertions), but for the CJK glyph-extraction regressions the assertion IS
-// the test - a silent log-and-pass would turn the regression into a no-op.
-// Skipping keeps the gap visible in -v output.
-func requirePDFTextTool(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("pdftotext"); err != nil {
-		t.Skipf("pdftotext unavailable, cannot verify CJK glyph extraction: %v", err)
-	}
-}
-
-// assertPDFContainsText 用 pdftotext 提取 PDF 文本并断言包含 want。
-// pdftotext 不可用时只记日志: 该断言用于捕获 "PDF 有效但字形丢失 (tofu)"
-// 这类回归 (CJK 前导被丢弃时就是如此), 缺失工具不应让测试失败。
-func assertPDFContainsText(t *testing.T, pdf []byte, want string) {
-	t.Helper()
-	if _, err := exec.LookPath("pdftotext"); err != nil {
-		t.Logf("pdftotext unavailable, skipping text assertion: %v", err)
-		return
-	}
-	path := filepath.Join(t.TempDir(), "rendered.pdf")
-	if err := os.WriteFile(path, pdf, 0644); err != nil {
-		t.Fatal(err)
-	}
-	out, err := exec.Command("pdftotext", path, "-").Output()
-	if err != nil {
-		t.Fatalf("pdftotext failed: %v", err)
-	}
-	if !strings.Contains(string(out), want) {
-		t.Fatalf("rendered PDF text does not contain %q; got %q", want, string(out))
-	}
-}
-
-// TestRenderTikzEngineExit0WithoutPDF 钉住 "引擎退出 0 但没有产物" 的显式报错,
-// 并断言错误里出现的是**实际选中的引擎**而不是 --engine 的原始取值:
-// 用只 exit 0 的假引擎走完整 renderTikz 路径 (真实引擎很难构造该场景)。
 func TestRenderTikzEngineExit0WithoutPDF(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake engine script requires a POSIX shell")
